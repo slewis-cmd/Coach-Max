@@ -392,10 +392,14 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         text = ""
         for page in reader.pages:
             text += page.extract_text() or ""
-        return text
+        return text.strip()
     except Exception as e:
         logger.error(f"PDF extraction error: {e}")
-        return ""
+        # Try as plain text if PDF parsing fails
+        try:
+            return file_bytes.decode('utf-8', errors='ignore').strip()
+        except:
+            return ""
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
     """Extract text from Word document"""
@@ -404,10 +408,38 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         text = ""
         for para in doc.paragraphs:
             text += para.text + "\n"
-        return text
+        return text.strip()
     except Exception as e:
         logger.error(f"DOCX extraction error: {e}")
-        return ""
+        # Try as plain text if DOCX parsing fails
+        try:
+            return file_bytes.decode('utf-8', errors='ignore').strip()
+        except:
+            return ""
+
+def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+    """Extract text from file based on extension"""
+    ext = filename.lower().split(".")[-1] if "." in filename else ""
+    
+    if ext == "pdf":
+        text = extract_text_from_pdf(file_bytes)
+    elif ext in ["docx", "doc"]:
+        text = extract_text_from_docx(file_bytes)
+    else:
+        # Try plain text
+        try:
+            text = file_bytes.decode('utf-8', errors='ignore').strip()
+        except:
+            text = ""
+    
+    # If still empty, try plain text as fallback
+    if not text:
+        try:
+            text = file_bytes.decode('utf-8', errors='ignore').strip()
+        except:
+            pass
+    
+    return text
 
 @api_router.post("/cohorts/{cohort_id}/materials")
 async def upload_material(
@@ -671,10 +703,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
         async with aiofiles.open(submission["file_path"], "rb") as f:
             file_bytes = await f.read()
         
-        if submission["file_name"].lower().endswith(".pdf"):
-            submission_text = extract_text_from_pdf(file_bytes)
-        else:
-            submission_text = extract_text_from_docx(file_bytes)
+        submission_text = extract_text_from_file(file_bytes, submission["file_name"])
     except Exception as e:
         logger.error(f"Error reading submission: {e}")
         raise HTTPException(status_code=500, detail="Error reading submission file")
@@ -689,10 +718,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
             async with aiofiles.open(mat["file_path"], "rb") as f:
                 mat_bytes = await f.read()
             
-            if mat["file_name"].lower().endswith(".pdf"):
-                mat_text = extract_text_from_pdf(mat_bytes)
-            else:
-                mat_text = extract_text_from_docx(mat_bytes)
+            mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
             
             context_text += f"\n\n--- {mat['material_type'].upper()}: {mat['title']} ---\n{mat_text[:5000]}"
         except:
