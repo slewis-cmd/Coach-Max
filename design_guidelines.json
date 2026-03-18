@@ -1,0 +1,184 @@
+{
+  "brand_identity": {
+    "name": "ThinkificAI Tutor",
+    "archetype": "The Intellectual's Workspace",
+    "tone": "Encouraging, Structured, Human, Intellectual",
+    "metaphor": "A fresh workbook on a clean desk"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Fraunces, Playfair Display, serif",
+      "usage": "H1-H3, Hero Sections, Feature Titles",
+      "weights": "Light (300) to SemiBold (600)",
+      "tracking": "tight"
+    },
+    "body": {
+      "font_family": "Inter, system-ui, sans-serif",
+      "usage": "Paragraphs, UI labels, Inputs",
+      "weights": "Regular (400), Medium (500)",
+      "tracking": "normal"
+    },
+    "mono": {
+      "font_family": "JetBrains Mono, monospace",
+      "usage": "Code snippets, Data points, IDs",
+      "weights": "Regular (400)"
+    },
+    "scale": {
+      "h1": "text-5xl md:text-7xl font-light tracking-tight leading-[1.1]",
+      "h2": "text-3xl md:text-5xl font-light tracking-tight leading-tight",
+      "h3": "text-2xl md:text-3xl font-normal leading-snug",
+      "p": "text-base md:text-lg leading-relaxed text-muted-foreground",
+      "caption": "text-sm text-muted-foreground uppercase tracking-widest"
+    }
+  },
+  "colors": {
+    "palette_name": "Paper & Ink",
+    "mode": "Light (Primary)",
+    "theme_strategy": "Warm Minimalist",
+    "backgrounds": {
+      "app_bg": "bg-[#F9F8F6]",
+      "card_bg": "bg-white",
+      "sidebar_bg": "bg-[#F2F0ED]"
+    },
+    "foregrounds": {
+      "primary_text": "text-[#1A1A1A]",
+      "secondary_text": "text-[#5A5A5A]",
+      "muted_text": "text-[#888888]"
+    },
+    "accents": {
+      "primary": {
+        "color": "bg-[#1A1A1A]",
+        "text": "text-white",
+        "usage": "Primary Buttons, Active States"
+      },
+      "highlight": {
+        "color": "bg-[#FDE047]",
+        "text": "text-[#1A1A1A]",
+        "usage": "Text Highlights, Important Notes"
+      },
+      "success": {
+        "color": "bg-[#D1FAE5]",
+        "text": "text-[#065F46]",
+        "usage": "Encouraging Feedback, Progress"
+      },
+      "focus": {
+        "color": "bg-[#E0F2FE]",
+        "text": "text-[#075985]",
+        "usage": "Active Links, Focus Rings"
+      }
+    },
+    "borders": {
+      "default": "border-[#E5E5E5]",
+      "active": "border-[#1A1A1A]"
+    }
+  },
+  "layout": {
+    "spacing_scale": {
+      "section_gap": "gap-24 md:gap-32",
+      "component_gap": "gap-8",
+      "internal_padding": "p-6 md:p-8"
+    },
+    "container": {
+      "max_width": "max-w-7xl mx-auto px-6 md:px-12",
+      "reading_width": "max-w-2xl"
+    },
+    "grid_strategy": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-12 gap-6",
+      "bento_cards": "rounded-xl border bg-card p-6 shadow-sm"
+    }
+  },
+  "visual_enhancers": {
+    "texture": {
+      "noise": "bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20",
+      "usage": "Overlay on solid backgrounds to reduce digital flatness"
+    },
+    "shadows": {
+      "soft": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+      "float": "shadow-[0_12px_24px_rgba(0,0,0,0.06)]",
+      "inner": "shadow-inner"
+    },
+    "radius": {
+      "card": "rounded-xl",
+      "button": "rounded-full md:rounded-lg",
+      "input": "rounded-md"
+    },
+    "motion": {
+      "hover_lift": "hover:-translate-y-1 transition-transform duration-300 ease-out",
+      "fade_in": "animate-in fade-in zoom-in-95 duration-500",
+      "stagger": "stagger-children"
+    }
+  },
+  "component_guidelines": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm rounded-lg px-6 py-2.5 font-medium transition-all",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-lg px-6 py-2.5 font-medium",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-lg px-4 py-2"
+    },
+    "cards": {
+      "style": "bg-white border border-border/60 shadow-sm hover:shadow-md transition-shadow duration-300",
+      "content_padding": "p-6 md:p-8"
+    },
+    "inputs": {
+      "style": "bg-transparent border border-input focus:border-primary focus:ring-1 focus:ring-primary rounded-md px-4 py-2"
+    },
+    "feedback_box": {
+      "style": "bg-[#F0FDF4] border border-[#BBF7D0] text-[#166534] rounded-lg p-6 font-serif italic relative",
+      "icon": "Add a quill or spark icon"
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "hero_students",
+        "url": "https://images.unsplash.com/photo-1758270705317-3ef6142d306f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHw0fHx1bml2ZXJzaXR5JTIwc3R1ZGVudHMlMjBzdHVkeWluZyUyMGdyb3VwfGVufDB8fHx8MTc3MzgyOTE1NXww&ixlib=rb-4.1.0&q=85",
+        "alt": "Students studying together in a warm environment"
+      },
+      {
+        "category": "abstract_learning",
+        "url": "https://images.unsplash.com/photo-1770719269462-d3c1ed7e184f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGtub3dsZWRnZSUyMGxlYXJuaW5nJTIwc2hhcGVzJTIwZ2VvbWV0cmljfGVufDB8fHx8MTc3MzgyOTE1Nnww&ixlib=rb-4.1.0&q=85",
+        "alt": "Blackboard with complex formulas representing knowledge"
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width-1.5"
+    }
+  },
+  "instructions_to_main_agent": {
+    "general": [
+      "Implement the 'Paper & Ink' theme meticulously. Avoid pure white backgrounds for the main app area; use the warm off-white.",
+      "Use Serif fonts (Fraunces or Playfair) for ALL headings (H1-H3). Import them from Google Fonts.",
+      "Ensure the 'AI Feedback' section feels like a personal note from a mentor, using the success/green palette and serif font.",
+      "The 'Workbook' upload section should feel tactile—use dashed borders and ample padding."
+    ],
+    "dashboard_specifics": {
+      "instructor": "Focus on clarity and management. Use a dense table layout for student lists but keep it airy with padding.",
+      "student": "Focus on progress and encouragement. Use large progress bars and card-based layouts for homework assignments."
+    },
+    "ai_interaction": {
+      "feedback_display": "Do not just dump text. Wrap AI feedback in a 'Letter' style component with a signature feel.",
+      "loading_state": "Use a 'thinking' animation that is subtle, like a pulsing geometric shape, not a standard spinner."
+    }
+  },
+  "universal_guidelines": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Examine existing components to understand the project's component patterns before creating new ones",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use sonner for toasts. Sonner component are located in /app/frontend/src/components/ui/sonner.jsx"
+  ]
+}
