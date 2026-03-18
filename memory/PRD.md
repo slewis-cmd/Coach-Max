@@ -62,6 +62,18 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
   - AI generates draft feedback
   - Instructor reviews and edits
   - Instructor sends to student via email
+- [x] **Resubmission capability for students**
+  - Instructor can allow resubmission
+  - Student notified via email
+  - Resubmission count tracked
+- [x] **Progress Tracking Dashboard**
+  - Cohort-level analytics
+  - Weekly progress with completion rates
+  - Individual student progress rankings
+- [x] **Dashboard Analytics Widgets**
+  - Color-coded stat cards (needs review, drafts to send, feedback sent)
+  - Action required alert banner
+  - This week activity summary
 
 ## API Endpoints
 - POST /api/auth/session - Exchange session_id for token
@@ -99,7 +111,9 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Email notifications for new submissions ✅
 - [x] Material due dates ✅
 - [x] Human-in-the-loop feedback review ✅
-- [ ] Resubmission capability for students
+- [x] Resubmission capability for students ✅
+- [x] Progress tracking dashboard ✅
+- [x] Dashboard widgets for action items ✅
 
 ### P2 (Nice to Have)
 - [ ] Discussion/comments on submissions
