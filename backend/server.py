@@ -16,6 +16,8 @@ from PyPDF2 import PdfReader
 from docx import Document
 import io
 import csv
+import asyncio
+import resend
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -41,6 +43,32 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Configure Resend
+resend.api_key = os.environ.get("RESEND_API_KEY")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+
+# ==================== EMAIL HELPER ====================
+
+async def send_email_notification(to_email: str, subject: str, html_content: str):
+    """Send email notification using Resend"""
+    if not resend.api_key:
+        logger.warning("Resend API key not configured, skipping email")
+        return None
+    
+    try:
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content
+        }
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Email sent to {to_email}: {result.get('id')}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to send email to {to_email}: {e}")
+        return None
 
 # ==================== MODELS ====================
 
@@ -85,6 +113,7 @@ class Material(BaseModel):
     file_path: str
     file_name: str
     uploaded_by: str
+    due_date: Optional[str] = None  # ISO date string for homework assignments
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Submission(BaseModel):
@@ -94,10 +123,13 @@ class Submission(BaseModel):
     student_id: str
     file_path: str
     file_name: str
-    status: str = "pending"  # "pending", "reviewed"
+    status: str = "pending"  # "pending", "draft", "reviewed", "sent"
     ai_feedback: Optional[str] = None
+    instructor_feedback: Optional[str] = None  # Human-in-the-loop: instructor's edited/added feedback
+    feedback_sent: bool = False  # Whether feedback has been sent to student
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     reviewed_at: Optional[datetime] = None
+    sent_at: Optional[datetime] = None  # When feedback was sent to student
 
 # ==================== AUTH HELPERS ====================
 
@@ -556,6 +588,7 @@ async def upload_material(
     title: str,
     file: UploadFile = File(...),
     description: str = "",
+    due_date: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload course material (workbook, case study, or homework assignment)"""
@@ -590,7 +623,8 @@ async def upload_material(
         description=description,
         file_path=str(file_path),
         file_name=filename,
-        uploaded_by=user["user_id"]
+        uploaded_by=user["user_id"],
+        due_date=due_date if due_date else None
     )
     
     doc = material.model_dump()
@@ -737,6 +771,35 @@ async def submit_homework(
     doc = submission.model_dump()
     doc["submitted_at"] = doc["submitted_at"].isoformat()
     await db.submissions.insert_one(doc)
+    
+    # Send email notification to instructor
+    instructor = await db.users.find_one({"user_id": cohort["instructor_id"]}, {"_id": 0})
+    if instructor:
+        email_html = f"""
+        <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #FDE047; padding: 20px; border-radius: 12px 12px 0 0;">
+                <h1 style="color: #1A1A1A; margin: 0; font-size: 24px;">New Homework Submission</h1>
+            </div>
+            <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+                <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
+                    <strong>{user['name']}</strong> has submitted homework for review.
+                </p>
+                <div style="background-color: white; border: 1px solid #E5E5E5; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                    <p style="margin: 0 0 8px 0; color: #5A5A5A; font-size: 14px;">Assignment</p>
+                    <p style="margin: 0; color: #1A1A1A; font-weight: 500;">{material['title']}</p>
+                    <p style="margin: 8px 0 0 0; color: #888; font-size: 14px;">Week {material['week_number']} • {cohort['name']}</p>
+                </div>
+                <p style="color: #5A5A5A; font-size: 14px;">
+                    Log in to ThinkificAI to review this submission and provide AI-powered feedback.
+                </p>
+            </div>
+        </div>
+        """
+        await send_email_notification(
+            instructor["email"],
+            f"New Submission: {material['title']} from {user['name']}",
+            email_html
+        )
     
     return {"submission_id": submission_id, "message": "Homework submitted"}
 
@@ -907,17 +970,120 @@ Please provide encouraging, qualitative feedback for this student."""
         logger.error(f"AI review error: {e}")
         raise HTTPException(status_code=500, detail=f"AI review failed: {str(e)}")
     
-    # Save feedback
+    # Save feedback as DRAFT (Human-in-the-loop: instructor must review before sending)
     await db.submissions.update_one(
         {"submission_id": submission_id},
         {"$set": {
             "ai_feedback": feedback,
-            "status": "reviewed",
+            "status": "draft",  # Changed from "reviewed" to "draft"
             "reviewed_at": datetime.now(timezone.utc).isoformat()
         }}
     )
     
-    return {"feedback": feedback, "message": "Review complete"}
+    return {"feedback": feedback, "message": "AI feedback generated. Review and edit before sending to student.", "status": "draft"}
+
+@api_router.put("/submissions/{submission_id}/feedback")
+async def update_feedback(submission_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Update/edit feedback before sending to student (Human-in-the-loop)"""
+    data = await request.json()
+    feedback = data.get("feedback")
+    
+    if not feedback:
+        raise HTTPException(status_code=400, detail="Feedback is required")
+    
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+    if not cohort or cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Update with instructor's edited feedback
+    await db.submissions.update_one(
+        {"submission_id": submission_id},
+        {"$set": {
+            "instructor_feedback": feedback,
+            "reviewed_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Feedback updated"}
+
+@api_router.post("/submissions/{submission_id}/send-feedback")
+async def send_feedback_to_student(submission_id: str, user: dict = Depends(require_instructor)):
+    """Send feedback to student via email (Human-in-the-loop final step)"""
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+    if not cohort or cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Use instructor's edited feedback if available, otherwise use AI feedback
+    feedback = submission.get("instructor_feedback") or submission.get("ai_feedback")
+    if not feedback:
+        raise HTTPException(status_code=400, detail="No feedback to send. Generate AI feedback first.")
+    
+    # Get student and material info
+    student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
+    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    instructor = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Send email to student
+    feedback_html = feedback.replace("\n", "<br>")
+    email_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #D1FAE5; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: #065F46; margin: 0; font-size: 24px;">Your Feedback is Ready!</h1>
+        </div>
+        <div style="background-color: #F9F8F6; padding: 24px;">
+            <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
+                Hi <strong>{student['name'].split()[0]}</strong>,
+            </p>
+            <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
+                Your instructor has reviewed your submission for <strong>{material['title'] if material else 'Homework'}</strong> 
+                (Week {material['week_number'] if material else '?'}).
+            </p>
+            <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <p style="color: #166534; font-size: 15px; line-height: 1.7; margin: 0;">
+                    {feedback_html}
+                </p>
+            </div>
+            <p style="color: #5A5A5A; font-size: 14px; margin-top: 20px;">
+                Keep up the great work!<br>
+                — {instructor['name'] if instructor else 'Your Instructor'}
+            </p>
+        </div>
+        <div style="background-color: #E5E5E5; padding: 16px; border-radius: 0 0 12px 12px; text-align: center;">
+            <p style="color: #888; font-size: 12px; margin: 0;">
+                ThinkificAI Tutor • {cohort['name']}
+            </p>
+        </div>
+    </div>
+    """
+    
+    await send_email_notification(
+        student["email"],
+        f"Feedback on {material['title'] if material else 'Your Homework'} - {cohort['name']}",
+        email_html
+    )
+    
+    # Update submission status
+    await db.submissions.update_one(
+        {"submission_id": submission_id},
+        {"$set": {
+            "status": "sent",
+            "feedback_sent": True,
+            "sent_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Feedback sent to student"}
 
 # ==================== UTILITY ENDPOINTS ====================
 

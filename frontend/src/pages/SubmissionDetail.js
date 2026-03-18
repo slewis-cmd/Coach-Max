@@ -3,13 +3,19 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
+import { Textarea } from '../components/ui/textarea';
+import { Label } from '../components/ui/label';
 import { 
   ArrowLeft,
   File,
   CheckCircle,
   Clock,
   Sparkles,
-  User
+  User,
+  Edit3,
+  Send,
+  Mail,
+  FileEdit
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -23,6 +29,10 @@ export default function SubmissionDetail() {
   const [submission, setSubmission] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
+  const [editedFeedback, setEditedFeedback] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -35,6 +45,8 @@ export default function SubmissionDetail() {
     try {
       const res = await axios.get(`${API_URL}/api/submissions/${submissionId}`, { withCredentials: true });
       setSubmission(res.data);
+      // Set edited feedback to instructor's version if exists, otherwise AI version
+      setEditedFeedback(res.data.instructor_feedback || res.data.ai_feedback || '');
     } catch (error) {
       toast.error('Failed to load submission');
       navigate('/submissions');
@@ -51,12 +63,58 @@ export default function SubmissionDetail() {
         {},
         { withCredentials: true }
       );
-      toast.success('AI review complete!');
+      toast.success('AI feedback generated! Review and edit before sending.');
+      setEditedFeedback(res.data.feedback);
+      setIsEditing(true);
       fetchSubmission();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Review failed');
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const handleSaveFeedback = async () => {
+    if (!editedFeedback.trim()) {
+      toast.error('Feedback cannot be empty');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      await axios.put(
+        `${API_URL}/api/submissions/${submissionId}/feedback`,
+        { feedback: editedFeedback },
+        { withCredentials: true }
+      );
+      toast.success('Feedback saved');
+      setIsEditing(false);
+      fetchSubmission();
+    } catch (error) {
+      toast.error('Failed to save feedback');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSendFeedback = async () => {
+    if (!window.confirm('Send this feedback to the student via email? This action cannot be undone.')) {
+      return;
+    }
+    
+    setSending(true);
+    try {
+      await axios.post(
+        `${API_URL}/api/submissions/${submissionId}/send-feedback`,
+        {},
+        { withCredentials: true }
+      );
+      toast.success('Feedback sent to student!');
+      fetchSubmission();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to send feedback');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -69,6 +127,10 @@ export default function SubmissionDetail() {
   }
 
   if (!submission) return null;
+
+  const currentFeedback = submission.instructor_feedback || submission.ai_feedback;
+  const isDraft = submission.status === 'draft';
+  const isSent = submission.status === 'sent' || submission.feedback_sent;
 
   return (
     <div className="min-h-screen bg-[#F9F8F6]" data-testid="submission-detail">
@@ -105,7 +167,7 @@ export default function SubmissionDetail() {
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Generate AI Review
+                  Generate AI Feedback
                 </>
               )}
             </Button>
@@ -146,16 +208,28 @@ export default function SubmissionDetail() {
                 )}
               </div>
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-                submission.status === 'reviewed' 
+                isSent 
                   ? 'bg-[#D1FAE5] text-[#065F46]' 
-                  : 'bg-[#FEF9C3] text-[#854D0E]'
+                  : isDraft
+                    ? 'bg-[#E0F2FE] text-[#075985]'
+                    : 'bg-[#FEF9C3] text-[#854D0E]'
               }`}>
-                {submission.status === 'reviewed' ? (
-                  <CheckCircle className="w-4 h-4" />
+                {isSent ? (
+                  <>
+                    <Mail className="w-4 h-4" />
+                    Sent to Student
+                  </>
+                ) : isDraft ? (
+                  <>
+                    <FileEdit className="w-4 h-4" />
+                    Draft - Review Required
+                  </>
                 ) : (
-                  <Clock className="w-4 h-4" />
+                  <>
+                    <Clock className="w-4 h-4" />
+                    Pending Review
+                  </>
                 )}
-                {submission.status === 'reviewed' ? 'Reviewed' : 'Pending Review'}
               </div>
             </div>
             
@@ -166,23 +240,121 @@ export default function SubmissionDetail() {
           </CardContent>
         </Card>
 
-        {/* AI Feedback */}
-        {submission.ai_feedback ? (
+        {/* AI Feedback / Editor */}
+        {currentFeedback || isDraft ? (
           <div className="animate-fade-in">
-            <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[#065F46]" />
-              AI Feedback
-            </h2>
-            <Card className="bg-[#F0FDF4] border-[#BBF7D0]">
-              <CardContent className="p-8">
-                <div className="feedback-letter text-[#166534] whitespace-pre-wrap leading-relaxed">
-                  {submission.ai_feedback}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-light text-[#1A1A1A] flex items-center gap-2">
+                {isSent ? (
+                  <>
+                    <CheckCircle className="w-5 h-5 text-[#065F46]" />
+                    Feedback Sent
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 text-[#075985]" />
+                    {isEditing ? 'Edit Feedback' : 'AI Feedback (Draft)'}
+                  </>
+                )}
+              </h2>
+              
+              {isInstructor && !isSent && currentFeedback && !isEditing && (
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setEditedFeedback(currentFeedback);
+                      setIsEditing(true);
+                    }}
+                    className="border-[#E5E5E5]"
+                    data-testid="edit-feedback-btn"
+                  >
+                    <Edit3 className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button 
+                    onClick={handleSendFeedback}
+                    disabled={sending}
+                    className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+                    data-testid="send-feedback-btn"
+                  >
+                    {sending ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send to Student
+                      </>
+                    )}
+                  </Button>
                 </div>
-                <div className="mt-6 pt-6 border-t border-[#BBF7D0] text-right">
-                  <p className="text-sm text-[#065F46] italic">— Your AI Tutor</p>
-                </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
+
+            {isEditing ? (
+              <Card className="bg-white border-[#E5E5E5]">
+                <CardContent className="p-6">
+                  <Label className="text-sm text-[#5A5A5A] mb-2 block">
+                    Review and edit the AI-generated feedback before sending to the student
+                  </Label>
+                  <Textarea
+                    value={editedFeedback}
+                    onChange={(e) => setEditedFeedback(e.target.value)}
+                    className="min-h-[300px] mb-4 font-normal"
+                    placeholder="Enter feedback for the student..."
+                    data-testid="feedback-editor"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditedFeedback(currentFeedback);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleSaveFeedback}
+                      disabled={saving}
+                      className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+                      data-testid="save-feedback-btn"
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                    <Button 
+                      onClick={async () => {
+                        await handleSaveFeedback();
+                        if (editedFeedback.trim()) {
+                          handleSendFeedback();
+                        }
+                      }}
+                      disabled={saving || sending}
+                      className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Save & Send
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className={isSent ? "bg-[#F0FDF4] border-[#BBF7D0]" : "bg-[#F0F9FF] border-[#BAE6FD]"}>
+                <CardContent className="p-8">
+                  <div className="feedback-letter text-[#166534] whitespace-pre-wrap leading-relaxed">
+                    {currentFeedback}
+                  </div>
+                  <div className="mt-6 pt-6 border-t border-[#BBF7D0] text-right">
+                    <p className="text-sm text-[#065F46] italic">
+                      {isSent ? '— Feedback sent to student' : '— Draft (Not yet sent to student)'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         ) : (
           <Card className="bg-white border-[#E5E5E5] border-dashed">
@@ -193,11 +365,32 @@ export default function SubmissionDetail() {
               <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">Awaiting Review</h3>
               <p className="text-[#5A5A5A]">
                 {isInstructor 
-                  ? 'Click "Generate AI Review" to provide feedback'
+                  ? 'Click "Generate AI Feedback" to create a draft for review'
                   : 'Your instructor will review this submission soon'}
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {/* Workflow info for instructors */}
+        {isInstructor && !isSent && (
+          <div className="mt-6 p-4 bg-[#F2F0ED] rounded-lg">
+            <h3 className="text-sm font-medium text-[#1A1A1A] mb-2">Review Workflow</h3>
+            <ol className="text-sm text-[#5A5A5A] space-y-1">
+              <li className={`flex items-center gap-2 ${currentFeedback ? 'text-[#065F46]' : ''}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${currentFeedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#E5E5E5] text-[#888]'}`}>1</span>
+                Generate AI feedback
+              </li>
+              <li className={`flex items-center gap-2 ${submission.instructor_feedback ? 'text-[#065F46]' : ''}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${submission.instructor_feedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#E5E5E5] text-[#888]'}`}>2</span>
+                Review and edit feedback
+              </li>
+              <li className={`flex items-center gap-2 ${isSent ? 'text-[#065F46]' : ''}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSent ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#E5E5E5] text-[#888]'}`}>3</span>
+                Send feedback to student via email
+              </li>
+            </ol>
+          </div>
         )}
       </main>
     </div>

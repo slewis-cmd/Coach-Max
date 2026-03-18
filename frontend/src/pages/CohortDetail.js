@@ -38,7 +38,9 @@ import {
   Download,
   FileUp,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -69,7 +71,8 @@ export default function CohortDetail() {
     description: '',
     week_number: 1,
     material_type: 'workbook',
-    file: null
+    file: null,
+    due_date: ''
   });
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
   
@@ -159,7 +162,8 @@ export default function CohortDetail() {
         week_number: materialForm.week_number,
         material_type: materialForm.material_type,
         title: materialForm.title,
-        description: materialForm.description
+        description: materialForm.description,
+        due_date: materialForm.due_date || ''
       });
 
       await axios.post(
@@ -173,7 +177,7 @@ export default function CohortDetail() {
       
       toast.success('Material uploaded');
       setShowUploadMaterial(false);
-      setMaterialForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null });
+      setMaterialForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '' });
       fetchCohort();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload material');
@@ -553,6 +557,15 @@ export default function CohortDetail() {
                           </div>
                           <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
                           <CardDescription className="text-xs uppercase tracking-wide">Homework Assignment</CardDescription>
+                          {mat.due_date && (
+                            <div className={`flex items-center gap-1 mt-2 text-xs ${
+                              new Date(mat.due_date) < new Date() ? 'text-red-500' : 'text-[#854D0E]'
+                            }`}>
+                              <Calendar className="w-3 h-3" />
+                              Due: {new Date(mat.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {new Date(mat.due_date) < new Date() && ' (Past due)'}
+                            </div>
+                          )}
                         </CardHeader>
                         <CardContent>
                           <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
@@ -750,6 +763,19 @@ export default function CohortDetail() {
                 rows={2}
               />
             </div>
+            {materialForm.material_type === 'homework' && (
+              <div>
+                <Label htmlFor="due-date">Due Date (optional)</Label>
+                <Input
+                  id="due-date"
+                  type="date"
+                  data-testid="due-date-input"
+                  value={materialForm.due_date}
+                  onChange={(e) => setMaterialForm({ ...materialForm, due_date: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+            )}
             <div>
               <Label>File (PDF or Word)</Label>
               <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer"

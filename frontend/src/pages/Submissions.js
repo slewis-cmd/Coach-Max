@@ -9,7 +9,10 @@ import {
   Upload,
   CheckCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  FileEdit,
+  Mail,
+  Send
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -27,6 +30,7 @@ export default function Submissions() {
     if (!authLoading && user) {
       fetchSubmissions();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
 
   const fetchSubmissions = async () => {
@@ -43,12 +47,12 @@ export default function Submissions() {
   const handleReview = async (submissionId) => {
     setReviewing(submissionId);
     try {
-      const res = await axios.post(
+      await axios.post(
         `${API_URL}/api/submissions/${submissionId}/review`,
         {},
         { withCredentials: true }
       );
-      toast.success('AI review complete!');
+      toast.success('AI feedback generated! Click to review and send.');
       fetchSubmissions();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Review failed');
@@ -66,7 +70,8 @@ export default function Submissions() {
   }
 
   const pendingSubmissions = submissions.filter(s => s.status === 'pending');
-  const reviewedSubmissions = submissions.filter(s => s.status === 'reviewed');
+  const draftSubmissions = submissions.filter(s => s.status === 'draft');
+  const sentSubmissions = submissions.filter(s => s.status === 'sent' || s.feedback_sent);
 
   return (
     <div className="min-h-screen bg-[#F9F8F6]" data-testid="submissions-page">
@@ -84,7 +89,7 @@ export default function Submissions() {
               {isInstructor ? 'Student Submissions' : 'My Submissions'}
             </h1>
             <p className="text-sm text-[#888]">
-              {isInstructor ? 'Review homework and provide AI feedback' : 'Track your homework submissions'}
+              {isInstructor ? 'Review homework and send feedback' : 'Track your homework submissions'}
             </p>
           </div>
         </div>
@@ -96,7 +101,8 @@ export default function Submissions() {
           <div className="mb-8">
             <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#FDE047]" />
-              {isInstructor ? 'Pending Reviews' : 'Awaiting Review'}
+              {isInstructor ? 'Needs AI Review' : 'Awaiting Review'}
+              <span className="text-sm bg-[#FEF9C3] text-[#854D0E] px-2 py-0.5 rounded-full">{pendingSubmissions.length}</span>
             </h2>
             <div className="space-y-3">
               {pendingSubmissions.map((sub) => (
@@ -132,12 +138,12 @@ export default function Submissions() {
                         {reviewing === sub.submission_id ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                            Reviewing...
+                            Generating...
                           </>
                         ) : (
                           <>
                             <Sparkles className="w-4 h-4 mr-2" />
-                            Generate AI Review
+                            Generate AI Feedback
                           </>
                         )}
                       </Button>
@@ -149,20 +155,65 @@ export default function Submissions() {
           </div>
         )}
 
-        {/* Reviewed */}
-        {reviewedSubmissions.length > 0 && (
+        {/* Draft - Needs Review */}
+        {isInstructor && draftSubmissions.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
+              <FileEdit className="w-5 h-5 text-[#075985]" />
+              Ready to Review & Send
+              <span className="text-sm bg-[#E0F2FE] text-[#075985] px-2 py-0.5 rounded-full">{draftSubmissions.length}</span>
+            </h2>
+            <div className="space-y-3">
+              {draftSubmissions.map((sub) => (
+                <Card 
+                  key={sub.submission_id}
+                  className="bg-[#F0F9FF] border-[#BAE6FD] cursor-pointer hover:shadow-sm transition-shadow"
+                  onClick={() => navigate(`/submission/${sub.submission_id}`)}
+                  data-testid={`draft-${sub.submission_id}`}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-[#E0F2FE] rounded-lg flex items-center justify-center">
+                        <FileEdit className="w-5 h-5 text-[#075985]" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[#1A1A1A]">{sub.student?.name}</p>
+                        <p className="text-sm text-[#888]">
+                          {sub.material?.title || 'Homework'} • Week {sub.material?.week_number || '?'}
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/submission/${sub.submission_id}`);
+                      }}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Review & Send
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sent */}
+        {sentSubmissions.length > 0 && (
           <div>
             <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-[#065F46]" />
-              Reviewed
+              <Mail className="w-5 h-5 text-[#065F46]" />
+              {isInstructor ? 'Feedback Sent' : 'Received Feedback'}
             </h2>
             <div className="space-y-4">
-              {reviewedSubmissions.map((sub) => (
+              {sentSubmissions.map((sub) => (
                 <Card 
                   key={sub.submission_id}
                   className="bg-white border-[#E5E5E5] cursor-pointer hover:shadow-sm transition-shadow"
                   onClick={() => navigate(`/submission/${sub.submission_id}`)}
-                  data-testid={`reviewed-${sub.submission_id}`}
+                  data-testid={`sent-${sub.submission_id}`}
                 >
                   <CardContent className="p-6">
                     <div className="flex items-start gap-4 mb-4">
@@ -181,10 +232,10 @@ export default function Submissions() {
                         </p>
                       </div>
                     </div>
-                    {sub.ai_feedback && (
+                    {(sub.instructor_feedback || sub.ai_feedback) && (
                       <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg p-4">
                         <p className="text-sm text-[#166534] feedback-letter line-clamp-3">
-                          {sub.ai_feedback.substring(0, 200)}...
+                          {(sub.instructor_feedback || sub.ai_feedback).substring(0, 200)}...
                         </p>
                       </div>
                     )}

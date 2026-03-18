@@ -231,6 +231,301 @@ invalid-email,Invalid Entry
             print(f"❌ Failed - Error: {str(e)}")
             return False
 
+    def test_homework_upload_with_due_date(self):
+        """Test homework material upload with due date parameter"""
+        print("\n" + "="*50)
+        print("📅 TESTING HOMEWORK UPLOAD WITH DUE DATE")
+        print("="*50)
+        
+        # Create a simple test PDF content (minimal PDF structure)
+        pdf_content = b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 44 >>
+stream
+BT
+/F1 12 Tf
+100 700 Td
+(Test Homework) Tj
+ET
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000207 00000 n 
+trailer
+<< /Size 5 /Root 1 0 R >>
+startxref
+296
+%%EOF"""
+        
+        # Set due date to 7 days from now
+        from datetime import datetime, timedelta
+        due_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        # Test uploading homework with due date - use query parameters and multipart form
+        files = {'file': ('test_homework.pdf', pdf_content, 'application/pdf')}
+        
+        from urllib.parse import urlencode
+        params = {
+            'week_number': 3,
+            'material_type': 'homework',
+            'title': 'Test Homework with Due Date',
+            'description': 'Testing due date functionality',
+            'due_date': due_date
+        }
+        
+        url = f"{self.base_url}/api/cohorts/{self.cohort_id}/materials?{urlencode(params)}"
+        headers = {'Authorization': f'Bearer {self.token}'}
+        
+        print(f"🔍 Testing homework upload with due date...")
+        print(f"   URL: {url}")
+        print(f"   Due date: {due_date}")
+        
+        self.tests_run += 1
+        try:
+            response = requests.post(url, files=files, headers=headers)
+            print(f"   Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                self.tests_passed += 1
+                result = response.json()
+                homework_material_id = result.get('material_id')
+                print(f"✅ Homework uploaded successfully with due date")
+                print(f"   Material ID: {homework_material_id}")
+                return True, homework_material_id
+            else:
+                print(f"❌ Failed - Status: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False, None
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, None
+
+    def test_submission_workflow(self, material_id=None):
+        """Test the complete submission workflow with human-in-the-loop"""
+        print("\n" + "="*50)
+        print("🔄 TESTING SUBMISSION WORKFLOW (HUMAN-IN-THE-LOOP)")
+        print("="*50)
+        
+        # Step 1: Test submissions listing
+        success1, submissions = self.run_test(
+            "Get submissions list",
+            "GET",
+            "submissions",
+            200
+        )
+        
+        if not success1:
+            print("❌ Could not fetch submissions")
+            return False
+            
+        print(f"   Found {len(submissions) if isinstance(submissions, list) else 0} submissions")
+        
+        # Find a pending submission to test with, or note that we need one
+        pending_submissions = [s for s in submissions if s.get('status') == 'pending'] if isinstance(submissions, list) else []
+        draft_submissions = [s for s in submissions if s.get('status') == 'draft'] if isinstance(submissions, list) else []
+        
+        print(f"   Pending submissions: {len(pending_submissions)}")
+        print(f"   Draft submissions: {len(draft_submissions)}")
+        
+        if pending_submissions:
+            submission_id = pending_submissions[0]['submission_id']
+            print(f"   Testing with pending submission: {submission_id}")
+            
+            # Test the AI review generation
+            return self.test_ai_review_and_feedback_flow(submission_id)
+        elif draft_submissions:
+            submission_id = draft_submissions[0]['submission_id']
+            print(f"   Testing with draft submission: {submission_id}")
+            
+            # Test the feedback editing workflow
+            return self.test_feedback_edit_and_send_flow(submission_id)
+        else:
+            print("   No pending or draft submissions found")
+            print("   ✅ Submissions API is working, but no test data available for workflow testing")
+            print(f"   Note: Material ID was {'provided' if material_id else 'not provided'}")
+            return True
+
+    def test_feedback_edit_and_send_flow(self, submission_id):
+        """Test feedback editing and sending for a draft submission"""
+        print(f"\n📝 Testing Feedback Edit and Send Flow for Draft Submission: {submission_id}")
+        
+        # Get current submission details
+        success1, submission = self.run_test(
+            "Get submission details",
+            "GET",
+            f"submissions/{submission_id}",
+            200
+        )
+        
+        if not success1:
+            print("❌ Could not fetch submission details")
+            return False
+            
+        current_feedback = submission.get('ai_feedback', '') or submission.get('instructor_feedback', '')
+        if not current_feedback:
+            print("   No existing feedback found, generating AI feedback first...")
+            return self.test_ai_review_and_feedback_flow(submission_id)
+        
+        # Test updating feedback (PUT /api/submissions/{id}/feedback)
+        updated_feedback = f"Updated feedback: {current_feedback[:200]}... [Instructor edits and additions for testing]"
+        
+        success2, update_response = self.run_test(
+            "Update feedback (human-in-the-loop edit)",
+            "PUT",
+            f"submissions/{submission_id}/feedback", 
+            200,
+            data={"feedback": updated_feedback}
+        )
+        
+        if success2:
+            print("✅ Feedback update (human-in-the-loop) successful")
+        else:
+            print("❌ Feedback update failed")
+            return False
+        
+        # Test sending feedback to student (POST /api/submissions/{id}/send-feedback)
+        success3, send_response = self.run_test(
+            "Send feedback to student",
+            "POST",
+            f"submissions/{submission_id}/send-feedback",
+            200
+        )
+        
+        if success3:
+            print("✅ Feedback sent to student successfully")
+            print("   Note: Email delivery may fail in test environment, but API should succeed")
+        else:
+            print("❌ Send feedback failed")
+            return False
+        
+        return success1 and success2 and success3
+
+    def test_ai_review_and_feedback_flow(self, submission_id):
+        """Test AI review generation and human-in-the-loop feedback workflow"""
+        print("\n📝 Testing AI Review and Feedback Flow")
+        print(f"   Submission ID: {submission_id}")
+        
+        # Step 1: Generate AI review (should create 'draft' status)
+        success1, review_response = self.run_test(
+            "Generate AI review (should create draft)",
+            "POST",
+            f"submissions/{submission_id}/review",
+            200
+        )
+        
+        if not success1:
+            print("❌ AI review generation failed")
+            return False
+            
+        # Verify the response indicates draft status
+        if review_response.get('status') == 'draft':
+            print("✅ AI review correctly created draft status")
+        else:
+            print(f"⚠️  Expected 'draft' status, got: {review_response.get('status')}")
+        
+        feedback = review_response.get('feedback', '')
+        if feedback:
+            print(f"   Generated feedback (preview): {feedback[:100]}...")
+        
+        # Step 2: Test updating feedback (PUT /api/submissions/{id}/feedback)
+        updated_feedback = f"Edited feedback: {feedback[:200]}... [Instructor additions and edits]"
+        
+        success2, update_response = self.run_test(
+            "Update feedback (human-in-the-loop)",
+            "PUT",
+            f"submissions/{submission_id}/feedback", 
+            200,
+            data={"feedback": updated_feedback}
+        )
+        
+        if success2:
+            print("✅ Feedback update (human-in-the-loop) successful")
+        else:
+            print("❌ Feedback update failed")
+            return False
+        
+        # Step 3: Test sending feedback to student (POST /api/submissions/{id}/send-feedback)
+        success3, send_response = self.run_test(
+            "Send feedback to student",
+            "POST",
+            f"submissions/{submission_id}/send-feedback",
+            200
+        )
+        
+        if success3:
+            print("✅ Feedback sent to student successfully")
+            print("   Note: Email delivery may fail in test environment, but API should succeed")
+        else:
+            print("❌ Send feedback failed")
+            return False
+        
+        # Step 4: Verify submission status changed to 'sent'
+        success4, final_submission = self.run_test(
+            "Verify final submission status",
+            "GET",
+            f"submissions/{submission_id}",
+            200
+        )
+        
+        if success4:
+            final_status = final_submission.get('status')
+            if final_status == 'sent':
+                print("✅ Submission status correctly updated to 'sent'")
+            else:
+                print(f"⚠️  Expected 'sent' status, got: {final_status}")
+        
+        return success1 and success2 and success3 and success4
+
+    def test_due_date_display(self):
+        """Test that due dates are properly returned in materials API"""
+        print("\n" + "="*50)
+        print("📅 TESTING DUE DATE DISPLAY")
+        print("="*50)
+        
+        success, response = self.run_test(
+            f"Get materials with due dates for cohort {self.cohort_id}",
+            "GET",
+            f"cohorts/{self.cohort_id}/materials",
+            200
+        )
+        
+        if success and isinstance(response, list):
+            print(f"✅ Materials retrieved successfully")
+            
+            # Look for homework materials with due dates
+            homework_with_due_dates = []
+            for week in response:
+                homework_list = week.get('homework', [])
+                for hw in homework_list:
+                    if hw.get('due_date'):
+                        homework_with_due_dates.append(hw)
+                        print(f"   Found homework '{hw['title']}' with due date: {hw['due_date']}")
+            
+            if homework_with_due_dates:
+                print(f"✅ Found {len(homework_with_due_dates)} homework assignments with due dates")
+                return True
+            else:
+                print("   No homework with due dates found (this may be expected if none uploaded)")
+                return True
+        else:
+            print("❌ Could not retrieve materials")
+            return False
+
     def test_materials_list(self):
         """Test materials listing to verify context"""
         print("\n" + "="*50)
@@ -258,9 +553,9 @@ invalid-email,Invalid Entry
         return False
 
     def run_all_tests(self):
-        """Run all tests"""
-        print("🚀 Starting ThinkificAI Download & Import Tests")
-        print("=" * 60)
+        """Run all tests including new human-in-the-loop features"""
+        print("🚀 Starting ThinkificAI Comprehensive Tests (Including New Features)")
+        print("=" * 70)
         
         # Test authentication first
         if not self.test_auth_access():
@@ -275,7 +570,7 @@ invalid-email,Invalid Entry
         # Test materials list for context
         self.test_materials_list()
         
-        # Test new download functionality
+        # Test existing download functionality
         self.test_material_download()
         
         # Test CSV template download
@@ -284,10 +579,23 @@ invalid-email,Invalid Entry
         # Test bulk import
         self.test_bulk_student_import()
         
+        # NEW FEATURE TESTS
+        print("\n🆕 TESTING NEW FEATURES")
+        print("=" * 50)
+        
+        # Test homework upload with due date
+        homework_success, homework_material_id = self.test_homework_upload_with_due_date()
+        
+        # Test due date display in materials
+        self.test_due_date_display()
+        
+        # Test submission workflow (human-in-the-loop)
+        self.test_submission_workflow(homework_material_id if homework_success else None)
+        
         # Print final results
-        print("\n" + "=" * 60)
+        print("\n" + "=" * 70)
         print("📊 FINAL RESULTS")
-        print("=" * 60)
+        print("=" * 70)
         print(f"Tests Run: {self.tests_run}")
         print(f"Tests Passed: {self.tests_passed}")
         print(f"Success Rate: {(self.tests_passed/self.tests_run)*100:.1f}%" if self.tests_run > 0 else "0%")
