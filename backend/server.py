@@ -898,6 +898,85 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
         media_type="application/octet-stream"
     )
 
+
+# ==================== STUDENT DASHBOARD ENDPOINT ====================
+
+@api_router.get("/student/dashboard")
+async def get_student_dashboard(user: dict = Depends(get_current_user)):
+    """Get structured weekly dashboard data for student"""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Students only")
+    
+    cohorts = await db.cohorts.find(
+        {"student_ids": user["user_id"]},
+        {"_id": 0}
+    ).to_list(10)
+    
+    result = []
+    for cohort in cohorts:
+        materials = await db.materials.find(
+            {"cohort_id": cohort["cohort_id"]},
+            {"_id": 0}
+        ).to_list(100)
+        
+        submissions = await db.submissions.find(
+            {"student_id": user["user_id"], "cohort_id": cohort["cohort_id"]},
+            {"_id": 0}
+        ).to_list(100)
+        
+        weeks = []
+        for week_num in range(1, 13):
+            week_materials = [m for m in materials if m.get("week_number") == week_num]
+            homework_list = [m for m in week_materials if m.get("material_type") == "homework"]
+            
+            week_data = {
+                "week_number": week_num,
+                "homework": None,
+                "submission": None,
+                "status": "no_homework",
+                "feedback": None
+            }
+            
+            if homework_list:
+                hw = homework_list[0]
+                week_data["homework"] = {
+                    "material_id": hw["material_id"],
+                    "title": hw.get("title", ""),
+                    "description": hw.get("description", ""),
+                    "due_date": hw.get("due_date"),
+                    "file_name": hw.get("file_name", "")
+                }
+                week_data["status"] = "waiting_on_submission"
+                
+                sub = next((s for s in submissions if s.get("material_id") == hw["material_id"]), None)
+                if sub:
+                    week_data["submission"] = {
+                        "submission_id": sub["submission_id"],
+                        "file_name": sub.get("file_name", ""),
+                        "submitted_at": sub.get("submitted_at", ""),
+                        "resubmission_allowed": sub.get("resubmission_allowed", False),
+                        "resubmission_count": sub.get("resubmission_count", 0)
+                    }
+                    if sub.get("status") == "pending":
+                        week_data["status"] = "submitted"
+                    elif sub.get("status") == "draft":
+                        week_data["status"] = "under_review"
+                    elif sub.get("status") == "sent":
+                        week_data["status"] = "feedback_provided"
+                        week_data["feedback"] = sub.get("instructor_feedback") or sub.get("ai_feedback")
+            
+            weeks.append(week_data)
+        
+        result.append({
+            "cohort_id": cohort["cohort_id"],
+            "cohort_name": cohort.get("name", ""),
+            "description": cohort.get("description", ""),
+            "weeks": weeks
+        })
+    
+    return result
+
+
 # ==================== SUBMISSION ENDPOINTS ====================
 
 @api_router.post("/materials/{material_id}/submit")

@@ -1,68 +1,155 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Progress } from '../components/ui/progress';
+import { Card, CardContent } from '../components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
 import { 
   BookOpen, 
-  FileText, 
   LogOut,
   Upload,
   CheckCircle,
   Clock,
-  ChevronRight,
-  Sparkles
+  MessageSquare,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  File,
+  Calendar,
+  Hourglass,
+  Send
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+const STATUS_CONFIG = {
+  no_homework: {
+    label: '',
+    color: 'bg-[#F2F0ED] text-[#888]',
+    icon: null
+  },
+  waiting_on_submission: {
+    label: 'Waiting on Submission',
+    color: 'bg-[#FEF3C7] text-[#92400E]',
+    icon: Clock
+  },
+  submitted: {
+    label: 'Submitted',
+    color: 'bg-[#DBEAFE] text-[#1E40AF]',
+    icon: Send
+  },
+  under_review: {
+    label: 'Under Review',
+    color: 'bg-[#F3E8FF] text-[#6B21A8]',
+    icon: Hourglass
+  },
+  feedback_provided: {
+    label: 'Feedback Provided',
+    color: 'bg-[#D1FAE5] text-[#065F46]',
+    icon: CheckCircle
+  }
+};
+
+function StatusBadge({ status }) {
+  const config = STATUS_CONFIG[status];
+  if (!config || !config.label) return null;
+  const Icon = config.icon;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${config.color}`} data-testid={`status-${status}`}>
+      {Icon && <Icon className="w-3 h-3" />}
+      {config.label}
+    </span>
+  );
+}
+
 export default function StudentDashboard() {
-  const { user, logout, loading, isAuthenticated, isStudent } = useAuth();
+  const { user, logout, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [cohorts, setCohorts] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
+  const [dashboardData, setDashboardData] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [expandedWeek, setExpandedWeek] = useState(null);
+
+  // Upload dialog
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       navigate('/');
-    } else if (!loading && user?.role === 'instructor') {
+    } else if (!loading && user?.role !== 'student') {
       navigate('/dashboard');
     }
   }, [loading, isAuthenticated, user, navigate]);
 
-  useEffect(() => {
-    if (isStudent) {
-      fetchData();
-    }
-  }, [isStudent]);
-
-  const fetchData = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
-      const [cohortsRes, submissionsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/cohorts`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/submissions`, { withCredentials: true })
-      ]);
-      setCohorts(cohortsRes.data);
-      setSubmissions(submissionsRes.data);
+      const res = await axios.get(`${API_URL}/api/student/dashboard`);
+      setDashboardData(res.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching dashboard:', error);
     } finally {
       setLoadingData(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!loading && user?.role === 'student') {
+      fetchDashboard();
+    }
+  }, [loading, user, fetchDashboard]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/');
   };
 
-  const reviewedCount = submissions.filter(s => s.status === 'reviewed').length;
-  const totalSubmissions = submissions.length;
-  const progressPercent = totalSubmissions > 0 ? (reviewedCount / totalSubmissions) * 100 : 0;
+  const openUpload = (homework, cohortId) => {
+    setUploadTarget({ ...homework, cohort_id: cohortId });
+    setUploadFile(null);
+    setShowUpload(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!uploadFile) {
+      toast.error('Please select a file');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      await axios.post(
+        `${API_URL}/api/materials/${uploadTarget.material_id}/submit`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+      toast.success('Homework submitted! Your instructor will review it soon.');
+      setShowUpload(false);
+      setUploadTarget(null);
+      setUploadFile(null);
+      fetchDashboard();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to submit homework');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleFeedback = (weekKey) => {
+    setExpandedWeek(expandedWeek === weekKey ? null : weekKey);
+  };
 
   if (loading || loadingData) {
     return (
@@ -71,6 +158,8 @@ export default function StudentDashboard() {
       </div>
     );
   }
+
+  const activeCohort = dashboardData[0];
 
   return (
     <div className="min-h-screen bg-[#F9F8F6]" data-testid="student-dashboard">
@@ -84,20 +173,10 @@ export default function StudentDashboard() {
         </div>
 
         <nav className="space-y-2">
-          <Link 
-            to="/dashboard"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-[#1A1A1A] font-medium"
-          >
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-[#1A1A1A] font-medium">
             <FileText className="w-5 h-5" />
-            My Learning
-          </Link>
-          <Link 
-            to="/my-submissions"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
-          >
-            <Upload className="w-5 h-5" />
-            My Submissions
-          </Link>
+            My Progress
+          </div>
         </nav>
 
         <div className="absolute bottom-6 left-6 right-6">
@@ -110,8 +189,8 @@ export default function StudentDashboard() {
               <p className="text-xs text-[#888] truncate">{user?.email}</p>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="w-full justify-start text-[#5A5A5A] hover:text-[#1A1A1A]"
             onClick={handleLogout}
             data-testid="logout-btn"
@@ -143,141 +222,188 @@ export default function StudentDashboard() {
             Hello, {user?.name?.split(' ')[0]}!
           </h1>
           <p className="text-[#5A5A5A]">
-            Keep up the great work on your learning journey
+            {activeCohort ? activeCohort.cohort_name : 'No courses assigned yet'}
           </p>
         </div>
 
-        {/* Progress Card */}
-        {totalSubmissions > 0 && (
-          <Card className="bg-white border-[#E5E5E5] mb-8 animate-fade-in">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-medium text-[#1A1A1A]">Your Progress</h3>
-                  <p className="text-sm text-[#888]">{reviewedCount} of {totalSubmissions} submissions reviewed</p>
-                </div>
-                <div className="w-12 h-12 bg-[#D1FAE5] rounded-full flex items-center justify-center">
-                  <Sparkles className="w-6 h-6 text-[#065F46]" />
-                </div>
-              </div>
-              <Progress value={progressPercent} className="h-2" />
+        {!activeCohort ? (
+          <Card className="bg-white border-[#E5E5E5] border-dashed">
+            <CardContent className="p-12 text-center">
+              <BookOpen className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No courses yet</h3>
+              <p className="text-[#5A5A5A]">Your instructor will add you to a cohort soon</p>
             </CardContent>
           </Card>
-        )}
+        ) : (
+          <div className="space-y-3" data-testid="weekly-progress">
+            {activeCohort.weeks.map((week) => {
+              const weekKey = `${activeCohort.cohort_id}-${week.week_number}`;
+              const isExpanded = expandedWeek === weekKey;
+              const hasFeedback = week.status === 'feedback_provided' && week.feedback;
+              const hasHomework = week.status !== 'no_homework';
+              const canSubmit = week.status === 'waiting_on_submission' ||
+                (week.submission?.resubmission_allowed && week.status !== 'feedback_provided');
 
-        {/* Cohorts */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-light text-[#1A1A1A] mb-4">My Courses</h2>
-          
-          {cohorts.length === 0 ? (
-            <Card className="bg-white border-[#E5E5E5] border-dashed">
-              <CardContent className="p-12 text-center">
-                <BookOpen className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No courses yet</h3>
-                <p className="text-[#5A5A5A]">
-                  Your instructor will add you to a cohort soon
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid md:grid-cols-2 gap-4">
-              {cohorts.map((cohort) => (
-                <Card 
-                  key={cohort.cohort_id}
-                  className="bg-white border-[#E5E5E5] hover:shadow-md transition-shadow cursor-pointer group"
-                  onClick={() => navigate(`/cohort/${cohort.cohort_id}`)}
-                  data-testid={`cohort-card-${cohort.cohort_id}`}
+              return (
+                <Card
+                  key={week.week_number}
+                  className={`bg-white border-[#E5E5E5] transition-all ${
+                    hasFeedback ? 'hover:shadow-md cursor-pointer' : ''
+                  } ${!hasHomework ? 'opacity-50' : ''}`}
+                  data-testid={`week-${week.week_number}`}
                 >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-normal flex items-center justify-between">
-                      {cohort.name}
-                      <ChevronRight className="w-5 h-5 text-[#C4C4C4] group-hover:text-[#1A1A1A] transition-colors" />
-                    </CardTitle>
-                    <CardDescription>{cohort.description || 'Course materials'}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button 
-                      size="sm" 
-                      className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+                  <CardContent className="p-0">
+                    {/* Week Row */}
+                    <div
+                      className={`flex items-center gap-4 p-4 md:p-5 ${hasFeedback ? 'cursor-pointer' : ''}`}
+                      onClick={hasFeedback ? () => toggleFeedback(weekKey) : undefined}
                     >
-                      View Materials
-                    </Button>
+                      {/* Week Number */}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0 ${
+                        week.status === 'feedback_provided'
+                          ? 'bg-[#065F46] text-white'
+                          : week.status === 'no_homework'
+                            ? 'bg-[#E5E5E5] text-[#888]'
+                            : 'bg-[#1A1A1A] text-white'
+                      }`}>
+                        {week.week_number}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className="font-medium text-[#1A1A1A] text-sm md:text-base">
+                            Week {week.week_number}
+                          </h3>
+                          <StatusBadge status={week.status} />
+                        </div>
+                        {week.homework && (
+                          <p className="text-sm text-[#5A5A5A] mt-0.5 truncate">
+                            {week.homework.title}
+                            {week.homework.due_date && (
+                              <span className="inline-flex items-center gap-1 ml-3 text-xs text-[#92400E]">
+                                <Calendar className="w-3 h-3" />
+                                Due {new Date(week.homework.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        {!hasHomework && (
+                          <p className="text-sm text-[#888] mt-0.5">No assignment yet</p>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {canSubmit && (
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openUpload(week.homework, activeCohort.cohort_id);
+                            }}
+                            className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg text-xs md:text-sm"
+                            data-testid={`submit-week-${week.week_number}`}
+                          >
+                            <Upload className="w-3.5 h-3.5 mr-1.5" />
+                            Submit
+                          </Button>
+                        )}
+                        {week.status === 'submitted' && (
+                          <span className="text-xs text-[#5A5A5A] hidden md:block">
+                            {week.submission?.file_name}
+                          </span>
+                        )}
+                        {hasFeedback && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[#065F46] hover:bg-[#D1FAE5]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFeedback(weekKey);
+                            }}
+                            data-testid={`view-feedback-${week.week_number}`}
+                          >
+                            <MessageSquare className="w-4 h-4 mr-1" />
+                            Feedback
+                            {isExpanded ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Expanded Feedback */}
+                    {hasFeedback && isExpanded && (
+                      <div className="border-t border-[#E5E5E5] p-5 md:p-6 bg-[#F0FDF4] animate-fade-in" data-testid={`feedback-content-${week.week_number}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <CheckCircle className="w-4 h-4 text-[#065F46]" />
+                          <span className="text-sm font-medium text-[#065F46]">Instructor Feedback</span>
+                        </div>
+                        <div className="text-sm text-[#1A1A1A] whitespace-pre-wrap leading-relaxed pl-6">
+                          {week.feedback}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Recent Feedback */}
-        {submissions.filter(s => s.status === 'reviewed').length > 0 && (
-          <div>
-            <h2 className="text-2xl font-light text-[#1A1A1A] mb-4">Recent Feedback</h2>
-            <div className="space-y-4">
-              {submissions
-                .filter(s => s.status === 'reviewed')
-                .slice(0, 3)
-                .map((sub) => (
-                  <Card 
-                    key={sub.submission_id}
-                    className="bg-[#F0FDF4] border-[#BBF7D0] cursor-pointer hover:shadow-sm transition-shadow"
-                    onClick={() => navigate(`/submission/${sub.submission_id}`)}
-                    data-testid={`feedback-${sub.submission_id}`}
-                  >
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 bg-[#D1FAE5] rounded-full flex items-center justify-center flex-shrink-0">
-                          <CheckCircle className="w-5 h-5 text-[#065F46]" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-[#166534] mb-1">
-                            {sub.material?.title || 'Homework'} - Week {sub.material?.week_number || '?'}
-                          </p>
-                          <p className="text-sm text-[#065F46] line-clamp-2 feedback-letter">
-                            {sub.ai_feedback?.substring(0, 150)}...
-                          </p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-[#065F46] flex-shrink-0" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pending Submissions */}
-        {submissions.filter(s => s.status === 'pending').length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-light text-[#1A1A1A] mb-4">Awaiting Review</h2>
-            <div className="space-y-3">
-              {submissions
-                .filter(s => s.status === 'pending')
-                .map((sub) => (
-                  <Card 
-                    key={sub.submission_id}
-                    className="bg-white border-[#E5E5E5]"
-                    data-testid={`pending-${sub.submission_id}`}
-                  >
-                    <CardContent className="p-4 flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#FDE047] rounded-full flex items-center justify-center">
-                        <Clock className="w-5 h-5 text-[#1A1A1A]" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-[#1A1A1A]">
-                          {sub.material?.title || 'Homework'}
-                        </p>
-                        <p className="text-sm text-[#888]">
-                          Submitted • Awaiting instructor review
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-            </div>
+              );
+            })}
           </div>
         )}
       </main>
+
+      {/* Upload Dialog */}
+      <Dialog open={showUpload} onOpenChange={setShowUpload}>
+        <DialogContent className="bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-normal text-2xl">Submit Homework</DialogTitle>
+            <DialogDescription>
+              {uploadTarget?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Your Submission (PDF or Word)</Label>
+            <div className="mt-1 upload-zone rounded-lg p-8 text-center cursor-pointer">
+              <label htmlFor="student-homework-file" className="cursor-pointer block">
+                {uploadFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <File className="w-5 h-5 text-[#065F46]" />
+                    <span className="text-sm text-[#1A1A1A]">{uploadFile.name}</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 text-[#C4C4C4] mx-auto mb-2" />
+                    <p className="text-sm text-[#888]">Click to upload your homework</p>
+                    <p className="text-xs text-[#C4C4C4] mt-1">PDF or DOCX only</p>
+                  </>
+                )}
+              </label>
+            </div>
+            <input
+              id="student-homework-file"
+              data-testid="student-homework-file-input"
+              type="file"
+              accept=".pdf,.docx"
+              className="hidden"
+              onChange={(e) => setUploadFile(e.target.files[0])}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUpload(false)}>
+              Cancel
+            </Button>
+            <Button
+              data-testid="submit-homework-btn"
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+            >
+              {submitting ? 'Submitting...' : 'Submit'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
