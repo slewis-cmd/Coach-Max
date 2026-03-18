@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -25,7 +25,9 @@ import {
   File,
   Calendar,
   Hourglass,
-  Send
+  Send,
+  X,
+  MessageCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -33,11 +35,7 @@ import axios from 'axios';
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const STATUS_CONFIG = {
-  no_homework: {
-    label: '',
-    color: 'bg-[#F2F0ED] text-[#888]',
-    icon: null
-  },
+  no_homework: { label: '', color: '', icon: null },
   waiting_on_submission: {
     label: 'Waiting on Submission',
     color: 'bg-[#FEF3C7] text-[#92400E]',
@@ -72,6 +70,158 @@ function StatusBadge({ status }) {
   );
 }
 
+function CoachMaxChat({ submissionId, weekNumber, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/chat/history/${submissionId}`);
+        const history = res.data.map(c => ([
+          { role: 'student', text: c.message },
+          { role: 'coach', text: c.response }
+        ])).flat();
+        setMessages(history);
+      } catch (e) {
+        console.error('Error loading chat history:', e);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+    loadHistory();
+  }, [submissionId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || sending) return;
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'student', text: userMsg }]);
+    setSending(true);
+
+    try {
+      const res = await axios.post(`${API_URL}/api/chat/ask-tutor`, {
+        message: userMsg,
+        submission_id: submissionId
+      });
+      setMessages(prev => [...prev, { role: 'coach', text: res.data.response }]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Coach Max is unavailable right now');
+      setMessages(prev => [...prev, { role: 'coach', text: "Sorry, I'm having trouble right now. Please try again in a moment." }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" data-testid="coach-max-chat">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      
+      {/* Chat Panel */}
+      <div className="relative bg-white w-full md:w-[480px] md:max-h-[600px] h-[85vh] md:h-auto md:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+        {/* Header */}
+        <div className="bg-[#1A1A1A] text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#065F46] rounded-full flex items-center justify-center">
+              <MessageCircle className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-medium text-sm">Coach Max</h3>
+              <p className="text-xs text-white/60">Week {weekNumber} feedback discussion</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="text-white/70 hover:text-white hover:bg-white/10">
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#FAFAF8]">
+          {/* Welcome message */}
+          {messages.length === 0 && !loadingHistory && (
+            <div className="text-center py-8">
+              <div className="w-14 h-14 bg-[#D1FAE5] rounded-full flex items-center justify-center mx-auto mb-3">
+                <MessageCircle className="w-7 h-7 text-[#065F46]" />
+              </div>
+              <h4 className="font-medium text-[#1A1A1A] mb-1">Hi! I'm Coach Max</h4>
+              <p className="text-sm text-[#5A5A5A] max-w-xs mx-auto">
+                Ask me anything about your Week {weekNumber} feedback. I'm here to help you grow!
+              </p>
+            </div>
+          )}
+
+          {loadingHistory && (
+            <div className="flex justify-center py-8">
+              <div className="w-6 h-6 border-2 border-[#065F46] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                msg.role === 'student'
+                  ? 'bg-[#1A1A1A] text-white rounded-br-md'
+                  : 'bg-white border border-[#E5E5E5] text-[#1A1A1A] rounded-bl-md shadow-sm'
+              }`}>
+                {msg.role === 'coach' && (
+                  <p className="text-xs font-medium text-[#065F46] mb-1">Coach Max</p>
+                )}
+                <div className="whitespace-pre-wrap">{msg.text}</div>
+              </div>
+            </div>
+          ))}
+
+          {sending && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-[#E5E5E5] rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                <p className="text-xs font-medium text-[#065F46] mb-1">Coach Max</p>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-[#065F46] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-[#065F46] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-[#065F46] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div className="border-t border-[#E5E5E5] p-3 flex items-center gap-2 bg-white flex-shrink-0">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            placeholder="Ask Coach Max a question..."
+            className="flex-1 px-4 py-2.5 bg-[#F2F0ED] rounded-full text-sm outline-none focus:ring-2 focus:ring-[#065F46]/20"
+            disabled={sending}
+            data-testid="coach-max-input"
+          />
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={sending || !input.trim()}
+            className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-full w-10 h-10 flex-shrink-0"
+            data-testid="coach-max-send"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentDashboard() {
   const { user, logout, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -84,6 +234,9 @@ export default function StudentDashboard() {
   const [uploadTarget, setUploadTarget] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Coach Max chat
+  const [chatOpen, setChatOpen] = useState(null); // { submissionId, weekNumber }
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -115,8 +268,8 @@ export default function StudentDashboard() {
     navigate('/');
   };
 
-  const openUpload = (homework, cohortId) => {
-    setUploadTarget({ ...homework, cohort_id: cohortId });
+  const openUpload = (homework) => {
+    setUploadTarget(homework);
     setUploadFile(null);
     setShowUpload(true);
   };
@@ -234,6 +387,14 @@ export default function StudentDashboard() {
               <p className="text-[#5A5A5A]">Your instructor will add you to a cohort soon</p>
             </CardContent>
           </Card>
+        ) : activeCohort.weeks.length === 0 ? (
+          <Card className="bg-white border-[#E5E5E5] border-dashed">
+            <CardContent className="p-12 text-center">
+              <Clock className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No weeks released yet</h3>
+              <p className="text-[#5A5A5A]">Your instructor will release course weeks as the program progresses</p>
+            </CardContent>
+          </Card>
         ) : (
           <div className="space-y-3" data-testid="weekly-progress">
             {activeCohort.weeks.map((week) => {
@@ -248,7 +409,7 @@ export default function StudentDashboard() {
                 <Card
                   key={week.week_number}
                   className={`bg-white border-[#E5E5E5] transition-all ${
-                    hasFeedback ? 'hover:shadow-md cursor-pointer' : ''
+                    hasFeedback ? 'hover:shadow-md' : ''
                   } ${!hasHomework ? 'opacity-50' : ''}`}
                   data-testid={`week-${week.week_number}`}
                 >
@@ -300,7 +461,7 @@ export default function StudentDashboard() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              openUpload(week.homework, activeCohort.cohort_id);
+                              openUpload(week.homework);
                             }}
                             className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg text-xs md:text-sm"
                             data-testid={`submit-week-${week.week_number}`}
@@ -336,9 +497,27 @@ export default function StudentDashboard() {
                     {/* Expanded Feedback */}
                     {hasFeedback && isExpanded && (
                       <div className="border-t border-[#E5E5E5] p-5 md:p-6 bg-[#F0FDF4] animate-fade-in" data-testid={`feedback-content-${week.week_number}`}>
-                        <div className="flex items-center gap-2 mb-3">
-                          <CheckCircle className="w-4 h-4 text-[#065F46]" />
-                          <span className="text-sm font-medium text-[#065F46]">Instructor Feedback</span>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-[#065F46]" />
+                            <span className="text-sm font-medium text-[#065F46]">Instructor Feedback</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChatOpen({
+                                submissionId: week.submission.submission_id,
+                                weekNumber: week.week_number
+                              });
+                            }}
+                            className="border-[#065F46] text-[#065F46] hover:bg-[#D1FAE5] rounded-lg"
+                            data-testid={`ask-coach-max-${week.week_number}`}
+                          >
+                            <MessageCircle className="w-4 h-4 mr-1.5" />
+                            Ask Coach Max
+                          </Button>
                         </div>
                         <div className="text-sm text-[#1A1A1A] whitespace-pre-wrap leading-relaxed pl-6">
                           {week.feedback}
@@ -404,6 +583,15 @@ export default function StudentDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Coach Max Chat */}
+      {chatOpen && (
+        <CoachMaxChat
+          submissionId={chatOpen.submissionId}
+          weekNumber={chatOpen.weekNumber}
+          onClose={() => setChatOpen(null)}
+        />
+      )}
     </div>
   );
 }

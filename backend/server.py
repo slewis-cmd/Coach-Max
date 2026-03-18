@@ -703,6 +703,55 @@ async def download_student_template(cohort_id: str, user: dict = Depends(require
         headers={"Content-Disposition": "attachment; filename=student_import_template.csv"}
     )
 
+# ==================== WEEK RELEASE ENDPOINTS ====================
+
+@api_router.post("/cohorts/{cohort_id}/release-week")
+async def release_week(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Release a week to make it visible to students"""
+    data = await request.json()
+    week_number = data.get("week_number")
+    if not week_number or not isinstance(week_number, int) or week_number < 1 or week_number > 12:
+        raise HTTPException(status_code=400, detail="Invalid week number (1-12)")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    released = cohort.get("released_weeks", [])
+    if week_number not in released:
+        released.append(week_number)
+        released.sort()
+    
+    await db.cohorts.update_one(
+        {"cohort_id": cohort_id},
+        {"$set": {"released_weeks": released}}
+    )
+    
+    return {"released_weeks": released, "message": f"Week {week_number} released"}
+
+@api_router.post("/cohorts/{cohort_id}/unrelease-week")
+async def unrelease_week(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Hide a week from students"""
+    data = await request.json()
+    week_number = data.get("week_number")
+    if not week_number or not isinstance(week_number, int):
+        raise HTTPException(status_code=400, detail="Invalid week number")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    released = cohort.get("released_weeks", [])
+    if week_number in released:
+        released.remove(week_number)
+    
+    await db.cohorts.update_one(
+        {"cohort_id": cohort_id},
+        {"$set": {"released_weeks": released}}
+    )
+    
+    return {"released_weeks": released, "message": f"Week {week_number} hidden"}
+
 # ==================== MATERIAL ENDPOINTS ====================
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -914,6 +963,8 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
     
     result = []
     for cohort in cohorts:
+        released_weeks = cohort.get("released_weeks", [])
+        
         materials = await db.materials.find(
             {"cohort_id": cohort["cohort_id"]},
             {"_id": 0}
@@ -926,6 +977,10 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
         
         weeks = []
         for week_num in range(1, 13):
+            # Only include released weeks
+            if week_num not in released_weeks:
+                continue
+            
             week_materials = [m for m in materials if m.get("week_number") == week_num]
             homework_list = [m for m in week_materials if m.get("material_type") == "homework"]
             
@@ -975,6 +1030,137 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
         })
     
     return result
+
+
+# ==================== COACH MAX CHAT ENDPOINT ====================
+
+@api_router.post("/chat/ask-tutor")
+async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
+    """Ask Coach Max a follow-up question about feedback"""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Students only")
+    
+    data = await request.json()
+    message = data.get("message", "").strip()
+    submission_id = data.get("submission_id")
+    
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+    if not submission_id:
+        raise HTTPException(status_code=400, detail="Submission ID is required")
+    
+    # Get submission
+    submission = await db.submissions.find_one(
+        {"submission_id": submission_id, "student_id": user["user_id"]},
+        {"_id": 0}
+    )
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    if submission.get("status") != "sent":
+        raise HTTPException(status_code=400, detail="Feedback has not been provided yet")
+    
+    feedback = submission.get("instructor_feedback") or submission.get("ai_feedback", "")
+    
+    # Get material info
+    material = await db.materials.find_one(
+        {"material_id": submission["material_id"]},
+        {"_id": 0}
+    )
+    
+    # Get course materials for context
+    context_text = ""
+    if material:
+        context_materials = await db.materials.find({
+            "cohort_id": submission["cohort_id"],
+            "week_number": material.get("week_number"),
+            "material_type": {"$in": ["workbook", "case_study"]}
+        }, {"_id": 0}).to_list(10)
+        
+        for mat in context_materials:
+            try:
+                async with aiofiles.open(mat["file_path"], "rb") as f:
+                    mat_bytes = await f.read()
+                mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
+                context_text += f"\n--- {mat['title']} ---\n{mat_text[:3000]}"
+            except:
+                pass
+    
+    # Get student's submission text
+    submission_text = ""
+    try:
+        async with aiofiles.open(submission["file_path"], "rb") as f:
+            file_bytes = await f.read()
+        submission_text = extract_text_from_file(file_bytes, submission["file_name"])
+    except:
+        pass
+    
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"coach_max_{user['user_id']}_{submission_id}",
+            system_message=f"""You are Coach Max, a friendly, supportive AI tutor for a leadership development course.
+A student has received feedback on their homework and wants to discuss it with you.
+
+Your personality:
+- Warm, encouraging, and conversational
+- Use the student's name when possible
+- Answer questions clearly and specifically
+- Reference the course materials and their submission when relevant
+- Help them understand how to improve
+- Keep responses concise (2-4 paragraphs max)
+- Never give grades or scores
+
+ASSIGNMENT: {material['title'] if material else 'Unknown'}
+WEEK: {material.get('week_number', '?') if material else '?'}
+
+THE STUDENT'S SUBMISSION:
+{submission_text[:5000] if submission_text else 'Not available'}
+
+FEEDBACK THE STUDENT RECEIVED:
+{feedback}
+
+COURSE MATERIALS:
+{context_text[:5000] if context_text else 'Not available'}"""
+        ).with_model("openai", "gpt-5.2")
+        
+        response = await chat.send_message(UserMessage(text=message))
+        
+    except Exception as e:
+        logger.error(f"Coach Max error: {e}")
+        raise HTTPException(status_code=500, detail="Coach Max is unavailable right now")
+    
+    # Store chat in DB
+    chat_entry = {
+        "chat_id": f"chat_{uuid.uuid4().hex[:12]}",
+        "submission_id": submission_id,
+        "student_id": user["user_id"],
+        "message": message,
+        "response": response,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.tutor_chats.insert_one(chat_entry)
+    
+    return {"response": response}
+
+@api_router.get("/chat/history/{submission_id}")
+async def get_chat_history(submission_id: str, user: dict = Depends(get_current_user)):
+    """Get chat history for a submission"""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Students only")
+    
+    chats = await db.tutor_chats.find(
+        {"submission_id": submission_id, "student_id": user["user_id"]},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(100)
+    
+    return chats
 
 
 # ==================== SUBMISSION ENDPOINTS ====================

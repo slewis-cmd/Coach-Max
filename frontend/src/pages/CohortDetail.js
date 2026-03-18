@@ -40,7 +40,9 @@ import {
   CheckCircle,
   AlertCircle,
   Calendar,
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -144,6 +146,23 @@ export default function CohortDetail() {
       fetchCohort();
     } catch (error) {
       toast.error('Failed to remove student');
+    }
+  };
+
+  const handleToggleWeek = async (weekNumber) => {
+    const released = cohort?.released_weeks || [];
+    const isReleased = released.includes(weekNumber);
+    const endpoint = isReleased ? 'unrelease-week' : 'release-week';
+    
+    try {
+      const res = await axios.post(
+        `${API_URL}/api/cohorts/${cohortId}/${endpoint}`,
+        { week_number: weekNumber }
+      );
+      setCohort(prev => ({ ...prev, released_weeks: res.data.released_weeks }));
+      toast.success(isReleased ? `Week ${weekNumber} hidden from students` : `Week ${weekNumber} released to students`);
+    } catch (error) {
+      toast.error('Failed to update week visibility');
     }
   };
 
@@ -414,6 +433,31 @@ export default function CohortDetail() {
                       {week.week_number}
                     </div>
                     <h2 className="text-xl font-light text-[#1A1A1A]">Week {week.week_number}</h2>
+                    {isInstructor && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggleWeek(week.week_number)}
+                        className={`ml-auto rounded-lg text-xs ${
+                          (cohort?.released_weeks || []).includes(week.week_number)
+                            ? 'text-[#065F46] hover:bg-[#D1FAE5]'
+                            : 'text-[#888] hover:bg-[#F2F0ED]'
+                        }`}
+                        data-testid={`toggle-week-${week.week_number}`}
+                      >
+                        {(cohort?.released_weeks || []).includes(week.week_number) ? (
+                          <>
+                            <Eye className="w-4 h-4 mr-1.5" />
+                            Visible to students
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="w-4 h-4 mr-1.5" />
+                            Hidden from students
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
 
                   <div className="grid md:grid-cols-3 gap-4 pl-12">
