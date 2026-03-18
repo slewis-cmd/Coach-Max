@@ -80,7 +80,8 @@ export const AuthProvider = ({ children }) => {
     setRole,
     checkAuth,
     isAuthenticated: !!user,
-    isInstructor: user?.role === 'instructor',
+    isSuperAdmin: user?.role === 'super_admin',
+    isInstructor: user?.role === 'instructor' || user?.role === 'super_admin',
     isStudent: user?.role === 'student'
   };
 

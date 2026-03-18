@@ -28,7 +28,8 @@ import {
   FileEdit,
   Mail,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Shield
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -37,6 +38,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function InstructorDashboard() {
   const { user, logout, loading, isAuthenticated, isInstructor } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
   const navigate = useNavigate();
   const [cohorts, setCohorts] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -153,6 +155,16 @@ export default function InstructorDashboard() {
             <BarChart3 className="w-5 h-5" />
             Progress
           </Link>
+          {isSuperAdmin && (
+            <Link 
+              to="/admin"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+              data-testid="admin-link"
+            >
+              <Shield className="w-5 h-5" />
+              Admin
+            </Link>
+          )}
         </nav>
 
         <div className="absolute bottom-6 left-6 right-6">

@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 class ThinkificAITester:
-    def __init__(self, base_url="https://learning-agent-hub-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://admin-feedback-hub-1.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = "test_sess_1773829867648"  # Provided instructor token
         self.cohort_id = "cohort_3a1999cb7d72"  # Provided cohort ID

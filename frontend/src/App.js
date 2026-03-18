@@ -13,6 +13,7 @@ import CohortDetail from "./pages/CohortDetail";
 import Submissions from "./pages/Submissions";
 import SubmissionDetail from "./pages/SubmissionDetail";
 import ProgressTracking from "./pages/ProgressTracking";
+import AdminManagement from "./pages/AdminManagement";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -63,7 +64,7 @@ const DashboardRouter = () => {
     );
   }
 
-  if (user?.role === 'instructor') {
+  if (user?.role === 'instructor' || user?.role === 'super_admin') {
     return <InstructorDashboard />;
   }
 
@@ -116,6 +117,11 @@ const AppRouter = () => {
       <Route path="/progress" element={
         <ProtectedRoute>
           <ProgressTracking />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin" element={
+        <ProtectedRoute>
+          <AdminManagement />
         </ProtectedRoute>
       } />
       {/* Catch-all redirect */}

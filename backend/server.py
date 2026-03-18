@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 # Configure Resend
 resend.api_key = os.environ.get("RESEND_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").lower().strip()
 
 # ==================== EMAIL HELPER ====================
 
@@ -171,11 +172,24 @@ async def get_current_user(request: Request) -> dict:
     return user
 
 async def require_instructor(request: Request) -> dict:
-    """Require instructor role"""
+    """Require instructor or super_admin role"""
     user = await get_current_user(request)
-    if user.get("role") != "instructor":
+    if user.get("role") not in ["instructor", "super_admin"]:
         raise HTTPException(status_code=403, detail="Instructor access required")
     return user
+
+async def require_super_admin(request: Request) -> dict:
+    """Require super_admin role"""
+    user = await get_current_user(request)
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    return user
+
+def is_cohort_manager(user: dict, cohort: dict) -> bool:
+    """Check if user can manage a cohort (super_admin or cohort instructor)"""
+    if user.get("role") == "super_admin":
+        return True
+    return cohort.get("instructor_id") == user.get("user_id")
 
 # ==================== AUTH ENDPOINTS ====================
 
@@ -207,6 +221,9 @@ async def create_session(request: Request, response: Response):
             logger.error(f"Auth error: {e}")
             raise HTTPException(status_code=401, detail="Authentication failed")
     
+    # Check if this is the first user (make them super_admin)
+    user_count = await db.users.count_documents({})
+    
     # Check if user exists
     existing_user = await db.users.find_one(
         {"email": user_data["email"]},
@@ -217,27 +234,40 @@ async def create_session(request: Request, response: Response):
     if existing_user:
         user_id = existing_user["user_id"]
         # Update user info
+        update_fields = {
+            "name": user_data["name"],
+            "picture": user_data.get("picture")
+        }
+        # Auto-promote to super_admin if email matches SUPER_ADMIN_EMAIL
+        if SUPER_ADMIN_EMAIL and user_data["email"].lower().strip() == SUPER_ADMIN_EMAIL and existing_user.get("role") != "super_admin":
+            update_fields["role"] = "super_admin"
+            logger.info(f"Auto-promoting {user_data['email']} to super_admin")
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {
-                "name": user_data["name"],
-                "picture": user_data.get("picture")
-            }}
+            {"$set": update_fields}
         )
     else:
-        # Create new user (role needs to be selected)
+        # Create new user
         is_new_user = True
         user_id = f"user_{uuid.uuid4().hex[:12]}"
+        
+        # First user or matching SUPER_ADMIN_EMAIL becomes super_admin, all others become students
+        if user_count == 0 or (SUPER_ADMIN_EMAIL and user_data["email"].lower().strip() == SUPER_ADMIN_EMAIL):
+            role = "super_admin"
+            logger.info(f"Assigning super_admin role to: {user_data['email']}")
+        else:
+            role = "student"
+            logger.info(f"New user - assigning student role to: {user_data['email']}")
         new_user = {
             "user_id": user_id,
             "email": user_data["email"],
             "name": user_data["name"],
             "picture": user_data.get("picture"),
-            "role": None,  # No role until user selects one
+            "role": role,  # super_admin for first user, student for others
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(new_user)
-        logger.info(f"Created new user: {user_id}")
+        logger.info(f"Created new user: {user_id} with role: {role}")
     
     # Create session
     session_token = user_data.get("session_token", f"sess_{uuid.uuid4().hex}")
@@ -283,19 +313,157 @@ async def logout(request: Request, response: Response):
 
 @api_router.post("/auth/set-role")
 async def set_user_role(request: Request, user: dict = Depends(get_current_user)):
-    """Set user role (first time only or by admin)"""
+    """Set user role - only super_admin can promote to instructor"""
     data = await request.json()
     role = data.get("role")
+    target_user_id = data.get("user_id")  # Optional: for super_admin to set other users' roles
     
     if role not in ["instructor", "student"]:
         raise HTTPException(status_code=400, detail="Invalid role")
     
+    # If trying to set instructor role, must be super_admin
+    if role == "instructor":
+        if user.get("role") != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admin can promote users to instructor")
+    
+    # Determine which user to update
+    if target_user_id and user.get("role") == "super_admin":
+        # Super admin setting another user's role
+        update_user_id = target_user_id
+    else:
+        # User setting their own role (only allowed for student)
+        if role == "instructor":
+            raise HTTPException(status_code=403, detail="Only super admin can promote users to instructor")
+        update_user_id = user["user_id"]
+    
     await db.users.update_one(
-        {"user_id": user["user_id"]},
+        {"user_id": update_user_id},
         {"$set": {"role": role}}
     )
     
     return {"message": "Role updated", "role": role}
+
+# ==================== ADMIN MANAGEMENT ENDPOINTS ====================
+
+@api_router.get("/admin/users")
+async def get_all_users(user: dict = Depends(require_super_admin)):
+    """Get all users (super admin only)"""
+    users = await db.users.find({}, {"_id": 0}).to_list(500)
+    return users
+
+@api_router.post("/admin/invite-instructor")
+async def invite_instructor(request: Request, user: dict = Depends(require_super_admin)):
+    """Invite/promote a user to instructor role (super admin only)"""
+    data = await request.json()
+    email = data.get("email")
+    
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+    
+    # Find user by email
+    target_user = await db.users.find_one({"email": email.lower().strip()}, {"_id": 0})
+    
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found. They must sign up first.")
+    
+    if target_user.get("role") == "super_admin":
+        raise HTTPException(status_code=400, detail="Cannot change super admin role")
+    
+    if target_user.get("role") == "instructor":
+        raise HTTPException(status_code=400, detail="User is already an instructor")
+    
+    # Promote to instructor
+    await db.users.update_one(
+        {"user_id": target_user["user_id"]},
+        {"$set": {"role": "instructor"}}
+    )
+    
+    # Send notification email
+    email_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #E0F2FE; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: #075985; margin: 0; font-size: 24px;">You're Now an Instructor!</h1>
+        </div>
+        <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+            <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
+                Hi <strong>{target_user['name'].split()[0]}</strong>,
+            </p>
+            <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
+                Great news! <strong>{user['name']}</strong> has promoted you to an instructor on ThinkificAI.
+            </p>
+            <p style="color: #5A5A5A; font-size: 14px;">
+                You can now create cohorts, upload course materials, and review student submissions with AI-powered feedback.
+            </p>
+            <p style="color: #5A5A5A; font-size: 14px; margin-top: 16px;">
+                Log in to get started!
+            </p>
+        </div>
+    </div>
+    """
+    await send_email_notification(
+        target_user["email"],
+        "You've Been Promoted to Instructor - ThinkificAI",
+        email_html
+    )
+    
+    return {
+        "message": f"{target_user['name']} has been promoted to instructor",
+        "user": {
+            "user_id": target_user["user_id"],
+            "name": target_user["name"],
+            "email": target_user["email"],
+            "role": "instructor"
+        }
+    }
+
+@api_router.post("/admin/revoke-instructor")
+async def revoke_instructor(request: Request, user: dict = Depends(require_super_admin)):
+    """Revoke instructor role (super admin only)"""
+    data = await request.json()
+    user_id = data.get("user_id")
+    
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id required")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if target_user.get("role") == "super_admin":
+        raise HTTPException(status_code=400, detail="Cannot change super admin role")
+    
+    if target_user.get("role") != "instructor":
+        raise HTTPException(status_code=400, detail="User is not an instructor")
+    
+    # Demote to student
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"role": "student"}}
+    )
+    
+    return {"message": f"{target_user['name']} has been changed to student"}
+
+@api_router.get("/admin/stats")
+async def get_admin_stats(user: dict = Depends(require_super_admin)):
+    """Get platform stats (super admin only)"""
+    total_users = await db.users.count_documents({})
+    instructors = await db.users.count_documents({"role": "instructor"})
+    students = await db.users.count_documents({"role": "student"})
+    super_admins = await db.users.count_documents({"role": "super_admin"})
+    total_cohorts = await db.cohorts.count_documents({})
+    total_submissions = await db.submissions.count_documents({})
+    
+    return {
+        "users": {
+            "total": total_users,
+            "super_admins": super_admins,
+            "instructors": instructors,
+            "students": students
+        },
+        "cohorts": total_cohorts,
+        "submissions": total_submissions
+    }
 
 # ==================== COHORT ENDPOINTS ====================
 
@@ -317,11 +485,15 @@ async def create_cohort(cohort_data: CohortCreate, user: dict = Depends(require_
 @api_router.get("/cohorts")
 async def get_cohorts(user: dict = Depends(get_current_user)):
     """Get cohorts for current user"""
-    if user["role"] == "instructor":
-        cohorts = await db.cohorts.find(
-            {"instructor_id": user["user_id"]},
-            {"_id": 0}
-        ).to_list(100)
+    if user["role"] in ["instructor", "super_admin"]:
+        if user["role"] == "super_admin":
+            # Super admin sees all cohorts
+            cohorts = await db.cohorts.find({}, {"_id": 0}).to_list(100)
+        else:
+            cohorts = await db.cohorts.find(
+                {"instructor_id": user["user_id"]},
+                {"_id": 0}
+            ).to_list(100)
     else:
         cohorts = await db.cohorts.find(
             {"student_ids": user["user_id"]},
@@ -339,13 +511,14 @@ async def get_cohort(cohort_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     # Check access
-    if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
+    if user["role"] in ["instructor", "super_admin"]:
+        if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Get student details if instructor
-    if user["role"] == "instructor":
+    # Get student details if instructor/super_admin
+    if user["role"] in ["instructor", "super_admin"]:
         students = await db.users.find(
             {"user_id": {"$in": cohort.get("student_ids", [])}},
             {"_id": 0, "user_id": 1, "name": 1, "email": 1, "picture": 1}
@@ -359,7 +532,7 @@ async def update_cohort(cohort_id: str, update: CohortUpdate, user: dict = Depen
     """Update cohort details"""
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
     
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
@@ -373,7 +546,7 @@ async def delete_cohort(cohort_id: str, user: dict = Depends(require_instructor)
     """Delete a cohort"""
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
     
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     await db.cohorts.delete_one({"cohort_id": cohort_id})
@@ -392,7 +565,7 @@ async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = D
         raise HTTPException(status_code=400, detail="Student email required")
     
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     # Find student by email
@@ -414,7 +587,7 @@ async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = D
 async def remove_student_from_cohort(cohort_id: str, student_id: str, user: dict = Depends(require_instructor)):
     """Remove student from cohort"""
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     await db.cohorts.update_one(
@@ -434,7 +607,7 @@ async def bulk_import_students(
     CSV should have columns: email (required), name (optional)
     """
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     # Validate file type
@@ -518,7 +691,7 @@ async def bulk_import_students(
 async def download_student_template(cohort_id: str, user: dict = Depends(require_instructor)):
     """Download CSV template for bulk student import"""
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     # Create CSV template
@@ -601,7 +774,7 @@ async def upload_material(
 ):
     """Upload course material (workbook, case study, or homework assignment)"""
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     if material_type not in ["workbook", "case_study", "homework"]:
@@ -649,9 +822,10 @@ async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(g
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     # Check access
-    if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
+    if user["role"] in ["instructor", "super_admin"]:
+        if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
         raise HTTPException(status_code=403, detail="Access denied")
     
     query = {"cohort_id": cohort_id}
@@ -684,7 +858,7 @@ async def delete_material(material_id: str, user: dict = Depends(require_instruc
         raise HTTPException(status_code=404, detail="Material not found")
     
     cohort = await db.cohorts.find_one({"cohort_id": material["cohort_id"]}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Delete file
@@ -708,9 +882,10 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
     
-    if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
+    if user["role"] in ["instructor", "super_admin"]:
+        if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
         raise HTTPException(status_code=403, detail="Access denied")
     
     file_path = Path(material["file_path"])
@@ -852,6 +1027,16 @@ async def get_submissions(user: dict = Depends(get_current_user)):
             {"student_id": user["user_id"]},
             {"_id": 0}
         ).to_list(100)
+    elif user["role"] == "super_admin":
+        # Super admin sees all submissions
+        submissions = await db.submissions.find({}, {"_id": 0}).to_list(500)
+        # Add student info
+        for sub in submissions:
+            student = await db.users.find_one(
+                {"user_id": sub["student_id"]},
+                {"_id": 0, "name": 1, "email": 1}
+            )
+            sub["student"] = student
     else:
         # Instructor: get all submissions for their cohorts
         cohorts = await db.cohorts.find(
@@ -891,7 +1076,7 @@ async def allow_resubmission(submission_id: str, user: dict = Depends(require_in
         raise HTTPException(status_code=404, detail="Submission not found")
     
     cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Update to allow resubmission
@@ -936,11 +1121,14 @@ async def allow_resubmission(submission_id: str, user: dict = Depends(require_in
 @api_router.get("/analytics/dashboard")
 async def get_dashboard_analytics(user: dict = Depends(require_instructor)):
     """Get dashboard analytics for instructor"""
-    # Get instructor's cohorts
-    cohorts = await db.cohorts.find(
-        {"instructor_id": user["user_id"]},
-        {"_id": 0}
-    ).to_list(100)
+    # Get cohorts (super_admin sees all, instructor sees their own)
+    if user["role"] == "super_admin":
+        cohorts = await db.cohorts.find({}, {"_id": 0}).to_list(100)
+    else:
+        cohorts = await db.cohorts.find(
+            {"instructor_id": user["user_id"]},
+            {"_id": 0}
+        ).to_list(100)
     
     cohort_ids = [c["cohort_id"] for c in cohorts]
     
@@ -986,7 +1174,7 @@ async def get_dashboard_analytics(user: dict = Depends(require_instructor)):
 async def get_cohort_analytics(cohort_id: str, user: dict = Depends(require_instructor)):
     """Get detailed analytics for a specific cohort"""
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     # Get all materials for this cohort
@@ -1072,14 +1260,14 @@ async def get_submission(submission_id: str, user: dict = Depends(get_current_us
     
     if user["role"] == "instructor":
         cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
-        if not cohort or cohort["instructor_id"] != user["user_id"]:
+        if not cohort or not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
     
     # Add related info
     material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
     submission["material"] = material
     
-    if user["role"] == "instructor":
+    if user["role"] in ["instructor", "super_admin"]:
         student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0, "name": 1, "email": 1})
         submission["student"] = student
     
@@ -1097,7 +1285,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
         raise HTTPException(status_code=404, detail="Submission not found")
     
     cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Get material info (for context)
@@ -1213,7 +1401,7 @@ async def update_feedback(submission_id: str, request: Request, user: dict = Dep
         raise HTTPException(status_code=404, detail="Submission not found")
     
     cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Update with instructor's edited feedback
@@ -1235,7 +1423,7 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
         raise HTTPException(status_code=404, detail="Submission not found")
     
     cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
-    if not cohort or cohort["instructor_id"] != user["user_id"]:
+    if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Use instructor's edited feedback if available, otherwise use AI feedback

@@ -1,0 +1,183 @@
+<analysis>**original_problem_statement:** 
+The user wants to build a full-stack AI tutor application for a cohort-based learning environment on the Thinkific LMS Platform.
+
+**PRODUCT REQUIREMENTS:**
+- **Core Functionality:** Instructors can upload weekly materials (workbooks, case studies, homework assignments in PDF and Word format). An AI agent (OpenAI GPT-5.2) should review student homework submissions and provide qualitative, encouraging feedback.
+- **Authentication:** Use Emergent-managed Google Auth.
+- **User Roles & Permissions:**
+    - A super admin role is required.
+    - Only super admins can invite or promote other users to the instructor role.
+    - All other users default to the student role.
+- **File Management:**
+    - Instructors can upload learning materials.
+    - Students and instructors can download learning materials.
+    - Instructors can import students in bulk via a CSV file.
+- **Human-in-the-Loop (HITL):** AI-generated feedback should be saved as a draft for instructor review. The instructor can edit the feedback before sending it to the student.
+- **Notifications:** Instructors should receive email notifications (via Resend) when a new submission is made.
+- **Workflow & Tracking:**
+    - Instructors can add due dates to materials.
+    - Students should have the ability to resubmit assignments if an instructor allows it.
+    - A progress tracking dashboard should be available for instructors to monitor student and cohort completion rates.
+    - The instructor dashboard should have a widget showing the number of drafts awaiting review.
+- **Authentication Flow:** New users signing in for the first time should be prompted to establish their account/role, not be blocked from authenticating.
+
+**User's preferred language**: English
+
+**what currently exists?**
+The application is a functional AI Tutor platform. It supports user authentication via Google, cohort and student management, and material uploads (PDF, DOCX, TXT) and downloads. Students can submit homework, and an AI agent generates draft feedback. The Human-in-the-Loop flow allows instructors to review, edit, and send this feedback. The system includes email notifications for new submissions, due dates for materials, and a student resubmission workflow. A comprehensive progress-tracking dashboard provides analytics on student and cohort completion. The authentication flow for new users has been fixed to correctly route them to a role selection page.
+
+**Last working item**: 
+    - Last item agent was working: The agent began implementing a super admin role. This role will be the only one capable of promoting other users to instructor. The plan involves modifying the backend to create the new role, adjusting permission-related endpoints (like setting roles and managing users), and adding a new admin management page to the frontend. The agent has reviewed the relevant files (, ) to prepare for implementation.
+    - Status: IN PROGRESS
+    - Agent Testing Done: N
+    - Which testing method agent to use? both
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**: 
+  - Issue 1: Finish the Super Admin feature (P0)
+  - Issue 2: Verify the new user authentication flow end-to-end (P1)
+
+  **Issues Detail**:
+  - **Issue 1**: Finish the Super Admin feature
+     - **Attempted fixes**: No code has been written yet. The agent was in the planning and file exploration phase.
+     - **Next debug checklist**:
+        1.  **Backend ():**
+            -   Modify the User model to include a  role.
+            -   Update the  endpoint to ensure only  can promote users to .
+            -   Create new endpoints for admin management (e.g.,  to list users,  to make a user an instructor).
+            -   Ensure the default role for new users is .
+        2.  **Frontend:**
+            -   Create a new page component  for super admins to manage users.
+            -   Update  or  to show a link to the admin management page only if the logged-in user is a .
+            -   Add a route for  in .
+     - **Why fix this issue and what will be achieved with the fix?** This is a core feature request from the user to establish a proper user hierarchy and control access.
+     - **Status**: IN PROGRESS
+     - **Is recurring issue?** N
+     - **Should Test frontend/backend/both after fix?** both
+     - **Blocked on other issue**: None
+
+  - **Issue 2**: Verify the new user authentication flow end-to-end
+     - **Attempted fixes**: The agent implemented a fix by setting the default role for new users to  and redirecting them to a role-selection page. However, a full end-to-end test with a completely new user account was not performed.
+     - **Next debug checklist**:
+        1.  Use the testing agent or manual testing to simulate a brand new user signing in via Google Auth for the first time.
+        2.  Verify the user is redirected to the  page.
+        3.  Verify that after role selection, the user is correctly routed to their respective dashboard.
+        4.  Verify the user's role is correctly persisted in the database.
+     - **Why fix this issue and what will be achieved with the fix?** To confirm that the bug reported by the user (the system will not authenticate) is fully resolved and the onboarding experience is seamless.
+     - **Status**: TESTING PENDING
+     - **Is recurring issue?** Y (It was reported by the user after a previous implementation).
+     - **Should Test frontend/backend/both after fix?** both
+     - **Blocked on other issue**: None
+
+**In progress Task List**: 
+  - **Task 1**: Implement Super Admin Role
+     - **Where to resume**: Start by modifying  to add the  role to the User model and update role-based logic.
+     - **What will be achieved with this?** A secure user hierarchy where only designated super admins can grant instructor privileges.
+     - **Status**: IN PROGRESS
+     - **Should Test frontend/backend/both after fix?** both
+     - **Blocked on something**: None
+
+**Upcoming and Future Tasks**
+There are no other pending tasks from the user at this time.
+
+**Completed work in this session**
+- **AI Tutor Core:** Initial application build with cohort management, material uploads, and AI-powered feedback generation.
+- **File Management:** Added file download for materials and bulk student import via CSV.
+- **Human-in-the-Loop (HITL):** Implemented a workflow for instructors to review, edit, and send AI-generated feedback.
+- **Due Dates & Notifications:** Added functionality for setting material due dates and sending email notifications for new submissions.
+- **Resubmissions & Progress Tracking:** Enabled a student resubmission flow and built a comprehensive progress tracking dashboard for instructors.
+- **Auth Bug Fix:** Resolved an issue where new users were not being authenticated correctly, ensuring they are now prompted for role selection.
+- **Dashboard Enhancements:** Added widgets to the instructor dashboard to show drafts waiting for review and other key stats.
+
+**Earlier issues found/mentioned but not fixed**
+None. All identified issues have been addressed.
+
+**Known issue recurrence from previous fork**
+None.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Backend:** FastAPI, Python, MongoDB (with Pymongo)
+- **Frontend:** React, Tailwind CSS, Shadcn/UI components
+- **Authentication:** Emergent-managed Google OAuth
+- **Integrations:** OpenAI API (for AI feedback), Resend API (for emails)
+- **File Handling:** ,  for text extraction from uploads.
+
+**key DB schema**
+- **users**: 
+- **cohorts**: 
+- **materials**: 
+- **submissions**: 
+
+**changes in tech stack**
+None.
+
+**All files of reference**
+- : The main FastAPI application containing all API endpoints, database logic, and integration calls.
+- : Main React component defining the application's routes.
+- : Dashboard for instructors, showing stats and cohorts.
+- : Page for managing a specific cohort, its materials, and students.
+- : Page for viewing a student's submission and managing the AI feedback (HITL).
+- : The progress tracking dashboard.
+- : Handles the redirect from Google Auth and user session creation.
+- : Page for new users to select their role.
+- : The Product Requirements Document tracking completed and pending features.
+
+**Areas that need refactoring**: 
+None identified.
+
+**key api endpoints**
+- **Auth:** , , , 
+- **Cohorts:**  (CRUD),  (manage students), 
+- **Materials:**  (upload), 
+- **Submissions:**  (submit),  (trigger AI review),  (update/send feedback), 
+- **Analytics:** 
+
+**Critical Info for New Agent**
+- You are in the middle of implementing the Super Admin feature. The plan is defined in the Pending/In progress Issue list. Start by implementing the backend changes in .
+- The fix for the new user authentication flow needs to be verified with a full end-to-end test to ensure it's completely resolved.
+- The testing agent has a known limitation with browser-based authentication (cookies). When testing auth flows, rely on backend API tests () and manual verification through screenshots. Full automated E2E tests for login may fail due to this environmental constraint.
+
+**documents and test reports created in this job**
+- 
+- 
+- 
+- 
+- 
+- 
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **user**: Requests a super admin role where only they can invite other admins; others should be students. (PENDING)
+2.  **agent**: Acknowledges the request and plans to implement it.
+3.  **agent**: Confirms the auth flow fix is in place and explains the logic.
+4.  **user**: Reports an authentication issue where new users cannot sign in. (RESOLVED)
+5.  **agent**: Finishes the previous task (Progress Tracking).
+6.  **user**: Requests resubmission capability, a progress tracking dashboard, and a widget for drafts awaiting review. (COMPLETED)
+7.  **agent**: Finishes the previous task (HITL, Due Dates).
+8.  **user**: Provides the Resend API key and confirms the HITL requirement (review before send). (COMPLETED)
+9.  **agent**: Asks for the Resend API key and clarifies the HITL workflow.
+10. **user**: Requests email notifications, material due dates, and HITL for feedback. (COMPLETED)
+
+**Project Health Check:**
+- **Broken:** None.
+- **Mocked:** None.
+
+**3rd Party Integrations**
+- **OpenAI GPT-5.2 (Text Generation):** Uses Emergent LLM Key.
+- **Emergent-managed Google Auth:** No key required from user.
+- **Resend (Email):** Requires User API Key (provided and stored in ).
+
+**Testing status**
+- **Testing agent used after significant changes:** YES
+- **Troubleshoot agent used after agent stuck in loop:** NO
+- **Test files created:** None
+- **Known regressions:** None. The testing agent has noted a recurring, known limitation with browser cookie handling during auth tests, which is an environment issue, not a regression.
+
+**Credentials to test flow:**
+- **Google Auth:** Handled by Emergent's managed service.
+- **Resend API Key:**  (already in ).
+
+**What agent forgot to execute**
+The agent did not perform a full end-to-end test on the authentication flow fix after implementing it. This verification is listed as a pending P1 issue.</analysis>

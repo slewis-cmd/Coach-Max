@@ -49,31 +49,7 @@ export default function RoleSelection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 stagger-children">
-          <Card 
-            data-testid="role-instructor"
-            className="cursor-pointer hover:-translate-y-1 transition-transform duration-300 border-2 border-transparent hover:border-[#1A1A1A]"
-            onClick={() => handleSelectRole('instructor')}
-          >
-            <CardHeader className="text-center pb-2">
-              <div className="w-16 h-16 bg-[#E0F2FE] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <GraduationCap className="w-8 h-8 text-[#075985]" />
-              </div>
-              <CardTitle className="text-2xl font-normal">I'm an Instructor</CardTitle>
-              <CardDescription className="text-base">
-                Create cohorts, upload materials, and review student submissions
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <Button 
-                className="w-full bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
-                disabled={selecting}
-              >
-                Continue as Instructor
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="grid md:grid-cols-1 gap-6 max-w-md mx-auto stagger-children">
           <Card 
             data-testid="role-student"
             className="cursor-pointer hover:-translate-y-1 transition-transform duration-300 border-2 border-transparent hover:border-[#1A1A1A]"
@@ -97,6 +73,9 @@ export default function RoleSelection() {
               </Button>
             </CardContent>
           </Card>
+          <p className="text-center text-sm text-[#888]">
+            Need instructor access? Ask your admin to promote your account.
+          </p>
         </div>
       </div>
     </div>
