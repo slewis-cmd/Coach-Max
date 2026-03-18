@@ -778,23 +778,24 @@ export default function CohortDetail() {
             )}
             <div>
               <Label>File (PDF or Word)</Label>
-              <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer"
-                onClick={() => document.getElementById('material-file').click()}
-              >
-                {materialForm.file ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <File className="w-5 h-5 text-[#065F46]" />
-                    <span className="text-sm text-[#1A1A1A]">{materialForm.file.name}</span>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                    <p className="text-sm text-[#888]">Click to upload PDF or DOCX</p>
-                  </>
-                )}
+              <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer">
+                <label htmlFor="material-file" className="cursor-pointer block">
+                  {materialForm.file ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <File className="w-5 h-5 text-[#065F46]" />
+                      <span className="text-sm text-[#1A1A1A]">{materialForm.file.name}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
+                      <p className="text-sm text-[#888]">Click to upload PDF or DOCX</p>
+                    </>
+                  )}
+                </label>
               </div>
               <input
                 id="material-file"
+                data-testid="material-file-input"
                 type="file"
                 accept=".pdf,.docx"
                 className="hidden"
@@ -829,24 +830,25 @@ export default function CohortDetail() {
           </DialogHeader>
           <div className="py-4">
             <Label>Your Submission (PDF or Word)</Label>
-            <div className="mt-1 upload-zone rounded-lg p-8 text-center cursor-pointer"
-              onClick={() => document.getElementById('homework-file').click()}
-            >
-              {homeworkFile ? (
-                <div className="flex items-center justify-center gap-2">
-                  <File className="w-5 h-5 text-[#065F46]" />
-                  <span className="text-sm text-[#1A1A1A]">{homeworkFile.name}</span>
-                </div>
-              ) : (
-                <>
-                  <Upload className="w-10 h-10 text-[#C4C4C4] mx-auto mb-2" />
-                  <p className="text-sm text-[#888]">Click to upload your homework</p>
-                  <p className="text-xs text-[#C4C4C4] mt-1">PDF or DOCX only</p>
-                </>
-              )}
+            <div className="mt-1 upload-zone rounded-lg p-8 text-center cursor-pointer">
+              <label htmlFor="homework-file" className="cursor-pointer block">
+                {homeworkFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <File className="w-5 h-5 text-[#065F46]" />
+                    <span className="text-sm text-[#1A1A1A]">{homeworkFile.name}</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 text-[#C4C4C4] mx-auto mb-2" />
+                    <p className="text-sm text-[#888]">Click to upload your homework</p>
+                    <p className="text-xs text-[#C4C4C4] mt-1">PDF or DOCX only</p>
+                  </>
+                )}
+              </label>
             </div>
             <input
               id="homework-file"
+              data-testid="homework-file-input"
               type="file"
               accept=".pdf,.docx"
               className="hidden"
@@ -905,24 +907,25 @@ export default function CohortDetail() {
             {/* File Upload */}
             <div>
               <Label>CSV File</Label>
-              <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer"
-                onClick={() => document.getElementById('bulk-file').click()}
-              >
-                {bulkFile ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <File className="w-5 h-5 text-[#065F46]" />
-                    <span className="text-sm text-[#1A1A1A]">{bulkFile.name}</span>
-                  </div>
-                ) : (
-                  <>
-                    <FileUp className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                    <p className="text-sm text-[#888]">Click to upload CSV file</p>
-                    <p className="text-xs text-[#C4C4C4] mt-1">Required column: email</p>
-                  </>
-                )}
+              <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer">
+                <label htmlFor="bulk-file" className="cursor-pointer block">
+                  {bulkFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <File className="w-5 h-5 text-[#065F46]" />
+                      <span className="text-sm text-[#1A1A1A]">{bulkFile.name}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <FileUp className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
+                      <p className="text-sm text-[#888]">Click to upload CSV file</p>
+                      <p className="text-xs text-[#C4C4C4] mt-1">Required column: email</p>
+                    </>
+                  )}
+                </label>
               </div>
               <input
                 id="bulk-file"
+                data-testid="bulk-file-input"
                 type="file"
                 accept=".csv"
                 className="hidden"
