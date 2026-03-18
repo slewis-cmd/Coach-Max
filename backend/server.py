@@ -742,7 +742,15 @@ async def submit_homework(
     }, {"_id": 0})
     
     if existing:
-        raise HTTPException(status_code=400, detail="Already submitted. Contact instructor for resubmission.")
+        # Check if resubmission is allowed
+        if not existing.get("resubmission_allowed", False):
+            raise HTTPException(status_code=400, detail="Already submitted. Request resubmission from your instructor.")
+        
+        # Delete old file
+        try:
+            os.remove(existing["file_path"])
+        except:
+            pass
     
     # Validate file
     filename = file.filename or "unnamed"
@@ -758,31 +766,56 @@ async def submit_homework(
         content = await file.read()
         await f.write(content)
     
-    # Create submission
-    submission = Submission(
-        submission_id=submission_id,
-        material_id=material_id,
-        cohort_id=material["cohort_id"],
-        student_id=user["user_id"],
-        file_path=str(file_path),
-        file_name=filename
-    )
-    
-    doc = submission.model_dump()
-    doc["submitted_at"] = doc["submitted_at"].isoformat()
-    await db.submissions.insert_one(doc)
+    # Create or update submission
+    if existing:
+        # Update existing submission (resubmission)
+        submission_id = existing["submission_id"]
+        await db.submissions.update_one(
+            {"submission_id": submission_id},
+            {"$set": {
+                "file_path": str(file_path),
+                "file_name": filename,
+                "status": "pending",
+                "ai_feedback": None,
+                "instructor_feedback": None,
+                "feedback_sent": False,
+                "resubmission_allowed": False,
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
+                "reviewed_at": None,
+                "sent_at": None,
+                "resubmission_count": existing.get("resubmission_count", 0) + 1
+            }}
+        )
+        is_resubmission = True
+    else:
+        # Create new submission
+        submission = Submission(
+            submission_id=submission_id,
+            material_id=material_id,
+            cohort_id=material["cohort_id"],
+            student_id=user["user_id"],
+            file_path=str(file_path),
+            file_name=filename
+        )
+        
+        doc = submission.model_dump()
+        doc["submitted_at"] = doc["submitted_at"].isoformat()
+        doc["resubmission_count"] = 0
+        await db.submissions.insert_one(doc)
+        is_resubmission = False
     
     # Send email notification to instructor
     instructor = await db.users.find_one({"user_id": cohort["instructor_id"]}, {"_id": 0})
     if instructor:
+        subject_prefix = "Resubmission" if is_resubmission else "New Submission"
         email_html = f"""
         <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: #FDE047; padding: 20px; border-radius: 12px 12px 0 0;">
-                <h1 style="color: #1A1A1A; margin: 0; font-size: 24px;">New Homework Submission</h1>
+            <div style="background-color: {'#E0F2FE' if is_resubmission else '#FDE047'}; padding: 20px; border-radius: 12px 12px 0 0;">
+                <h1 style="color: #1A1A1A; margin: 0; font-size: 24px;">{subject_prefix}: Homework</h1>
             </div>
             <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
                 <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
-                    <strong>{user['name']}</strong> has submitted homework for review.
+                    <strong>{user['name']}</strong> has {'resubmitted' if is_resubmission else 'submitted'} homework for review.
                 </p>
                 <div style="background-color: white; border: 1px solid #E5E5E5; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
                     <p style="margin: 0 0 8px 0; color: #5A5A5A; font-size: 14px;">Assignment</p>
@@ -797,11 +830,11 @@ async def submit_homework(
         """
         await send_email_notification(
             instructor["email"],
-            f"New Submission: {material['title']} from {user['name']}",
+            f"{subject_prefix}: {material['title']} from {user['name']}",
             email_html
         )
     
-    return {"submission_id": submission_id, "message": "Homework submitted"}
+    return {"submission_id": submission_id, "message": f"Homework {'resubmitted' if is_resubmission else 'submitted'}"}
 
 @api_router.get("/submissions")
 async def get_submissions(user: dict = Depends(get_current_user)):
@@ -841,6 +874,182 @@ async def get_submissions(user: dict = Depends(get_current_user)):
         sub["material"] = material
     
     return submissions
+
+@api_router.post("/submissions/{submission_id}/allow-resubmission")
+async def allow_resubmission(submission_id: str, user: dict = Depends(require_instructor)):
+    """Allow student to resubmit homework"""
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+    if not cohort or cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Update to allow resubmission
+    await db.submissions.update_one(
+        {"submission_id": submission_id},
+        {"$set": {"resubmission_allowed": True}}
+    )
+    
+    # Send email to student
+    student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
+    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    
+    if student:
+        email_html = f"""
+        <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #E0F2FE; padding: 20px; border-radius: 12px 12px 0 0;">
+                <h1 style="color: #075985; margin: 0; font-size: 24px;">Resubmission Allowed</h1>
+            </div>
+            <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+                <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
+                    Hi <strong>{student['name'].split()[0]}</strong>,
+                </p>
+                <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
+                    Your instructor has allowed you to resubmit your homework for <strong>{material['title'] if material else 'the assignment'}</strong>.
+                </p>
+                <p style="color: #5A5A5A; font-size: 14px;">
+                    Log in to ThinkificAI to submit your updated work.
+                </p>
+            </div>
+        </div>
+        """
+        await send_email_notification(
+            student["email"],
+            f"Resubmission Allowed: {material['title'] if material else 'Homework'}",
+            email_html
+        )
+    
+    return {"message": "Resubmission allowed. Student has been notified."}
+
+# ==================== PROGRESS TRACKING ====================
+
+@api_router.get("/analytics/dashboard")
+async def get_dashboard_analytics(user: dict = Depends(require_instructor)):
+    """Get dashboard analytics for instructor"""
+    # Get instructor's cohorts
+    cohorts = await db.cohorts.find(
+        {"instructor_id": user["user_id"]},
+        {"_id": 0}
+    ).to_list(100)
+    
+    cohort_ids = [c["cohort_id"] for c in cohorts]
+    
+    # Get all submissions for these cohorts
+    submissions = await db.submissions.find(
+        {"cohort_id": {"$in": cohort_ids}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Calculate stats
+    pending_count = len([s for s in submissions if s.get("status") == "pending"])
+    draft_count = len([s for s in submissions if s.get("status") == "draft"])
+    sent_count = len([s for s in submissions if s.get("status") == "sent" or s.get("feedback_sent")])
+    total_submissions = len(submissions)
+    
+    # Get total students
+    total_students = sum(len(c.get("student_ids", [])) for c in cohorts)
+    
+    # Get recent submissions (last 7 days)
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    recent_submissions = [s for s in submissions if s.get("submitted_at") and 
+                         datetime.fromisoformat(s["submitted_at"].replace("Z", "+00:00")) > week_ago]
+    
+    return {
+        "cohorts": len(cohorts),
+        "total_students": total_students,
+        "submissions": {
+            "pending": pending_count,
+            "draft": draft_count,
+            "sent": sent_count,
+            "total": total_submissions
+        },
+        "recent_activity": {
+            "submissions_this_week": len(recent_submissions)
+        },
+        "action_required": {
+            "needs_review": pending_count,
+            "drafts_to_send": draft_count
+        }
+    }
+
+@api_router.get("/analytics/cohort/{cohort_id}")
+async def get_cohort_analytics(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Get detailed analytics for a specific cohort"""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    # Get all materials for this cohort
+    materials = await db.materials.find(
+        {"cohort_id": cohort_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    homework_materials = [m for m in materials if m.get("material_type") == "homework"]
+    
+    # Get all submissions for this cohort
+    submissions = await db.submissions.find(
+        {"cohort_id": cohort_id},
+        {"_id": 0}
+    ).to_list(500)
+    
+    # Get student details
+    students = await db.users.find(
+        {"user_id": {"$in": cohort.get("student_ids", [])}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "picture": 1}
+    ).to_list(100)
+    
+    # Calculate per-student progress
+    student_progress = []
+    for student in students:
+        student_subs = [s for s in submissions if s.get("student_id") == student["user_id"]]
+        completed = len([s for s in student_subs if s.get("status") == "sent" or s.get("feedback_sent")])
+        pending = len([s for s in student_subs if s.get("status") in ["pending", "draft"]])
+        
+        student_progress.append({
+            "user_id": student["user_id"],
+            "name": student["name"],
+            "email": student["email"],
+            "picture": student.get("picture"),
+            "submissions": len(student_subs),
+            "completed": completed,
+            "pending": pending,
+            "completion_rate": round((completed / len(homework_materials) * 100) if homework_materials else 0, 1)
+        })
+    
+    # Sort by completion rate
+    student_progress.sort(key=lambda x: x["completion_rate"], reverse=True)
+    
+    # Calculate per-week progress
+    weeks = {}
+    for mat in homework_materials:
+        week = mat["week_number"]
+        if week not in weeks:
+            weeks[week] = {"week": week, "assignments": 0, "submitted": 0, "reviewed": 0}
+        weeks[week]["assignments"] += 1
+        
+        mat_subs = [s for s in submissions if s.get("material_id") == mat["material_id"]]
+        weeks[week]["submitted"] += len(mat_subs)
+        weeks[week]["reviewed"] += len([s for s in mat_subs if s.get("status") == "sent" or s.get("feedback_sent")])
+    
+    return {
+        "cohort": {
+            "name": cohort["name"],
+            "description": cohort.get("description"),
+            "total_students": len(students),
+            "total_homework": len(homework_materials)
+        },
+        "overview": {
+            "total_submissions": len(submissions),
+            "completed_reviews": len([s for s in submissions if s.get("status") == "sent" or s.get("feedback_sent")]),
+            "pending_reviews": len([s for s in submissions if s.get("status") in ["pending", "draft"]]),
+            "avg_completion_rate": round(sum(s["completion_rate"] for s in student_progress) / len(student_progress) if student_progress else 0, 1)
+        },
+        "student_progress": student_progress,
+        "weekly_progress": list(weeks.values())
+    }
 
 @api_router.get("/submissions/{submission_id}")
 async def get_submission(submission_id: str, user: dict = Depends(get_current_user)):

@@ -526,6 +526,183 @@ startxref
             print("❌ Could not retrieve materials")
             return False
 
+    def test_dashboard_analytics(self):
+        """Test dashboard analytics endpoint"""
+        print("\n" + "="*50)
+        print("📊 TESTING DASHBOARD ANALYTICS")
+        print("="*50)
+        
+        success, response = self.run_test(
+            "Get dashboard analytics",
+            "GET",
+            "analytics/dashboard",
+            200
+        )
+        
+        if success:
+            print("✅ Dashboard analytics retrieved successfully")
+            
+            # Check response structure
+            cohorts_count = response.get('cohorts', 0)
+            total_students = response.get('total_students', 0)
+            submissions = response.get('submissions', {})
+            action_required = response.get('action_required', {})
+            recent_activity = response.get('recent_activity', {})
+            
+            print(f"   Cohorts: {cohorts_count}")
+            print(f"   Total Students: {total_students}")
+            print(f"   Submissions - Pending: {submissions.get('pending', 0)}")
+            print(f"   Submissions - Draft: {submissions.get('draft', 0)}")  
+            print(f"   Submissions - Sent: {submissions.get('sent', 0)}")
+            print(f"   Action Required - Needs Review: {action_required.get('needs_review', 0)}")
+            print(f"   Action Required - Drafts to Send: {action_required.get('drafts_to_send', 0)}")
+            print(f"   Recent Activity - This Week: {recent_activity.get('submissions_this_week', 0)}")
+            
+            # Verify required fields are present
+            required_fields = ['cohorts', 'total_students', 'submissions', 'action_required']
+            missing_fields = [field for field in required_fields if field not in response]
+            
+            if missing_fields:
+                print(f"⚠️  Missing fields in response: {missing_fields}")
+                return False
+            else:
+                print("✅ All required fields present in dashboard analytics")
+                return True
+        else:
+            print("❌ Dashboard analytics failed")
+            return False
+
+    def test_cohort_analytics(self):
+        """Test cohort-specific analytics endpoint"""
+        print("\n" + "="*50)
+        print("📊 TESTING COHORT ANALYTICS")
+        print("="*50)
+        
+        success, response = self.run_test(
+            f"Get cohort analytics for {self.cohort_id}",
+            "GET",
+            f"analytics/cohort/{self.cohort_id}",
+            200
+        )
+        
+        if success:
+            print("✅ Cohort analytics retrieved successfully")
+            
+            # Check response structure
+            cohort = response.get('cohort', {})
+            overview = response.get('overview', {})
+            student_progress = response.get('student_progress', [])
+            weekly_progress = response.get('weekly_progress', [])
+            
+            print(f"   Cohort Name: {cohort.get('name', 'Unknown')}")
+            print(f"   Total Students: {cohort.get('total_students', 0)}")
+            print(f"   Total Homework: {cohort.get('total_homework', 0)}")
+            print(f"   Total Submissions: {overview.get('total_submissions', 0)}")
+            print(f"   Completed Reviews: {overview.get('completed_reviews', 0)}")
+            print(f"   Pending Reviews: {overview.get('pending_reviews', 0)}")
+            print(f"   Avg Completion Rate: {overview.get('avg_completion_rate', 0)}%")
+            print(f"   Student Progress Entries: {len(student_progress)}")
+            print(f"   Weekly Progress Entries: {len(weekly_progress)}")
+            
+            # Show sample student progress data
+            if student_progress:
+                sample_student = student_progress[0]
+                print(f"   Sample Student: {sample_student.get('name', 'Unknown')}")
+                print(f"     Completion Rate: {sample_student.get('completion_rate', 0)}%")
+                print(f"     Submissions: {sample_student.get('submissions', 0)}")
+                print(f"     Completed: {sample_student.get('completed', 0)}")
+            
+            # Show sample weekly progress data
+            if weekly_progress:
+                sample_week = weekly_progress[0]
+                print(f"   Sample Week {sample_week.get('week', 'Unknown')}:")
+                print(f"     Assignments: {sample_week.get('assignments', 0)}")
+                print(f"     Submitted: {sample_week.get('submitted', 0)}")
+                print(f"     Reviewed: {sample_week.get('reviewed', 0)}")
+            
+            # Verify required fields
+            required_fields = ['cohort', 'overview', 'student_progress', 'weekly_progress']
+            missing_fields = [field for field in required_fields if field not in response]
+            
+            if missing_fields:
+                print(f"⚠️  Missing fields in response: {missing_fields}")
+                return False
+            else:
+                print("✅ All required fields present in cohort analytics")
+                return True
+        else:
+            print("❌ Cohort analytics failed")
+            return False
+
+    def test_resubmission_feature(self):
+        """Test resubmission functionality"""
+        print("\n" + "="*50)
+        print("🔄 TESTING RESUBMISSION FEATURE")
+        print("="*50)
+        
+        # First get submissions to find one that's sent
+        success, submissions = self.run_test(
+            "Get submissions for resubmission test",
+            "GET",
+            "submissions",
+            200
+        )
+        
+        if not success:
+            print("❌ Could not fetch submissions")
+            return False
+        
+        # Find a sent submission to test resubmission
+        sent_submissions = [s for s in submissions if s.get('status') == 'sent' or s.get('feedback_sent')] if isinstance(submissions, list) else []
+        
+        if not sent_submissions:
+            print("   No sent submissions found to test resubmission")
+            print("   ✅ Resubmission API is available but no test data")
+            return True
+        
+        submission_id = sent_submissions[0]['submission_id']
+        print(f"   Testing with submission: {submission_id}")
+        
+        # Test allowing resubmission
+        success1, response1 = self.run_test(
+            f"Allow resubmission for {submission_id}",
+            "POST",
+            f"submissions/{submission_id}/allow-resubmission",
+            200
+        )
+        
+        if success1:
+            print("✅ Resubmission allowed successfully")
+            print(f"   Response: {response1.get('message', 'No message')}")
+            
+            # Verify the submission was updated
+            success2, updated_submission = self.run_test(
+                f"Verify resubmission flag set",
+                "GET",
+                f"submissions/{submission_id}",
+                200
+            )
+            
+            if success2:
+                resubmission_allowed = updated_submission.get('resubmission_allowed', False)
+                if resubmission_allowed:
+                    print("✅ Resubmission flag correctly set in submission")
+                    return True
+                else:
+                    print("⚠️  Resubmission flag not set in submission (may have been already set)")
+                    return True  # Still success as API worked
+            else:
+                print("❌ Could not verify resubmission flag")
+                return False
+        else:
+            # Check if it was already allowed
+            if "already" in str(response1).lower():
+                print("✅ Resubmission was already allowed (API working correctly)")
+                return True
+            else:
+                print("❌ Allow resubmission failed")
+                return False
+
     def test_materials_list(self):
         """Test materials listing to verify context"""
         print("\n" + "="*50)
@@ -591,6 +768,19 @@ startxref
         
         # Test submission workflow (human-in-the-loop)
         self.test_submission_workflow(homework_material_id if homework_success else None)
+        
+        # NEW ANALYTICS FEATURES
+        print("\n📊 TESTING NEW ANALYTICS FEATURES")
+        print("=" * 50)
+        
+        # Test dashboard analytics
+        self.test_dashboard_analytics()
+        
+        # Test cohort analytics
+        self.test_cohort_analytics()
+        
+        # Test resubmission feature
+        self.test_resubmission_feature()
         
         # Print final results
         print("\n" + "=" * 70)

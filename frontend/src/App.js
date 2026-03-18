@@ -11,6 +11,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import CohortDetail from "./pages/CohortDetail";
 import Submissions from "./pages/Submissions";
 import SubmissionDetail from "./pages/SubmissionDetail";
+import ProgressTracking from "./pages/ProgressTracking";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -98,6 +99,11 @@ const AppRouter = () => {
       <Route path="/submission/:submissionId" element={
         <ProtectedRoute>
           <SubmissionDetail />
+        </ProtectedRoute>
+      } />
+      <Route path="/progress" element={
+        <ProtectedRoute>
+          <ProgressTracking />
         </ProtectedRoute>
       } />
       {/* Catch-all redirect */}

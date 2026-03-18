@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Progress } from '../components/ui/progress';
 import { 
   Dialog, 
   DialogContent, 
@@ -22,7 +23,12 @@ import {
   LogOut,
   ChevronRight,
   Upload,
-  ClipboardList
+  ClipboardList,
+  AlertCircle,
+  FileEdit,
+  Mail,
+  TrendingUp,
+  BarChart3
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -34,6 +40,7 @@ export default function InstructorDashboard() {
   const navigate = useNavigate();
   const [cohorts, setCohorts] = useState([]);
   const [submissions, setSubmissions] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [loadingData, setLoadingData] = useState(true);
   const [showCreateCohort, setShowCreateCohort] = useState(false);
   const [newCohort, setNewCohort] = useState({ name: '', description: '' });
@@ -55,12 +62,14 @@ export default function InstructorDashboard() {
 
   const fetchData = async () => {
     try {
-      const [cohortsRes, submissionsRes] = await Promise.all([
+      const [cohortsRes, submissionsRes, analyticsRes] = await Promise.all([
         axios.get(`${API_URL}/api/cohorts`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/submissions`, { withCredentials: true })
+        axios.get(`${API_URL}/api/submissions`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/analytics/dashboard`, { withCredentials: true })
       ]);
       setCohorts(cohortsRes.data);
       setSubmissions(submissionsRes.data);
+      setAnalytics(analyticsRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load data');
@@ -95,6 +104,8 @@ export default function InstructorDashboard() {
   };
 
   const pendingSubmissions = submissions.filter(s => s.status === 'pending');
+  const draftSubmissions = submissions.filter(s => s.status === 'draft');
+  const totalActionRequired = pendingSubmissions.length + draftSubmissions.length;
 
   if (loading || loadingData) {
     return (
@@ -129,11 +140,18 @@ export default function InstructorDashboard() {
           >
             <ClipboardList className="w-5 h-5" />
             Submissions
-            {pendingSubmissions.length > 0 && (
+            {totalActionRequired > 0 && (
               <span className="ml-auto bg-[#FDE047] text-[#1A1A1A] text-xs px-2 py-0.5 rounded-full">
-                {pendingSubmissions.length}
+                {totalActionRequired}
               </span>
             )}
+          </Link>
+          <Link 
+            to="/progress"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+          >
+            <BarChart3 className="w-5 h-5" />
+            Progress
           </Link>
         </nav>
 
@@ -184,37 +202,95 @@ export default function InstructorDashboard() {
           </p>
         </div>
 
+        {/* Action Required Alert */}
+        {totalActionRequired > 0 && (
+          <Card className="bg-[#FEF3C7] border-[#FDE047] mb-6 animate-fade-in">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-[#FDE047] rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-[#854D0E]" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-[#854D0E]">Action Required</p>
+                  <p className="text-sm text-[#92400E]">
+                    {pendingSubmissions.length > 0 && `${pendingSubmissions.length} submission${pendingSubmissions.length > 1 ? 's' : ''} need AI review`}
+                    {pendingSubmissions.length > 0 && draftSubmissions.length > 0 && ' • '}
+                    {draftSubmissions.length > 0 && `${draftSubmissions.length} draft${draftSubmissions.length > 1 ? 's' : ''} ready to send`}
+                  </p>
+                </div>
+                <Button 
+                  onClick={() => navigate('/submissions')}
+                  className="bg-[#854D0E] text-white hover:bg-[#713F12]"
+                >
+                  Review Now
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 stagger-children">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8 stagger-children">
           <Card className="bg-white border-[#E5E5E5]">
             <CardContent className="p-4">
               <p className="text-sm text-[#888] mb-1">Cohorts</p>
-              <p className="text-2xl font-light text-[#1A1A1A]">{cohorts.length}</p>
+              <p className="text-2xl font-light text-[#1A1A1A]">{analytics?.cohorts || cohorts.length}</p>
             </CardContent>
           </Card>
           <Card className="bg-white border-[#E5E5E5]">
             <CardContent className="p-4">
-              <p className="text-sm text-[#888] mb-1">Total Students</p>
+              <p className="text-sm text-[#888] mb-1">Students</p>
               <p className="text-2xl font-light text-[#1A1A1A]">
-                {cohorts.reduce((acc, c) => acc + (c.student_ids?.length || 0), 0)}
+                {analytics?.total_students || cohorts.reduce((acc, c) => acc + (c.student_ids?.length || 0), 0)}
               </p>
             </CardContent>
           </Card>
-          <Card className="bg-white border-[#E5E5E5]">
+          <Card className="bg-[#FEF9C3] border-[#FDE047]">
             <CardContent className="p-4">
-              <p className="text-sm text-[#888] mb-1">Pending Reviews</p>
-              <p className="text-2xl font-light text-[#FDE047]">{pendingSubmissions.length}</p>
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-[#854D0E]" />
+                <p className="text-sm text-[#854D0E]">Needs Review</p>
+              </div>
+              <p className="text-2xl font-light text-[#854D0E]">{analytics?.submissions?.pending || pendingSubmissions.length}</p>
             </CardContent>
           </Card>
-          <Card className="bg-white border-[#E5E5E5]">
+          <Card className="bg-[#E0F2FE] border-[#BAE6FD]">
             <CardContent className="p-4">
-              <p className="text-sm text-[#888] mb-1">Reviewed</p>
+              <div className="flex items-center gap-2">
+                <FileEdit className="w-4 h-4 text-[#075985]" />
+                <p className="text-sm text-[#075985]">Drafts to Send</p>
+              </div>
+              <p className="text-2xl font-light text-[#075985]">{analytics?.submissions?.draft || draftSubmissions.length}</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-[#D1FAE5] border-[#BBF7D0]">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-[#065F46]" />
+                <p className="text-sm text-[#065F46]">Feedback Sent</p>
+              </div>
               <p className="text-2xl font-light text-[#065F46]">
-                {submissions.filter(s => s.status === 'reviewed').length}
+                {analytics?.submissions?.sent || submissions.filter(s => s.status === 'sent' || s.feedback_sent).length}
               </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Weekly Activity */}
+        {analytics?.recent_activity && (
+          <Card className="bg-white border-[#E5E5E5] mb-8">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-normal flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-[#065F46]" />
+                This Week
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-light text-[#1A1A1A]">{analytics.recent_activity.submissions_this_week}</p>
+              <p className="text-sm text-[#888]">new submissions received</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Cohorts Section */}
         <div className="mb-8">
@@ -275,11 +351,11 @@ export default function InstructorDashboard() {
           )}
         </div>
 
-        {/* Recent Submissions */}
-        {pendingSubmissions.length > 0 && (
+        {/* Pending & Draft Submissions */}
+        {(pendingSubmissions.length > 0 || draftSubmissions.length > 0) && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-light text-[#1A1A1A]">Pending Reviews</h2>
+              <h2 className="text-2xl font-light text-[#1A1A1A]">Action Required</h2>
               <Link 
                 to="/submissions"
                 className="text-sm text-[#5A5A5A] hover:text-[#1A1A1A] flex items-center gap-1"
@@ -288,7 +364,34 @@ export default function InstructorDashboard() {
               </Link>
             </div>
             <div className="space-y-3">
-              {pendingSubmissions.slice(0, 5).map((sub) => (
+              {/* Drafts first (ready to send) */}
+              {draftSubmissions.slice(0, 3).map((sub) => (
+                <Card 
+                  key={sub.submission_id}
+                  className="bg-[#F0F9FF] border-[#BAE6FD] hover:shadow-sm transition-shadow cursor-pointer"
+                  onClick={() => navigate(`/submission/${sub.submission_id}`)}
+                  data-testid={`draft-${sub.submission_id}`}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-[#E0F2FE] rounded-lg flex items-center justify-center">
+                        <FileEdit className="w-5 h-5 text-[#075985]" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[#1A1A1A]">{sub.student?.name || 'Unknown'}</p>
+                        <p className="text-sm text-[#888]">
+                          {sub.material?.title || 'Homework'} • Ready to send
+                        </p>
+                      </div>
+                    </div>
+                    <Button size="sm" className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg">
+                      Review & Send
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+              {/* Pending (needs AI review) */}
+              {pendingSubmissions.slice(0, 3).map((sub) => (
                 <Card 
                   key={sub.submission_id}
                   className="bg-white border-[#E5E5E5] hover:shadow-sm transition-shadow cursor-pointer"
@@ -308,7 +411,7 @@ export default function InstructorDashboard() {
                       </div>
                     </div>
                     <Button size="sm" className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
-                      Review
+                      Generate Review
                     </Button>
                   </CardContent>
                 </Card>

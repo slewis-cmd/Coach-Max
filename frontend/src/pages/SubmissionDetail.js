@@ -15,7 +15,9 @@ import {
   Edit3,
   Send,
   Mail,
-  FileEdit
+  FileEdit,
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -33,6 +35,7 @@ export default function SubmissionDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [allowingResubmission, setAllowingResubmission] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -115,6 +118,27 @@ export default function SubmissionDetail() {
       toast.error(error.response?.data?.detail || 'Failed to send feedback');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleAllowResubmission = async () => {
+    if (!window.confirm('Allow this student to resubmit their homework? They will be notified via email.')) {
+      return;
+    }
+    
+    setAllowingResubmission(true);
+    try {
+      await axios.post(
+        `${API_URL}/api/submissions/${submissionId}/allow-resubmission`,
+        {},
+        { withCredentials: true }
+      );
+      toast.success('Resubmission allowed. Student has been notified.');
+      fetchSubmission();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to allow resubmission');
+    } finally {
+      setAllowingResubmission(false);
     }
   };
 
@@ -233,9 +257,44 @@ export default function SubmissionDetail() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2 text-sm text-[#5A5A5A]">
-              <File className="w-4 h-4" />
-              {submission.file_name}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-[#5A5A5A]">
+                <File className="w-4 h-4" />
+                {submission.file_name}
+                {submission.resubmission_count > 0 && (
+                  <span className="bg-[#E0F2FE] text-[#075985] px-2 py-0.5 rounded text-xs ml-2">
+                    Resubmission #{submission.resubmission_count}
+                  </span>
+                )}
+              </div>
+              {isInstructor && isSent && !submission.resubmission_allowed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAllowResubmission}
+                  disabled={allowingResubmission}
+                  className="border-[#E5E5E5] text-[#5A5A5A]"
+                  data-testid="allow-resubmission-btn"
+                >
+                  {allowingResubmission ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Allow Resubmission
+                    </>
+                  )}
+                </Button>
+              )}
+              {submission.resubmission_allowed && (
+                <span className="text-sm text-[#075985] flex items-center gap-1">
+                  <RotateCcw className="w-4 h-4" />
+                  Resubmission allowed
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
