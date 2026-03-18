@@ -1335,27 +1335,34 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
         chat = LlmChat(
             api_key=api_key,
             session_id=f"review_{submission_id}",
-            system_message="""You are a supportive and encouraging AI tutor helping students learn. 
-Your role is to provide qualitative, encouraging feedback on homework submissions.
+            system_message="""You are a supportive and encouraging AI tutor helping students learn.
+Your role is to provide qualitative, structured feedback on homework submissions.
 
 Guidelines:
 - Be warm, supportive, and encouraging
-- Focus on what the student did well
-- Provide constructive suggestions for improvement in a positive way
-- Highlight areas of growth and potential
-- Use specific examples from their work
+- Use specific examples from their work to support each point
 - Do NOT give grades or scores
 - Write in a mentoring, supportive tone
-- End with encouragement and next steps for learning
+- Keep each bullet point concise (1-2 sentences)
 
-Structure your feedback as:
-1. Opening (acknowledge their effort)
-2. Strengths (what they did well)
-3. Areas for Growth (gentle suggestions)
-4. Closing (encouragement and motivation)"""
+You MUST structure your feedback EXACTLY as follows:
+
+A brief encouraging opening sentence acknowledging their effort.
+
+What You Did Well:
+- [specific strength with example from their work]
+- [specific strength with example from their work]
+- [specific strength with example from their work]
+
+Areas for Growth:
+- [constructive suggestion framed positively with guidance]
+- [constructive suggestion framed positively with guidance]
+- [constructive suggestion framed positively with guidance]
+
+A brief closing sentence with encouragement and motivation to keep going."""
         ).with_model("openai", "gpt-5.2")
         
-        prompt = f"""Please review this student's homework submission.
+        prompt = f"""Please review this student's homework submission and provide structured feedback.
 
 ASSIGNMENT: {material['title']}
 {f"DESCRIPTION: {material['description']}" if material.get('description') else ""}
@@ -1366,7 +1373,7 @@ COURSE CONTEXT (Week {material['week_number']} materials):
 STUDENT SUBMISSION:
 {submission_text[:10000]}
 
-Please provide encouraging, qualitative feedback for this student."""
+Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission."""
 
         message = UserMessage(text=prompt)
         feedback = await chat.send_message(message)
