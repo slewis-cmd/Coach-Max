@@ -3,6 +3,23 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Session token management
+const TOKEN_KEY = 'thinkific_session_token';
+
+const getStoredToken = () => localStorage.getItem(TOKEN_KEY);
+const storeToken = (token) => localStorage.setItem(TOKEN_KEY, token);
+const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+// Axios interceptor to include session token in all requests
+axios.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  config.withCredentials = true;
+  return config;
+});
+
 const AuthContext = createContext(null);
 
 export const useAuth = () => {
@@ -25,13 +42,19 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
+    const token = getStoredToken();
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await axios.get(`${API_URL}/api/auth/me`, {
-        withCredentials: true
-      });
+      const response = await axios.get(`${API_URL}/api/auth/me`);
       setUser(response.data);
     } catch (error) {
       setUser(null);
+      clearToken();
     } finally {
       setLoading(false);
     }
@@ -49,20 +72,21 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post(`${API_URL}/api/auth/logout`, {}, {
-        withCredentials: true
-      });
+      await axios.post(`${API_URL}/api/auth/logout`, {});
     } catch (error) {
       console.error('Logout error:', error);
     }
     setUser(null);
+    clearToken();
+  };
+
+  const saveSession = (token) => {
+    storeToken(token);
   };
 
   const setRole = async (role) => {
     try {
-      await axios.post(`${API_URL}/api/auth/set-role`, { role }, {
-        withCredentials: true
-      });
+      await axios.post(`${API_URL}/api/auth/set-role`, { role });
       setUser(prev => ({ ...prev, role }));
       return true;
     } catch (error) {
@@ -79,6 +103,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     setRole,
     checkAuth,
+    saveSession,
     isAuthenticated: !!user,
     isSuperAdmin: user?.role === 'super_admin',
     isInstructor: user?.role === 'instructor' || user?.role === 'super_admin',

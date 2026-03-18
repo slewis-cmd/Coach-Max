@@ -8,7 +8,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 export default function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setUser } = useAuth();
+  const { setUser, saveSession } = useAuth();
   const hasProcessed = useRef(false);
 
   useEffect(() => {
@@ -41,6 +41,11 @@ export default function AuthCallback() {
           is_new_user: response.data.is_new_user 
         });
 
+        // Store session token for reliable auth
+        if (response.data.session_token) {
+          saveSession(response.data.session_token);
+        }
+
         setUser(response.data.user);
         
         // Clear hash
@@ -50,8 +55,6 @@ export default function AuthCallback() {
         if (!response.data.user?.role) {
           // New user or user without role - go to role selection
           navigate('/role-selection', { replace: true });
-        } else if (response.data.user.role === 'instructor') {
-          navigate('/dashboard', { replace: true });
         } else {
           navigate('/dashboard', { replace: true });
         }
