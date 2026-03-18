@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Toaster } from "./components/ui/sonner";
 
@@ -36,6 +37,14 @@ const ProtectedRoute = ({ children }) => {
 // Dashboard router - redirects based on role
 const DashboardRouter = () => {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && user && !user.role) {
+      // User has no role selected, redirect to role selection
+      navigate('/role-selection', { replace: true });
+    }
+  }, [loading, user, navigate]);
 
   if (loading) {
     return (
@@ -45,10 +54,13 @@ const DashboardRouter = () => {
     );
   }
 
-  // New user without role selection
-  if (!user?.role || user.role === 'student') {
-    // Check if role needs to be selected (first time)
-    // For simplicity, students go to student dashboard, instructors to instructor dashboard
+  // If no role, show loading (will redirect via useEffect)
+  if (!user?.role) {
+    return (
+      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
   if (user?.role === 'instructor') {

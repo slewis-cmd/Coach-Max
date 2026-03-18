@@ -14,7 +14,8 @@ export default function RoleSelection() {
     if (!loading && !isAuthenticated) {
       navigate('/');
     }
-    if (!loading && user?.role && user.role !== 'student') {
+    // If user already has a role, redirect to dashboard
+    if (!loading && user?.role) {
       navigate('/dashboard');
     }
   }, [loading, isAuthenticated, user, navigate]);

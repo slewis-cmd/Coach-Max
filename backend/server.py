@@ -196,8 +196,13 @@ async def create_session(request: Request, response: Response):
                 headers={"X-Session-ID": session_id}
             )
             if resp.status_code != 200:
+                logger.error(f"Auth failed with status {resp.status_code}: {resp.text}")
                 raise HTTPException(status_code=401, detail="Invalid session_id")
             user_data = resp.json()
+            logger.info(f"Auth successful for: {user_data.get('email')}")
+        except httpx.HTTPError as e:
+            logger.error(f"Auth HTTP error: {e}")
+            raise HTTPException(status_code=401, detail="Authentication failed")
         except Exception as e:
             logger.error(f"Auth error: {e}")
             raise HTTPException(status_code=401, detail="Authentication failed")
@@ -208,6 +213,7 @@ async def create_session(request: Request, response: Response):
         {"_id": 0}
     )
     
+    is_new_user = False
     if existing_user:
         user_id = existing_user["user_id"]
         # Update user info
@@ -219,17 +225,19 @@ async def create_session(request: Request, response: Response):
             }}
         )
     else:
-        # Create new user (default role: student)
+        # Create new user (role needs to be selected)
+        is_new_user = True
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         new_user = {
             "user_id": user_id,
             "email": user_data["email"],
             "name": user_data["name"],
             "picture": user_data.get("picture"),
-            "role": "student",
+            "role": None,  # No role until user selects one
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(new_user)
+        logger.info(f"Created new user: {user_id}")
     
     # Create session
     session_token = user_data.get("session_token", f"sess_{uuid.uuid4().hex}")
@@ -256,7 +264,7 @@ async def create_session(request: Request, response: Response):
     # Get user with role
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     
-    return {"user": user, "session_token": session_token}
+    return {"user": user, "session_token": session_token, "is_new_user": is_new_user}
 
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(get_current_user)):

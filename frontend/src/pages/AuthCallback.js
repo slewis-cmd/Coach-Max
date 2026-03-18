@@ -20,11 +20,13 @@ export default function AuthCallback() {
       const sessionIdMatch = hash.match(/session_id=([^&]+)/);
       
       if (!sessionIdMatch) {
+        console.error('No session_id found in hash');
         navigate('/');
         return;
       }
 
       const sessionId = sessionIdMatch[1];
+      console.log('Processing auth with session_id:', sessionId.substring(0, 10) + '...');
 
       try {
         const response = await axios.post(
@@ -33,13 +35,28 @@ export default function AuthCallback() {
           { withCredentials: true }
         );
 
+        console.log('Auth response:', { 
+          user: response.data.user?.email, 
+          role: response.data.user?.role,
+          is_new_user: response.data.is_new_user 
+        });
+
         setUser(response.data.user);
         
-        // Clear hash and navigate to dashboard
-        window.history.replaceState(null, '', '/dashboard');
-        navigate('/dashboard', { replace: true, state: { user: response.data.user } });
+        // Clear hash
+        window.history.replaceState(null, '', window.location.pathname);
+        
+        // Redirect based on whether user has a role
+        if (!response.data.user?.role) {
+          // New user or user without role - go to role selection
+          navigate('/role-selection', { replace: true });
+        } else if (response.data.user.role === 'instructor') {
+          navigate('/dashboard', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
       } catch (error) {
-        console.error('Auth callback error:', error);
+        console.error('Auth callback error:', error.response?.data || error.message);
         navigate('/');
       }
     };
