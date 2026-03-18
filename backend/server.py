@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Depends, Response, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,6 +15,7 @@ import httpx
 from PyPDF2 import PdfReader
 from docx import Document
 import io
+import csv
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -383,6 +384,112 @@ async def remove_student_from_cohort(cohort_id: str, student_id: str, user: dict
     
     return {"message": "Student removed"}
 
+@api_router.post("/cohorts/{cohort_id}/students/bulk")
+async def bulk_import_students(
+    cohort_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_instructor)
+):
+    """Bulk import students from CSV file.
+    CSV should have columns: email (required), name (optional)
+    """
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    # Validate file type
+    filename = file.filename or "unnamed"
+    if not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files allowed")
+    
+    # Read and parse CSV
+    content = await file.read()
+    try:
+        text = content.decode('utf-8')
+    except:
+        text = content.decode('latin-1')
+    
+    reader = csv.DictReader(io.StringIO(text))
+    
+    results = {
+        "added": [],
+        "already_enrolled": [],
+        "not_found": [],
+        "errors": []
+    }
+    
+    for row in reader:
+        email = row.get("email", "").strip().lower()
+        if not email:
+            continue
+        
+        try:
+            # Find student by email
+            student = await db.users.find_one({"email": email}, {"_id": 0})
+            
+            if not student:
+                # Check if name provided for creating placeholder
+                name = row.get("name", "").strip()
+                if name:
+                    # Create placeholder user (they'll complete profile on first login)
+                    student_id = f"user_{uuid.uuid4().hex[:12]}"
+                    await db.users.insert_one({
+                        "user_id": student_id,
+                        "email": email,
+                        "name": name,
+                        "picture": None,
+                        "role": "student",
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    })
+                    student = {"user_id": student_id, "name": name, "email": email}
+                else:
+                    results["not_found"].append(email)
+                    continue
+            
+            # Check if already enrolled
+            if student["user_id"] in cohort.get("student_ids", []):
+                results["already_enrolled"].append(email)
+                continue
+            
+            # Add to cohort
+            await db.cohorts.update_one(
+                {"cohort_id": cohort_id},
+                {"$push": {"student_ids": student["user_id"]}}
+            )
+            
+            # Refresh cohort data
+            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+            
+            results["added"].append({
+                "email": email,
+                "name": student.get("name", "Unknown")
+            })
+            
+        except Exception as e:
+            logger.error(f"Error importing student {email}: {e}")
+            results["errors"].append(email)
+    
+    return {
+        "message": f"Import complete: {len(results['added'])} added, {len(results['already_enrolled'])} already enrolled, {len(results['not_found'])} not found",
+        "results": results
+    }
+
+@api_router.get("/cohorts/{cohort_id}/students/template")
+async def download_student_template(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Download CSV template for bulk student import"""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    # Create CSV template
+    template = "email,name\nstudent1@example.com,John Doe\nstudent2@example.com,Jane Smith\n"
+    
+    return Response(
+        content=template,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=student_import_template.csv"}
+    )
+
 # ==================== MATERIAL ENDPOINTS ====================
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -546,6 +653,33 @@ async def delete_material(material_id: str, user: dict = Depends(require_instruc
     
     await db.materials.delete_one({"material_id": material_id})
     return {"message": "Material deleted"}
+
+@api_router.get("/materials/{material_id}/download")
+async def download_material(material_id: str, user: dict = Depends(get_current_user)):
+    """Download a material file"""
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    
+    # Check access
+    cohort = await db.cohorts.find_one({"cohort_id": material["cohort_id"]}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    file_path = Path(material["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=file_path,
+        filename=material["file_name"],
+        media_type="application/octet-stream"
+    )
 
 # ==================== SUBMISSION ENDPOINTS ====================
 

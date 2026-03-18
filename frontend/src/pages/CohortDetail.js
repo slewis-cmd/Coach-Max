@@ -34,7 +34,11 @@ import {
   File,
   BookMarked,
   ClipboardList,
-  X
+  X,
+  Download,
+  FileUp,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -54,6 +58,7 @@ export default function CohortDetail() {
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showUploadMaterial, setShowUploadMaterial] = useState(false);
   const [showSubmitHomework, setShowSubmitHomework] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   
   // Form states
   const [studentEmail, setStudentEmail] = useState('');
@@ -71,6 +76,11 @@ export default function CohortDetail() {
   const [selectedHomework, setSelectedHomework] = useState(null);
   const [homeworkFile, setHomeworkFile] = useState(null);
   const [submittingHomework, setSubmittingHomework] = useState(false);
+  
+  // Bulk import states
+  const [bulkFile, setBulkFile] = useState(null);
+  const [importingBulk, setImportingBulk] = useState(false);
+  const [importResults, setImportResults] = useState(null);
 
   const fetchCohort = useCallback(async () => {
     try {
@@ -215,6 +225,87 @@ export default function CohortDetail() {
     }
   };
 
+  const handleDownloadMaterial = async (materialId, fileName) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/materials/${materialId}/download`,
+        { 
+          withCredentials: true,
+          responseType: 'blob'
+        }
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Download started');
+    } catch (error) {
+      toast.error('Failed to download file');
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/cohorts/${cohortId}/students/template`,
+        { 
+          withCredentials: true,
+          responseType: 'blob'
+        }
+      );
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'student_import_template.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error('Failed to download template');
+    }
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulkFile) {
+      toast.error('Please select a CSV file');
+      return;
+    }
+
+    setImportingBulk(true);
+    setImportResults(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', bulkFile);
+
+      const response = await axios.post(
+        `${API_URL}/api/cohorts/${cohortId}/students/bulk`,
+        formData,
+        { 
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' }
+        }
+      );
+      
+      setImportResults(response.data.results);
+      toast.success(response.data.message);
+      fetchCohort();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Import failed');
+    } finally {
+      setImportingBulk(false);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
@@ -244,6 +335,15 @@ export default function CohortDetail() {
           
           {isInstructor && (
             <div className="flex items-center gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => setShowBulkImport(true)}
+                className="border-[#E5E5E5] rounded-lg"
+                data-testid="bulk-import-btn"
+              >
+                <FileUp className="w-4 h-4 mr-2" />
+                Bulk Import
+              </Button>
               <Button 
                 variant="outline"
                 onClick={() => setShowAddStudent(true)}
@@ -321,26 +421,48 @@ export default function CohortDetail() {
                             <div className="w-10 h-10 bg-[#E0F2FE] rounded-lg flex items-center justify-center">
                               <BookMarked className="w-5 h-5 text-[#075985]" />
                             </div>
-                            {isInstructor && (
+                            <div className="flex items-center gap-1">
                               <Button 
                                 variant="ghost" 
                                 size="icon"
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => handleDeleteMaterial(mat.material_id)}
+                                onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                                data-testid={`download-${mat.material_id}`}
                               >
-                                <Trash2 className="w-4 h-4 text-red-500" />
+                                <Download className="w-4 h-4 text-[#075985]" />
                               </Button>
-                            )}
+                              {isInstructor && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => handleDeleteMaterial(mat.material_id)}
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
                           <CardDescription className="text-xs uppercase tracking-wide">Workbook</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
-                          <p className="text-xs text-[#888]">
-                            <File className="w-3 h-3 inline mr-1" />
-                            {mat.file_name}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-[#888]">
+                              <File className="w-3 h-3 inline mr-1" />
+                              {mat.file_name}
+                            </p>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-[#075985] hover:text-[#064E3B] h-7 px-2"
+                              onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Download
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
@@ -353,26 +475,48 @@ export default function CohortDetail() {
                             <div className="w-10 h-10 bg-[#FDE047] rounded-lg flex items-center justify-center">
                               <ClipboardList className="w-5 h-5 text-[#1A1A1A]" />
                             </div>
-                            {isInstructor && (
+                            <div className="flex items-center gap-1">
                               <Button 
                                 variant="ghost" 
                                 size="icon"
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => handleDeleteMaterial(mat.material_id)}
+                                onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                                data-testid={`download-${mat.material_id}`}
                               >
-                                <Trash2 className="w-4 h-4 text-red-500" />
+                                <Download className="w-4 h-4 text-[#854D0E]" />
                               </Button>
-                            )}
+                              {isInstructor && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => handleDeleteMaterial(mat.material_id)}
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
                           <CardDescription className="text-xs uppercase tracking-wide">Case Study</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
-                          <p className="text-xs text-[#888]">
-                            <File className="w-3 h-3 inline mr-1" />
-                            {mat.file_name}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-[#888]">
+                              <File className="w-3 h-3 inline mr-1" />
+                              {mat.file_name}
+                            </p>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-[#854D0E] hover:text-[#713F12] h-7 px-2"
+                              onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Download
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
@@ -385,23 +529,34 @@ export default function CohortDetail() {
                             <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center">
                               <Upload className="w-5 h-5 text-[#065F46]" />
                             </div>
-                            {isInstructor && (
+                            <div className="flex items-center gap-1">
                               <Button 
                                 variant="ghost" 
                                 size="icon"
                                 className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => handleDeleteMaterial(mat.material_id)}
+                                onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                                data-testid={`download-${mat.material_id}`}
                               >
-                                <Trash2 className="w-4 h-4 text-red-500" />
+                                <Download className="w-4 h-4 text-[#065F46]" />
                               </Button>
-                            )}
+                              {isInstructor && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => handleDeleteMaterial(mat.material_id)}
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
                           <CardDescription className="text-xs uppercase tracking-wide">Homework Assignment</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
-                          {!isInstructor && (
+                          {!isInstructor ? (
                             <Button 
                               size="sm"
                               onClick={() => {
@@ -413,6 +568,22 @@ export default function CohortDetail() {
                             >
                               Submit Homework
                             </Button>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs text-[#888]">
+                                <File className="w-3 h-3 inline mr-1" />
+                                {mat.file_name}
+                              </p>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                className="text-[#065F46] hover:text-[#064E3B] h-7 px-2"
+                                onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                              >
+                                <Download className="w-3 h-3 mr-1" />
+                                Download
+                              </Button>
+                            </div>
                           )}
                         </CardContent>
                       </Card>
@@ -668,6 +839,134 @@ export default function CohortDetail() {
             >
               {submittingHomework ? 'Submitting...' : 'Submit'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Import Dialog */}
+      <Dialog open={showBulkImport} onOpenChange={(open) => {
+        setShowBulkImport(open);
+        if (!open) {
+          setBulkFile(null);
+          setImportResults(null);
+        }
+      }}>
+        <DialogContent className="bg-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-normal text-2xl">Bulk Import Students</DialogTitle>
+            <DialogDescription>
+              Upload a CSV file with student emails. Students will be added to this cohort.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Template Download */}
+            <div className="flex items-center justify-between p-4 bg-[#F2F0ED] rounded-lg">
+              <div>
+                <p className="text-sm font-medium text-[#1A1A1A]">Need a template?</p>
+                <p className="text-xs text-[#888]">Download our CSV template to get started</p>
+              </div>
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadTemplate}
+                className="border-[#E5E5E5]"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Template
+              </Button>
+            </div>
+
+            {/* File Upload */}
+            <div>
+              <Label>CSV File</Label>
+              <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer"
+                onClick={() => document.getElementById('bulk-file').click()}
+              >
+                {bulkFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <File className="w-5 h-5 text-[#065F46]" />
+                    <span className="text-sm text-[#1A1A1A]">{bulkFile.name}</span>
+                  </div>
+                ) : (
+                  <>
+                    <FileUp className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
+                    <p className="text-sm text-[#888]">Click to upload CSV file</p>
+                    <p className="text-xs text-[#C4C4C4] mt-1">Required column: email</p>
+                  </>
+                )}
+              </div>
+              <input
+                id="bulk-file"
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(e) => setBulkFile(e.target.files[0])}
+              />
+            </div>
+
+            {/* Import Results */}
+            {importResults && (
+              <div className="space-y-3">
+                {importResults.added?.length > 0 && (
+                  <div className="flex items-start gap-2 p-3 bg-[#D1FAE5] rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-[#065F46] mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-[#065F46]">
+                        {importResults.added.length} students added
+                      </p>
+                      <p className="text-xs text-[#065F46]">
+                        {importResults.added.map(s => s.name || s.email).join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {importResults.already_enrolled?.length > 0 && (
+                  <div className="flex items-start gap-2 p-3 bg-[#FEF9C3] rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-[#854D0E] mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-[#854D0E]">
+                        {importResults.already_enrolled.length} already enrolled
+                      </p>
+                      <p className="text-xs text-[#854D0E]">
+                        {importResults.already_enrolled.join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {importResults.not_found?.length > 0 && (
+                  <div className="flex items-start gap-2 p-3 bg-[#FEE2E2] rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-red-600">
+                        {importResults.not_found.length} not found
+                      </p>
+                      <p className="text-xs text-red-600">
+                        {importResults.not_found.join(', ')} (not registered yet)
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowBulkImport(false);
+              setBulkFile(null);
+              setImportResults(null);
+            }}>
+              {importResults ? 'Close' : 'Cancel'}
+            </Button>
+            {!importResults && (
+              <Button 
+                data-testid="bulk-import-submit"
+                onClick={handleBulkImport}
+                disabled={importingBulk || !bulkFile}
+                className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+              >
+                {importingBulk ? 'Importing...' : 'Import Students'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

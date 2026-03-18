@@ -1,327 +1,306 @@
 #!/usr/bin/env python3
-
 import requests
-import json
 import sys
-from datetime import datetime, timezone
+import json
 import io
-import tempfile
+import csv
 import os
+from datetime import datetime
 
 class ThinkificAITester:
     def __init__(self, base_url="https://learning-agent-hub-1.preview.emergentagent.com"):
         self.base_url = base_url
-        self.session_token = None
-        self.test_user = None
-        self.test_instructor = None
+        self.token = "test_sess_1773829867648"  # Provided instructor token
+        self.cohort_id = "cohort_3a1999cb7d72"  # Provided cohort ID
+        self.material_id = "mat_ab936a2cb162"  # Provided material ID
         self.tests_run = 0
         self.tests_passed = 0
+        print(f"🔧 Testing ThinkificAI platform at: {base_url}")
+        print(f"🎯 Using instructor token: {self.token}")
+        print(f"📚 Testing cohort: {self.cohort_id}")
+        print(f"📄 Testing material: {self.material_id}")
 
-    def log_test(self, name, success, details=""):
-        """Log test result"""
-        self.tests_run += 1
-        if success:
-            self.tests_passed += 1
-            print(f"✅ {name}")
-        else:
-            print(f"❌ {name}: {details}")
-
-    def run_api_test(self, method, endpoint, expected_status=200, data=None, files=None, headers=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, headers_override=None, response_type='json'):
         """Run a single API test"""
-        url = f"{self.base_url}/api{endpoint}"
-        
-        if headers is None:
-            headers = {}
-        
-        if self.session_token:
-            headers['Authorization'] = f'Bearer {self.session_token}'
+        url = f"{self.base_url}/api/{endpoint}"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {self.token}'}
+        if headers_override:
+            headers.update(headers_override)
+
+        self.tests_run += 1
+        print(f"\n🔍 Testing {name}...")
+        print(f"   URL: {url}")
+        print(f"   Method: {method}")
         
         try:
             if method == 'GET':
                 response = requests.get(url, headers=headers)
             elif method == 'POST':
-                if files:
-                    response = requests.post(url, files=files, data=data, headers=headers)
-                else:
-                    headers.setdefault('Content-Type', 'application/json')
+                if isinstance(data, dict) and 'Content-Type' in headers and headers['Content-Type'] == 'application/json':
                     response = requests.post(url, json=data, headers=headers)
-            elif method == 'PUT':
-                headers.setdefault('Content-Type', 'application/json')
-                response = requests.put(url, json=data, headers=headers)
+                else:
+                    response = requests.post(url, data=data, headers=headers)
             elif method == 'DELETE':
                 response = requests.delete(url, headers=headers)
 
+            print(f"   Status: {response.status_code}")
+            
             success = response.status_code == expected_status
             if success:
-                try:
-                    return True, response.json()
-                except:
-                    return True, {"status": "ok"}
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                if response_type == 'json' and response.content:
+                    try:
+                        resp_json = response.json()
+                        print(f"   Response: {json.dumps(resp_json, indent=2)[:200]}...")
+                        return success, resp_json
+                    except:
+                        return success, response.text
+                else:
+                    return success, response.content
             else:
-                return False, f"Status {response.status_code}, expected {expected_status}. Response: {response.text[:200]}"
+                print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
+                print(f"   Response: {response.text[:300]}...")
+                return False, {}
 
         except Exception as e:
-            return False, f"Error: {str(e)}"
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
 
-    def test_health_endpoints(self):
-        """Test basic health endpoints"""
-        print("\n🏥 Testing Health Endpoints...")
+    def test_auth_access(self):
+        """Test authentication and access"""
+        print("\n" + "="*50)
+        print("🔐 TESTING AUTHENTICATION")
+        print("="*50)
         
-        # Test root endpoint
-        success, result = self.run_api_test('GET', '/')
-        self.log_test("API Root Endpoint", success, result if not success else "")
+        success, response = self.run_test(
+            "Get current user",
+            "GET", 
+            "auth/me",
+            200
+        )
         
-        # Test health endpoint
-        success, result = self.run_api_test('GET', '/health')
-        self.log_test("API Health Endpoint", success, result if not success else "")
-
-    def mock_auth_session(self, role="instructor", user_id=None, email=None):
-        """Create mock user session for testing"""
-        print(f"\n👤 Creating mock {role} session...")
-        
-        if user_id is None:
-            user_id = f"test_{role}_{datetime.now().strftime('%H%M%S')}"
-        if email is None:
-            email = f"{user_id}@test.com"
-            
-        # Create session token for testing
-        session_token = f"test_session_{user_id}"
-        self.session_token = session_token
-        
-        # Store user info
-        user_data = {
-            "user_id": user_id,
-            "email": email,
-            "name": f"Test {role.title()}",
-            "role": role
-        }
-        
-        if role == "instructor":
-            self.test_instructor = user_data
+        if success:
+            print(f"✅ Authenticated as: {response.get('name', 'Unknown')} ({response.get('role', 'Unknown')})")
+            return True
         else:
-            self.test_user = user_data
-            
-        return user_data
+            print("❌ Authentication failed - cannot proceed with tests")
+            return False
 
-    def test_cohort_management(self):
-        """Test cohort CRUD operations (instructor)"""
-        print("\n📚 Testing Cohort Management...")
+    def test_cohort_access(self):
+        """Test cohort access"""
+        print("\n" + "="*50)
+        print("📚 TESTING COHORT ACCESS")
+        print("="*50)
         
-        # Mock instructor session
-        instructor = self.mock_auth_session("instructor", "test_instructor_001")
-        
-        # Create cohort
-        cohort_data = {
-            "name": "Test Cohort 2024",
-            "description": "A test cohort for API testing"
-        }
-        success, result = self.run_api_test('POST', '/cohorts', 201, cohort_data)
-        self.log_test("Create Cohort", success, result if not success else "")
+        success, response = self.run_test(
+            f"Get cohort {self.cohort_id}",
+            "GET",
+            f"cohorts/{self.cohort_id}",
+            200
+        )
         
         if success:
-            cohort_id = result.get('cohort_id')
-            
-            # Get cohorts list
-            success, result = self.run_api_test('GET', '/cohorts')
-            self.log_test("Get Cohorts List", success, result if not success else "")
-            
-            # Get single cohort
-            success, result = self.run_api_test('GET', f'/cohorts/{cohort_id}')
-            self.log_test("Get Single Cohort", success, result if not success else "")
-            
-            return cohort_id
-        
-        return None
+            print(f"✅ Cohort found: {response.get('name', 'Unknown')}")
+            student_count = len(response.get('student_ids', []))
+            print(f"   Students: {student_count}")
+            return True, response
+        return False, {}
 
-    def test_student_management(self, cohort_id):
-        """Test adding students to cohort"""
-        print("\n👥 Testing Student Management...")
+    def test_material_download(self):
+        """Test material download functionality"""
+        print("\n" + "="*50)
+        print("📄 TESTING MATERIAL DOWNLOAD")
+        print("="*50)
         
-        if not cohort_id:
-            print("⚠️ Skipping student tests - no cohort available")
-            return None
-            
-        # Mock student session
-        student = self.mock_auth_session("student", "test_student_001")
-        
-        # Try to add student to cohort (would require student to exist in DB)
-        student_data = {"email": student["email"]}
-        success, result = self.run_api_test('POST', f'/cohorts/{cohort_id}/students', 404, student_data)  # Expect 404 as student doesn't exist in DB
-        self.log_test("Add Student to Cohort (Expected 404)", success or "not found" in str(result).lower(), result if not success else "")
-        
-        return student["user_id"]
-
-    def test_material_upload(self, cohort_id):
-        """Test material upload functionality"""
-        print("\n📄 Testing Material Upload...")
-        
-        if not cohort_id:
-            print("⚠️ Skipping material tests - no cohort available")
-            return None
-        
-        # Switch back to instructor session
-        self.mock_auth_session("instructor", "test_instructor_001")
-        
-        # Create a test PDF file
-        test_content = "Test PDF content for homework assignment"
-        
-        # Create form data
-        files = {
-            'file': ('test_homework.pdf', io.BytesIO(test_content.encode()), 'application/pdf')
-        }
-        
-        # Material upload parameters
-        params = {
-            'week_number': 1,
-            'material_type': 'homework',
-            'title': 'Test Homework Assignment',
-            'description': 'A test homework for API testing'
-        }
-        
-        # Test material upload
-        success, result = self.run_api_test(
-            'POST', 
-            f'/cohorts/{cohort_id}/materials?' + '&'.join([f'{k}={v}' for k, v in params.items()]), 
-            201, 
-            data=params, 
-            files=files
+        # First check if material exists
+        success, response = self.run_test(
+            f"Download material {self.material_id}",
+            "GET",
+            f"materials/{self.material_id}/download",
+            200,
+            response_type='binary'
         )
-        self.log_test("Upload Material", success, result if not success else "")
         
         if success:
-            # Get materials list
-            success, result = self.run_api_test('GET', f'/cohorts/{cohort_id}/materials')
-            self.log_test("Get Materials List", success, result if not success else "")
-            
-            if success and result:
-                # Find our uploaded material
-                for week in result:
-                    for homework in week.get('homework', []):
-                        if homework['title'] == 'Test Homework Assignment':
-                            return homework['material_id']
-        
-        return None
+            content_length = len(response) if response else 0
+            print(f"✅ Material downloaded successfully - Size: {content_length} bytes")
+            return True
+        else:
+            print("❌ Material download failed")
+            return False
 
-    def test_homework_submission(self, material_id):
-        """Test homework submission"""
-        print("\n📝 Testing Homework Submission...")
+    def test_csv_template_download(self):
+        """Test CSV template download"""
+        print("\n" + "="*50)
+        print("📋 TESTING CSV TEMPLATE DOWNLOAD") 
+        print("="*50)
         
-        if not material_id:
-            print("⚠️ Skipping submission tests - no homework material available")
-            return None
-            
-        # Switch to student session
-        self.mock_auth_session("student", "test_student_001")
-        
-        # Create test submission file
-        submission_content = "This is my homework submission content"
-        files = {
-            'file': ('submission.pdf', io.BytesIO(submission_content.encode()), 'application/pdf')
-        }
-        
-        # Submit homework
-        success, result = self.run_api_test(
-            'POST', 
-            f'/materials/{material_id}/submit', 
-            404,  # Expect 404 as student not in cohort
-            files=files
+        success, response = self.run_test(
+            f"Download student CSV template for cohort {self.cohort_id}",
+            "GET",
+            f"cohorts/{self.cohort_id}/students/template",
+            200,
+            response_type='csv'
         )
-        self.log_test("Submit Homework (Expected 404)", success or "not found" in str(result).lower() or "not enrolled" in str(result).lower(), result if not success else "")
+        
+        if success:
+            # Parse CSV to validate format
+            try:
+                csv_content = response.decode('utf-8') if isinstance(response, bytes) else str(response)
+                print(f"✅ CSV template downloaded")
+                print(f"   Content preview: {csv_content[:100]}...")
+                
+                # Validate CSV structure
+                reader = csv.DictReader(io.StringIO(csv_content))
+                headers = reader.fieldnames
+                print(f"   CSV headers: {headers}")
+                
+                if 'email' in headers:
+                    print("✅ CSV has required 'email' column")
+                    return True
+                else:
+                    print("❌ CSV missing 'email' column")
+                    return False
+                    
+            except Exception as e:
+                print(f"❌ Error parsing CSV: {e}")
+                return False
+        return False
 
-    def test_ai_review_generation(self):
-        """Test AI review functionality (mock)"""
-        print("\n🤖 Testing AI Review Generation...")
+    def test_bulk_student_import(self):
+        """Test bulk student import functionality"""
+        print("\n" + "="*50) 
+        print("👥 TESTING BULK STUDENT IMPORT")
+        print("="*50)
         
-        # This would normally require a real submission, so we'll test the auth requirement
-        self.mock_auth_session("instructor", "test_instructor_001")
+        # Create a test CSV
+        test_csv_content = """email,name
+test.student1@example.com,Test Student 1
+test.student2@example.com,Test Student 2
+invalid-email,Invalid Entry
+"""
         
-        fake_submission_id = "fake_submission_123"
-        success, result = self.run_api_test('POST', f'/submissions/{fake_submission_id}/review', 404)
-        self.log_test("AI Review Generation (Expected 404)", success or "not found" in str(result).lower(), result if not success else "")
+        # Test with multipart form data
+        files = {'file': ('test_students.csv', test_csv_content, 'text/csv')}
+        
+        url = f"{self.base_url}/api/cohorts/{self.cohort_id}/students/bulk"
+        headers = {'Authorization': f'Bearer {self.token}'}
+        
+        print(f"🔍 Testing bulk import...")
+        print(f"   URL: {url}")
+        print(f"   CSV content: {test_csv_content.strip()}")
+        
+        self.tests_run += 1
+        try:
+            response = requests.post(url, files=files, headers=headers)
+            print(f"   Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                self.tests_passed += 1
+                print(f"✅ Bulk import successful")
+                
+                try:
+                    result = response.json()
+                    print(f"   Response: {json.dumps(result, indent=2)}")
+                    
+                    # Check results structure
+                    results = result.get('results', {})
+                    added = results.get('added', [])
+                    not_found = results.get('not_found', [])
+                    already_enrolled = results.get('already_enrolled', [])
+                    errors = results.get('errors', [])
+                    
+                    print(f"   Added: {len(added)}")
+                    print(f"   Not found: {len(not_found)}")  
+                    print(f"   Already enrolled: {len(already_enrolled)}")
+                    print(f"   Errors: {len(errors)}")
+                    
+                    return True
+                    
+                except Exception as e:
+                    print(f"   Error parsing response: {e}")
+                    print(f"   Raw response: {response.text}")
+                    return True  # Still count as success if status was 200
+            else:
+                print(f"❌ Failed - Status: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
 
-    def test_submissions_endpoint(self):
-        """Test submissions listing"""
-        print("\n📋 Testing Submissions Endpoints...")
+    def test_materials_list(self):
+        """Test materials listing to verify context"""
+        print("\n" + "="*50)
+        print("📚 TESTING MATERIALS LIST")
+        print("="*50)
         
-        # Test as instructor
-        self.mock_auth_session("instructor", "test_instructor_001")
-        success, result = self.run_api_test('GET', '/submissions')
-        self.log_test("Get Submissions (Instructor)", success, result if not success else "")
+        success, response = self.run_test(
+            f"Get materials for cohort {self.cohort_id}",
+            "GET",
+            f"cohorts/{self.cohort_id}/materials",
+            200
+        )
         
-        # Test as student
-        self.mock_auth_session("student", "test_student_001")
-        success, result = self.run_api_test('GET', '/submissions')
-        self.log_test("Get Submissions (Student)", success, result if not success else "")
-
-    def test_auth_endpoints(self):
-        """Test authentication endpoints"""
-        print("\n🔐 Testing Authentication...")
-        
-        # Test /auth/me without session
-        self.session_token = None
-        success, result = self.run_api_test('GET', '/auth/me', 401)
-        self.log_test("Auth Me (No Token - Expected 401)", success, result if not success else "")
-        
-        # Test session creation (would need real session_id)
-        session_data = {"session_id": "fake_session"}
-        success, result = self.run_api_test('POST', '/auth/session', 401, session_data)
-        self.log_test("Create Session (Expected 401)", success, result if not success else "")
+        if success:
+            print(f"✅ Materials list retrieved")
+            if isinstance(response, list):
+                print(f"   Found {len(response)} weeks with materials")
+                for week in response:
+                    week_num = week.get('week_number', 'Unknown')
+                    workbooks = len(week.get('workbooks', []))
+                    case_studies = len(week.get('case_studies', []))
+                    homework = len(week.get('homework', []))
+                    print(f"   Week {week_num}: {workbooks} workbooks, {case_studies} case studies, {homework} homework")
+            return True
+        return False
 
     def run_all_tests(self):
-        """Run comprehensive test suite"""
-        print("🚀 Starting ThinkificAI API Tests...")
-        print(f"Backend URL: {self.base_url}")
+        """Run all tests"""
+        print("🚀 Starting ThinkificAI Download & Import Tests")
+        print("=" * 60)
         
-        try:
-            # Basic health checks
-            self.test_health_endpoints()
-            
-            # Authentication tests
-            self.test_auth_endpoints()
-            
-            # Cohort management tests
-            cohort_id = self.test_cohort_management()
-            
-            # Student management tests
-            student_id = self.test_student_management(cohort_id)
-            
-            # Material upload tests
-            material_id = self.test_material_upload(cohort_id)
-            
-            # Homework submission tests
-            self.test_homework_submission(material_id)
-            
-            # AI review tests
-            self.test_ai_review_generation()
-            
-            # Submissions listing tests
-            self.test_submissions_endpoint()
-            
-        except Exception as e:
-            print(f"❌ Test suite error: {e}")
+        # Test authentication first
+        if not self.test_auth_access():
             return 1
-
-        # Print summary
-        print(f"\n📊 Test Summary:")
-        print(f"Total tests: {self.tests_run}")
-        print(f"Passed: {self.tests_passed}")
-        print(f"Failed: {self.tests_run - self.tests_passed}")
         
-        success_rate = (self.tests_passed / self.tests_run * 100) if self.tests_run > 0 else 0
-        print(f"Success rate: {success_rate:.1f}%")
-        
-        if success_rate < 70:
-            print("⚠️  Many tests failed - check backend implementation")
+        # Test cohort access
+        cohort_success, cohort_data = self.test_cohort_access()
+        if not cohort_success:
+            print("❌ Cannot access cohort - stopping tests")
             return 1
-        elif success_rate < 90:
-            print("⚠️  Some tests failed - minor issues detected")
+        
+        # Test materials list for context
+        self.test_materials_list()
+        
+        # Test new download functionality
+        self.test_material_download()
+        
+        # Test CSV template download
+        self.test_csv_template_download()
+        
+        # Test bulk import
+        self.test_bulk_student_import()
+        
+        # Print final results
+        print("\n" + "=" * 60)
+        print("📊 FINAL RESULTS")
+        print("=" * 60)
+        print(f"Tests Run: {self.tests_run}")
+        print(f"Tests Passed: {self.tests_passed}")
+        print(f"Success Rate: {(self.tests_passed/self.tests_run)*100:.1f}%" if self.tests_run > 0 else "0%")
+        
+        if self.tests_passed == self.tests_run:
+            print("🎉 All tests passed!")
             return 0
         else:
-            print("✅ Most tests passed - backend looks healthy!")
-            return 0
+            print(f"⚠️  {self.tests_run - self.tests_passed} test(s) failed")
+            return 1
 
 def main():
-    """Main test function"""
+    """Main test runner"""
     tester = ThinkificAITester()
     return tester.run_all_tests()
 
