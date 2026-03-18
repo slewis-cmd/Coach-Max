@@ -53,6 +53,9 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] AI review generation using GPT-5.2
 - [x] Encouraging feedback display in "letter" style
 - [x] Submissions page with pending/reviewed sections
+- [x] **File download functionality for all materials**
+- [x] **Bulk student import via CSV**
+- [x] **CSV template download for bulk import**
 
 ## API Endpoints
 - POST /api/auth/session - Exchange session_id for token
@@ -63,8 +66,11 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - GET/PUT/DELETE /api/cohorts/{id} - Cohort operations
 - POST /api/cohorts/{id}/students - Add student
 - DELETE /api/cohorts/{id}/students/{studentId} - Remove student
+- **POST /api/cohorts/{id}/students/bulk - Bulk import students (CSV)**
+- **GET /api/cohorts/{id}/students/template - Download CSV template**
 - GET/POST /api/cohorts/{id}/materials - List/Upload materials
 - DELETE /api/materials/{id} - Delete material
+- **GET /api/materials/{id}/download - Download material file**
 - POST /api/materials/{id}/submit - Submit homework
 - GET /api/submissions - List submissions
 - GET /api/submissions/{id} - Get submission detail
@@ -80,10 +86,10 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] AI feedback generation
 
 ### P1 (Important - Next Phase)
-- [ ] File download functionality for materials
+- [x] File download functionality for materials ✅
+- [x] Bulk student import (CSV) ✅
 - [ ] Resubmission capability for students
 - [ ] Email notifications for new submissions
-- [ ] Bulk student import (CSV)
 - [ ] Material due dates
 
 ### P2 (Nice to Have)
