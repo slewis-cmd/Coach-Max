@@ -42,7 +42,8 @@ import {
   Calendar,
   Clock,
   Eye,
-  EyeOff
+  EyeOff,
+  Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -66,7 +67,9 @@ export default function CohortDetail() {
   
   // Form states
   const [studentEmail, setStudentEmail] = useState('');
+  const [studentName, setStudentName] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
+  const [invitingAll, setInvitingAll] = useState(false);
   
   const [materialForm, setMaterialForm] = useState({
     title: '',
@@ -120,17 +123,36 @@ export default function CohortDetail() {
     try {
       const res = await axios.post(
         `${API_URL}/api/cohorts/${cohortId}/students`,
-        { email: studentEmail },
+        { email: studentEmail, name: studentName },
         { withCredentials: true }
       );
-      toast.success(`${res.data.student.name} added to cohort`);
+      toast.success(res.data.invitation_sent 
+        ? `${res.data.student.name} added — invitation email sent!` 
+        : `${res.data.student.name} added to cohort`
+      );
       setShowAddStudent(false);
       setStudentEmail('');
+      setStudentName('');
       fetchCohort();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to add student');
     } finally {
       setAddingStudent(false);
+    }
+  };
+
+  const handleInviteAll = async () => {
+    setInvitingAll(true);
+    try {
+      const res = await axios.post(
+        `${API_URL}/api/cohorts/${cohortId}/students/invite-all`,
+        {}
+      );
+      toast.success(res.data.message);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to send invitations');
+    } finally {
+      setInvitingAll(false);
     }
   };
 
@@ -654,6 +676,21 @@ export default function CohortDetail() {
           {/* Students Tab (Instructor only) */}
           {isInstructor && (
             <TabsContent value="students">
+              {cohort?.students?.length > 0 && (
+                <div className="flex justify-end mb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleInviteAll}
+                    disabled={invitingAll}
+                    className="border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#F2F0ED] rounded-lg"
+                    data-testid="invite-all-btn"
+                  >
+                    <Mail className="w-4 h-4 mr-1.5" />
+                    {invitingAll ? 'Sending...' : 'Send Invitations to All'}
+                  </Button>
+                </div>
+              )}
               {cohort?.students?.length === 0 ? (
                 <Card className="bg-white border-[#E5E5E5] border-dashed">
                   <CardContent className="p-12 text-center">
@@ -710,20 +747,34 @@ export default function CohortDetail() {
           <DialogHeader>
             <DialogTitle className="font-normal text-2xl">Add Student</DialogTitle>
             <DialogDescription>
-              Enter the student's email address. They must have already signed up.
+              Enter the student's email. An invitation email will be sent to them.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="student-email">Student Email</Label>
-            <Input
-              id="student-email"
-              data-testid="student-email-input"
-              type="email"
-              placeholder="student@example.com"
-              value={studentEmail}
-              onChange={(e) => setStudentEmail(e.target.value)}
-              className="mt-1"
-            />
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="student-email">Student Email *</Label>
+              <Input
+                id="student-email"
+                data-testid="student-email-input"
+                type="email"
+                placeholder="student@example.com"
+                value={studentEmail}
+                onChange={(e) => setStudentEmail(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="student-name">Student Name (optional)</Label>
+              <Input
+                id="student-name"
+                data-testid="student-name-input"
+                type="text"
+                placeholder="Jane Smith"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddStudent(false)}>
@@ -735,7 +786,7 @@ export default function CohortDetail() {
               disabled={addingStudent}
               className="bg-[#1A1A1A] text-white hover:bg-[#333]"
             >
-              {addingStudent ? 'Adding...' : 'Add Student'}
+              {addingStudent ? 'Sending invite...' : 'Add & Invite'}
             </Button>
           </DialogFooter>
         </DialogContent>

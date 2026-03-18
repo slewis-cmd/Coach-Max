@@ -557,9 +557,10 @@ async def delete_cohort(cohort_id: str, user: dict = Depends(require_instructor)
 
 @api_router.post("/cohorts/{cohort_id}/students")
 async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
-    """Add student to cohort by email"""
+    """Add student to cohort by email. Creates placeholder if not signed up yet, sends invitation email."""
     data = await request.json()
-    student_email = data.get("email")
+    student_email = data.get("email", "").strip().lower()
+    student_name = data.get("name", "").strip()
     
     if not student_email:
         raise HTTPException(status_code=400, detail="Student email required")
@@ -568,10 +569,23 @@ async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = D
     if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
-    # Find student by email
+    # Find or create student
     student = await db.users.find_one({"email": student_email}, {"_id": 0})
+    is_new = False
+    
     if not student:
-        raise HTTPException(status_code=404, detail="Student not found. They need to sign up first.")
+        # Create placeholder user
+        student_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": student_id,
+            "email": student_email,
+            "name": student_name or student_email.split("@")[0],
+            "picture": None,
+            "role": "student",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        student = {"user_id": student_id, "name": student_name or student_email.split("@")[0], "email": student_email}
+        is_new = True
     
     if student["user_id"] in cohort.get("student_ids", []):
         raise HTTPException(status_code=400, detail="Student already in cohort")
@@ -581,7 +595,39 @@ async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = D
         {"$push": {"student_ids": student["user_id"]}}
     )
     
-    return {"message": "Student added", "student": {"user_id": student["user_id"], "name": student["name"], "email": student["email"]}}
+    # Send invitation email
+    origin = request.headers.get("origin", "")
+    app_url = origin or "https://admin-feedback-hub-1.preview.emergentagent.com"
+    await send_email_notification(
+        to_email=student_email,
+        subject=f"You've been invited to {cohort['name']}",
+        html_content=f"""
+        <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <h2 style="color: #1A1A1A; font-weight: normal;">Welcome to {cohort['name']}</h2>
+            <p style="color: #5A5A5A; line-height: 1.6;">
+                Hi {student['name']},
+            </p>
+            <p style="color: #5A5A5A; line-height: 1.6;">
+                You've been invited to join <strong>{cohort['name']}</strong> on ThinkificAI Tutor. 
+                Sign in to access your course materials, submit homework, and receive personalized feedback.
+            </p>
+            <p style="text-align: center; margin: 32px 0;">
+                <a href="{app_url}" style="background: #1A1A1A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; font-size: 14px;">
+                    Sign In to Get Started
+                </a>
+            </p>
+            <p style="color: #888; font-size: 13px; line-height: 1.6;">
+                Use your Google account ({student_email}) to sign in. Your instructor has already enrolled you in the course.
+            </p>
+        </div>
+        """
+    )
+    
+    return {
+        "message": f"Student {'invited' if is_new else 'added'} successfully",
+        "student": {"user_id": student["user_id"], "name": student["name"], "email": student["email"]},
+        "invitation_sent": True
+    }
 
 @api_router.delete("/cohorts/{cohort_id}/students/{student_id}")
 async def remove_student_from_cohort(cohort_id: str, student_id: str, user: dict = Depends(require_instructor)):
@@ -601,9 +647,10 @@ async def remove_student_from_cohort(cohort_id: str, student_id: str, user: dict
 async def bulk_import_students(
     cohort_id: str,
     file: UploadFile = File(...),
-    user: dict = Depends(require_instructor)
+    user: dict = Depends(require_instructor),
+    request: Request = None
 ):
-    """Bulk import students from CSV file.
+    """Bulk import students from CSV file and send invitation emails.
     CSV should have columns: email (required), name (optional)
     """
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
@@ -678,6 +725,34 @@ async def bulk_import_students(
                 "name": student.get("name", "Unknown")
             })
             
+            # Send invitation email
+            origin = request.headers.get("origin", "") if request else ""
+            app_url = origin or "https://admin-feedback-hub-1.preview.emergentagent.com"
+            await send_email_notification(
+                to_email=email,
+                subject=f"You've been invited to {cohort['name']}",
+                html_content=f"""
+                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+                    <h2 style="color: #1A1A1A; font-weight: normal;">Welcome to {cohort['name']}</h2>
+                    <p style="color: #5A5A5A; line-height: 1.6;">
+                        Hi {student.get('name', 'there')},
+                    </p>
+                    <p style="color: #5A5A5A; line-height: 1.6;">
+                        You've been invited to join <strong>{cohort['name']}</strong> on ThinkificAI Tutor.
+                        Sign in to access your course materials, submit homework, and receive personalized feedback.
+                    </p>
+                    <p style="text-align: center; margin: 32px 0;">
+                        <a href="{app_url}" style="background: #1A1A1A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; font-size: 14px;">
+                            Sign In to Get Started
+                        </a>
+                    </p>
+                    <p style="color: #888; font-size: 13px; line-height: 1.6;">
+                        Use your Google account ({email}) to sign in.
+                    </p>
+                </div>
+                """
+            )
+            
         except Exception as e:
             logger.error(f"Error importing student {email}: {e}")
             results["errors"].append(email)
@@ -694,7 +769,6 @@ async def download_student_template(cohort_id: str, user: dict = Depends(require
     if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
     
-    # Create CSV template
     template = "email,name\nstudent1@example.com,John Doe\nstudent2@example.com,Jane Smith\n"
     
     return Response(
@@ -702,6 +776,56 @@ async def download_student_template(cohort_id: str, user: dict = Depends(require
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=student_import_template.csv"}
     )
+
+@api_router.post("/cohorts/{cohort_id}/students/invite-all")
+async def invite_all_students(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Send invitation emails to all students in a cohort"""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    student_ids = cohort.get("student_ids", [])
+    if not student_ids:
+        raise HTTPException(status_code=400, detail="No students enrolled in this cohort")
+    
+    students = await db.users.find(
+        {"user_id": {"$in": student_ids}},
+        {"_id": 0, "email": 1, "name": 1}
+    ).to_list(200)
+    
+    origin = request.headers.get("origin", "")
+    app_url = origin or "https://admin-feedback-hub-1.preview.emergentagent.com"
+    sent_count = 0
+    
+    for student in students:
+        result = await send_email_notification(
+            to_email=student["email"],
+            subject=f"You've been invited to {cohort['name']}",
+            html_content=f"""
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+                <h2 style="color: #1A1A1A; font-weight: normal;">Welcome to {cohort['name']}</h2>
+                <p style="color: #5A5A5A; line-height: 1.6;">
+                    Hi {student.get('name', 'there')},
+                </p>
+                <p style="color: #5A5A5A; line-height: 1.6;">
+                    You've been invited to join <strong>{cohort['name']}</strong> on ThinkificAI Tutor.
+                    Sign in to access your course materials, submit homework, and receive personalized feedback.
+                </p>
+                <p style="text-align: center; margin: 32px 0;">
+                    <a href="{app_url}" style="background: #1A1A1A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; font-size: 14px;">
+                        Sign In to Get Started
+                    </a>
+                </p>
+                <p style="color: #888; font-size: 13px; line-height: 1.6;">
+                    Use your Google account ({student['email']}) to sign in.
+                </p>
+            </div>
+            """
+        )
+        if result:
+            sent_count += 1
+    
+    return {"message": f"Invitations sent to {sent_count} of {len(students)} students", "sent": sent_count, "total": len(students)}
 
 # ==================== WEEK RELEASE ENDPOINTS ====================
 
