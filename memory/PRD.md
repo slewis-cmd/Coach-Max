@@ -56,6 +56,12 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] **File download functionality for all materials**
 - [x] **Bulk student import via CSV**
 - [x] **CSV template download for bulk import**
+- [x] **Email notifications for new submissions (Resend)**
+- [x] **Material due dates for homework assignments**
+- [x] **Human-in-the-loop feedback workflow**:
+  - AI generates draft feedback
+  - Instructor reviews and edits
+  - Instructor sends to student via email
 
 ## API Endpoints
 - POST /api/auth/session - Exchange session_id for token
@@ -68,13 +74,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - DELETE /api/cohorts/{id}/students/{studentId} - Remove student
 - **POST /api/cohorts/{id}/students/bulk - Bulk import students (CSV)**
 - **GET /api/cohorts/{id}/students/template - Download CSV template**
-- GET/POST /api/cohorts/{id}/materials - List/Upload materials
+- GET/POST /api/cohorts/{id}/materials - List/Upload materials (with due_date)
 - DELETE /api/materials/{id} - Delete material
 - **GET /api/materials/{id}/download - Download material file**
-- POST /api/materials/{id}/submit - Submit homework
+- POST /api/materials/{id}/submit - Submit homework (sends email notification)
 - GET /api/submissions - List submissions
 - GET /api/submissions/{id} - Get submission detail
-- POST /api/submissions/{id}/review - Generate AI review
+- POST /api/submissions/{id}/review - Generate AI draft feedback
+- **PUT /api/submissions/{id}/feedback - Edit feedback (human-in-the-loop)**
+- **POST /api/submissions/{id}/send-feedback - Send feedback to student via email**
 
 ## Prioritized Backlog
 
@@ -88,9 +96,10 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 ### P1 (Important - Next Phase)
 - [x] File download functionality for materials ✅
 - [x] Bulk student import (CSV) ✅
+- [x] Email notifications for new submissions ✅
+- [x] Material due dates ✅
+- [x] Human-in-the-loop feedback review ✅
 - [ ] Resubmission capability for students
-- [ ] Email notifications for new submissions
-- [ ] Material due dates
 
 ### P2 (Nice to Have)
 - [ ] Discussion/comments on submissions
