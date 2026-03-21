@@ -1662,6 +1662,60 @@ async def get_submission(submission_id: str, user: dict = Depends(get_current_us
     
     return submission
 
+@api_router.get("/submissions/{submission_id}/download")
+async def download_submission(submission_id: str, user: dict = Depends(get_current_user)):
+    """Download a student's submitted homework file"""
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    # Students can only download their own submissions
+    if user["role"] == "student" and submission["student_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Instructors can only download from their cohorts
+    if user["role"] == "instructor":
+        cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+        if not cohort or not is_cohort_manager(user, cohort):
+            raise HTTPException(status_code=403, detail="Access denied")
+    # super_admin can download any submission
+    
+    file_path = Path(submission["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=str(file_path),
+        filename=submission.get("file_name", "submission"),
+        media_type="application/octet-stream"
+    )
+
+@api_router.get("/cohorts/{cohort_id}/submissions")
+async def get_cohort_submissions(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Get all submissions for a cohort, grouped by week, with student info"""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    submissions = await db.submissions.find(
+        {"cohort_id": cohort_id},
+        {"_id": 0}
+    ).to_list(500)
+    
+    for sub in submissions:
+        student = await db.users.find_one(
+            {"user_id": sub["student_id"]},
+            {"_id": 0, "name": 1, "email": 1, "picture": 1}
+        )
+        sub["student"] = student
+        material = await db.materials.find_one(
+            {"material_id": sub["material_id"]},
+            {"_id": 0, "title": 1, "week_number": 1}
+        )
+        sub["material"] = material
+    
+    return submissions
+
 # ==================== AI REVIEW ENDPOINT ====================
 
 @api_router.post("/submissions/{submission_id}/review")

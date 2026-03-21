@@ -29,7 +29,8 @@ import {
   Mail,
   TrendingUp,
   BarChart3,
-  Shield
+  Shield,
+  Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -396,9 +397,20 @@ export default function InstructorDashboard() {
                         </p>
                       </div>
                     </div>
-                    <Button size="sm" className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg">
-                      Review & Send
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`${API_URL}/api/submissions/${sub.submission_id}/download`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] border border-[#E5E5E5] rounded-lg px-2.5 py-1.5"
+                        data-testid={`download-draft-${sub.submission_id}`}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Homework
+                      </a>
+                      <Button size="sm" className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg">
+                        Review & Send
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -422,9 +434,20 @@ export default function InstructorDashboard() {
                         </p>
                       </div>
                     </div>
-                    <Button size="sm" className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
-                      Generate Review
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`${API_URL}/api/submissions/${sub.submission_id}/download`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] border border-[#E5E5E5] rounded-lg px-2.5 py-1.5"
+                        data-testid={`download-pending-${sub.submission_id}`}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Homework
+                      </a>
+                      <Button size="sm" className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
+                        Generate Review
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}

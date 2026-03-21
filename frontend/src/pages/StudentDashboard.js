@@ -27,7 +27,8 @@ import {
   Hourglass,
   Send,
   X,
-  MessageCircle
+  MessageCircle,
+  Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -470,10 +471,17 @@ export default function StudentDashboard() {
                             Submit
                           </Button>
                         )}
-                        {week.status === 'submitted' && (
-                          <span className="text-xs text-[#5A5A5A] hidden md:block">
-                            {week.submission?.file_name}
-                          </span>
+                        {week.submission && week.status !== 'waiting_on_submission' && (
+                          <a
+                            href={`${API_URL}/api/submissions/${week.submission.submission_id}/download`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] transition-colors"
+                            data-testid={`download-submission-${week.week_number}`}
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span className="hidden md:inline">{week.submission.file_name}</span>
+                            <span className="md:hidden">Download</span>
+                          </a>
                         )}
                         {hasFeedback && (
                           <Button

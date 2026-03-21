@@ -57,6 +57,7 @@ export default function CohortDetail() {
   
   const [cohort, setCohort] = useState(null);
   const [materials, setMaterials] = useState([]);
+  const [cohortSubmissions, setCohortSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Dialogs
@@ -92,12 +93,22 @@ export default function CohortDetail() {
 
   const fetchCohort = useCallback(async () => {
     try {
-      const [cohortRes, materialsRes] = await Promise.all([
+      const requests = [
         axios.get(`${API_URL}/api/cohorts/${cohortId}`, { withCredentials: true }),
         axios.get(`${API_URL}/api/cohorts/${cohortId}/materials`, { withCredentials: true })
-      ]);
-      setCohort(cohortRes.data);
-      setMaterials(materialsRes.data);
+      ];
+      // Instructors/admins also fetch submissions
+      if (isInstructor) {
+        requests.push(
+          axios.get(`${API_URL}/api/cohorts/${cohortId}/submissions`).catch(() => ({ data: [] }))
+        );
+      }
+      const results = await Promise.all(requests);
+      setCohort(results[0].data);
+      setMaterials(results[1].data);
+      if (results[2]) {
+        setCohortSubmissions(results[2].data);
+      }
     } catch (error) {
       console.error('Error fetching cohort:', error);
       toast.error('Failed to load cohort');
@@ -105,7 +116,7 @@ export default function CohortDetail() {
     } finally {
       setLoading(false);
     }
-  }, [cohortId, navigate]);
+  }, [cohortId, navigate, isInstructor]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -648,21 +659,58 @@ export default function CohortDetail() {
                               Submit Homework
                             </Button>
                           ) : (
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs text-[#888]">
-                                <File className="w-3 h-3 inline mr-1" />
-                                {mat.file_name}
-                              </p>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                className="text-[#065F46] hover:text-[#064E3B] h-7 px-2"
-                                onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
-                              >
-                                <Download className="w-3 h-3 mr-1" />
-                                Download
-                              </Button>
-                            </div>
+                            <>
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-xs text-[#888]">
+                                  <File className="w-3 h-3 inline mr-1" />
+                                  {mat.file_name}
+                                </p>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  className="text-[#065F46] hover:text-[#064E3B] h-7 px-2"
+                                  onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Download
+                                </Button>
+                              </div>
+                              {/* Student Submissions */}
+                              {(() => {
+                                const subs = cohortSubmissions.filter(s => s.material_id === mat.material_id);
+                                if (subs.length === 0) return (
+                                  <p className="text-xs text-[#888] italic pt-2 border-t border-[#E5E5E5]">No submissions yet</p>
+                                );
+                                return (
+                                  <div className="pt-2 border-t border-[#E5E5E5] space-y-2" data-testid={`submissions-${mat.material_id}`}>
+                                    <p className="text-xs font-medium text-[#5A5A5A] uppercase tracking-wide">Submissions ({subs.length})</p>
+                                    {subs.map(sub => (
+                                      <div key={sub.submission_id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-[#F9F8F6] group">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium text-[#1A1A1A] truncate">{sub.student?.name || 'Unknown'}</p>
+                                          <p className="text-xs text-[#888] truncate">{sub.file_name}</p>
+                                        </div>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                          sub.status === 'sent' ? 'bg-[#D1FAE5] text-[#065F46]' :
+                                          sub.status === 'draft' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
+                                          'bg-[#DBEAFE] text-[#1E40AF]'
+                                        }`}>
+                                          {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
+                                        </span>
+                                        <a
+                                          href={`${API_URL}/api/submissions/${sub.submission_id}/download`}
+                                          className="text-[#065F46] hover:text-[#064E3B] p-1"
+                                          title="Download submission"
+                                          data-testid={`download-sub-${sub.submission_id}`}
+                                        >
+                                          <Download className="w-4 h-4" />
+                                        </a>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                            </>
                           )}
                         </CardContent>
                       </Card>
