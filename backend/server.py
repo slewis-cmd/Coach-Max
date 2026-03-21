@@ -649,7 +649,7 @@ async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = D
     
     # Send invitation email
     origin = request.headers.get("origin", "")
-    app_url = origin or "https://admin-feedback-hub-1.preview.emergentagent.com"
+    app_url = origin or "https://cohort-feedback-hub.preview.emergentagent.com"
     await send_email_notification(
         to_email=student_email,
         subject=f"You've been invited to {cohort['name']}",
@@ -779,7 +779,7 @@ async def bulk_import_students(
             
             # Send invitation email
             origin = request.headers.get("origin", "") if request else ""
-            app_url = origin or "https://admin-feedback-hub-1.preview.emergentagent.com"
+            app_url = origin or "https://cohort-feedback-hub.preview.emergentagent.com"
             await send_email_notification(
                 to_email=email,
                 subject=f"You've been invited to {cohort['name']}",
@@ -846,7 +846,7 @@ async def invite_all_students(cohort_id: str, request: Request, user: dict = Dep
     ).to_list(200)
     
     origin = request.headers.get("origin", "")
-    app_url = origin or "https://admin-feedback-hub-1.preview.emergentagent.com"
+    app_url = origin or "https://cohort-feedback-hub.preview.emergentagent.com"
     sent_count = 0
     
     for student in students:
