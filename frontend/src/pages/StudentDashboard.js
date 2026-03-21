@@ -35,6 +35,22 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+const downloadFile = async (url, filename) => {
+  try {
+    const res = await axios.get(url, { responseType: 'blob' });
+    const blob = new Blob([res.data]);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  } catch (err) {
+    toast.error('Failed to download file');
+  }
+};
+
 const STATUS_CONFIG = {
   no_homework: { label: '', color: '', icon: null },
   waiting_on_submission: {
@@ -472,16 +488,21 @@ export default function StudentDashboard() {
                           </Button>
                         )}
                         {week.submission && week.status !== 'waiting_on_submission' && (
-                          <a
-                            href={`${API_URL}/api/submissions/${week.submission.submission_id}/download`}
-                            onClick={(e) => e.stopPropagation()}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadFile(
+                                `${API_URL}/api/submissions/${week.submission.submission_id}/download`,
+                                week.submission.file_name
+                              );
+                            }}
                             className="inline-flex items-center gap-1.5 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] transition-colors"
                             data-testid={`download-submission-${week.week_number}`}
                           >
                             <Download className="w-3.5 h-3.5" />
                             <span className="hidden md:inline">{week.submission.file_name}</span>
                             <span className="md:hidden">Download</span>
-                          </a>
+                          </button>
                         )}
                         {hasFeedback && (
                           <Button

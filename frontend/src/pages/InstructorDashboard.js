@@ -37,6 +37,22 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+const downloadFile = async (url, filename) => {
+  try {
+    const res = await axios.get(url, { responseType: 'blob' });
+    const blob = new Blob([res.data]);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  } catch (err) {
+    toast.error('Failed to download file');
+  }
+};
+
 export default function InstructorDashboard() {
   const { user, logout, loading, isAuthenticated, isInstructor } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin';
@@ -398,15 +414,20 @@ export default function InstructorDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <a
-                        href={`${API_URL}/api/submissions/${sub.submission_id}/download`}
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadFile(
+                            `${API_URL}/api/submissions/${sub.submission_id}/download`,
+                            sub.file_name || 'homework'
+                          );
+                        }}
                         className="inline-flex items-center gap-1 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] border border-[#E5E5E5] rounded-lg px-2.5 py-1.5"
                         data-testid={`download-draft-${sub.submission_id}`}
                       >
                         <Download className="w-3.5 h-3.5" />
                         Homework
-                      </a>
+                      </button>
                       <Button size="sm" className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg">
                         Review & Send
                       </Button>
@@ -435,15 +456,20 @@ export default function InstructorDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <a
-                        href={`${API_URL}/api/submissions/${sub.submission_id}/download`}
-                        onClick={(e) => e.stopPropagation()}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadFile(
+                            `${API_URL}/api/submissions/${sub.submission_id}/download`,
+                            sub.file_name || 'homework'
+                          );
+                        }}
                         className="inline-flex items-center gap-1 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] border border-[#E5E5E5] rounded-lg px-2.5 py-1.5"
                         data-testid={`download-pending-${sub.submission_id}`}
                       >
                         <Download className="w-3.5 h-3.5" />
                         Homework
-                      </a>
+                      </button>
                       <Button size="sm" className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
                         Generate Review
                       </Button>

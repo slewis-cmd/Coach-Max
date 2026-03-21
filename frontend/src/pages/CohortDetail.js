@@ -54,6 +54,22 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+const downloadFile = async (url, filename) => {
+  try {
+    const res = await axios.get(url, { responseType: 'blob' });
+    const blob = new Blob([res.data]);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  } catch (err) {
+    toast.error('Failed to download file');
+  }
+};
+
 export default function CohortDetail() {
   const { cohortId } = useParams();
   const navigate = useNavigate();
@@ -712,14 +728,17 @@ export default function CohortDetail() {
                                         }`}>
                                           {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
                                         </span>
-                                        <a
-                                          href={`${API_URL}/api/submissions/${sub.submission_id}/download`}
+                                        <button
+                                          onClick={() => downloadFile(
+                                            `${API_URL}/api/submissions/${sub.submission_id}/download`,
+                                            sub.file_name
+                                          )}
                                           className="text-[#065F46] hover:text-[#064E3B] p-1"
                                           title="Download submission"
                                           data-testid={`download-sub-${sub.submission_id}`}
                                         >
                                           <Download className="w-4 h-4" />
-                                        </a>
+                                        </button>
                                       </div>
                                     ))}
                                   </div>
