@@ -37,20 +37,15 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-const downloadFile = async (url, filename) => {
-  try {
-    const res = await axios.get(url, { responseType: 'blob' });
-    const blob = new Blob([res.data]);
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename || 'download';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-  } catch (err) {
-    toast.error('Failed to download file');
+const downloadFile = (url, filename) => {
+  const token = localStorage.getItem('thinkific_session_token');
+  if (!token) {
+    toast.error('Please log in to download files');
+    return;
   }
+  const separator = url.includes('?') ? '&' : '?';
+  const downloadUrl = `${url}${separator}token=${encodeURIComponent(token)}`;
+  window.open(downloadUrl, '_blank');
 };
 
 export default function InstructorDashboard() {

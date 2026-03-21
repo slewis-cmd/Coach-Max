@@ -142,6 +142,8 @@ async def get_current_user(request: Request) -> dict:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             session_token = auth_header.split(" ")[1]
+    if not session_token:
+        session_token = request.query_params.get("token")
     
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")

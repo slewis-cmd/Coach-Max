@@ -54,20 +54,15 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-const downloadFile = async (url, filename) => {
-  try {
-    const res = await axios.get(url, { responseType: 'blob' });
-    const blob = new Blob([res.data]);
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename || 'download';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-  } catch (err) {
-    toast.error('Failed to download file');
+const downloadFile = (url, filename) => {
+  const token = localStorage.getItem('thinkific_session_token');
+  if (!token) {
+    toast.error('Please log in to download files');
+    return;
   }
+  const separator = url.includes('?') ? '&' : '?';
+  const downloadUrl = `${url}${separator}token=${encodeURIComponent(token)}`;
+  window.open(downloadUrl, '_blank');
 };
 
 export default function CohortDetail() {
@@ -303,53 +298,24 @@ export default function CohortDetail() {
     }
   };
 
-  const handleDownloadMaterial = async (materialId, fileName) => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/api/materials/${materialId}/download`,
-        { 
-          withCredentials: true,
-          responseType: 'blob'
-        }
-      );
-      
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      
-      toast.success('Download started');
-    } catch (error) {
-      toast.error('Failed to download file');
+  const handleDownloadMaterial = (materialId, fileName) => {
+    const token = localStorage.getItem('thinkific_session_token');
+    if (!token) {
+      toast.error('Please log in to download files');
+      return;
     }
+    const downloadUrl = `${API_URL}/api/materials/${materialId}/download?token=${encodeURIComponent(token)}`;
+    window.open(downloadUrl, '_blank');
   };
 
-  const handleDownloadTemplate = async () => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/api/cohorts/${cohortId}/students/template`,
-        { 
-          withCredentials: true,
-          responseType: 'blob'
-        }
-      );
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'student_import_template.csv');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      toast.error('Failed to download template');
+  const handleDownloadTemplate = () => {
+    const token = localStorage.getItem('thinkific_session_token');
+    if (!token) {
+      toast.error('Please log in to download files');
+      return;
     }
+    const downloadUrl = `${API_URL}/api/cohorts/${cohortId}/students/template?token=${encodeURIComponent(token)}`;
+    window.open(downloadUrl, '_blank');
   };
 
   const handleBulkImport = async () => {
