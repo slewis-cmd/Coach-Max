@@ -35,15 +35,32 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-const downloadFile = (url, filename) => {
+const downloadFile = async (url, filename) => {
   const token = localStorage.getItem('thinkific_session_token');
   if (!token) {
     toast.error('Please log in to download files');
     return;
   }
   const separator = url.includes('?') ? '&' : '?';
-  const downloadUrl = `${url}${separator}token=${encodeURIComponent(token)}`;
-  window.open(downloadUrl, '_blank');
+  try {
+    const response = await fetch(`${url}${separator}token=${encodeURIComponent(token)}`);
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Download failed');
+    }
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error('Download error:', err);
+    toast.error('Failed to download file');
+  }
 };
 
 const STATUS_CONFIG = {
