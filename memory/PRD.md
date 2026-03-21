@@ -102,6 +102,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - **user_sessions**: {user_id, session_token, expires_at, created_at}
 - **tutor_chats**: {chat_id, submission_id, student_id, message, response, created_at}
 
+## Bug Fixes
+### File Download Bug Fix (March 21, 2026)
+- [x] Root cause: Frontend used axios blob downloads which failed silently for end users
+- [x] Fix: Backend `get_current_user` now accepts auth token via query parameter (`?token=xxx`)
+- [x] Fix: Frontend download functions use `window.open(url + '?token=xxx')` for native browser downloads
+- [x] All 3 download endpoints verified: materials, submissions, CSV template
+- [x] Affected files: `server.py`, `StudentDashboard.js`, `InstructorDashboard.js`, `CohortDetail.js`
+
 ## Prioritized Backlog
 ### P2 (Nice to Have - Future)
 - [ ] Discussion/comments on submissions
