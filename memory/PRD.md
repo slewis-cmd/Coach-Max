@@ -110,6 +110,11 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All 3 download endpoints verified: materials, submissions, CSV template
 - [x] Affected files: `server.py`, `StudentDashboard.js`, `InstructorDashboard.js`, `CohortDetail.js`
 
+### Notification Badge (March 21, 2026)
+- [x] Bell icon with red badge count in instructor dashboard header (desktop + mobile)
+- [x] Per-cohort pending submission count on cohort cards
+- [x] Clicking bell navigates to submissions page
+
 ## Prioritized Backlog
 ### P2 (Nice to Have - Future)
 - [ ] Discussion/comments on submissions

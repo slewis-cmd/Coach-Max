@@ -30,7 +30,8 @@ import {
   TrendingUp,
   BarChart3,
   Shield,
-  Download
+  Download,
+  Bell
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -120,6 +121,15 @@ export default function InstructorDashboard() {
   const pendingSubmissions = submissions.filter(s => s.status === 'pending');
   const draftSubmissions = submissions.filter(s => s.status === 'draft');
   const totalActionRequired = pendingSubmissions.length + draftSubmissions.length;
+
+  // Per-cohort pending counts
+  const cohortPendingCounts = {};
+  submissions.forEach(s => {
+    if (s.status === 'pending' || s.status === 'draft') {
+      const cId = s.cohort_id;
+      cohortPendingCounts[cId] = (cohortPendingCounts[cId] || 0) + 1;
+    }
+  });
 
   if (loading || loadingData) {
     return (
@@ -211,19 +221,48 @@ export default function InstructorDashboard() {
             </div>
             <span className="font-semibold">ThinkificAI</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleLogout}>
-            <LogOut className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/submissions')}
+              className="relative flex items-center justify-center w-9 h-9 rounded-full bg-white border border-[#E5E5E5]"
+              data-testid="notification-bell-mobile"
+            >
+              <Bell className="w-4 h-4 text-[#5A5A5A]" />
+              {totalActionRequired > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-[#DC2626] text-white text-[10px] font-semibold rounded-full px-0.5">
+                  {totalActionRequired}
+                </span>
+              )}
+            </button>
+            <Button variant="ghost" size="icon" onClick={handleLogout}>
+              <LogOut className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Header */}
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-3xl md:text-4xl font-light tracking-tight text-[#1A1A1A] mb-2">
-            Welcome back, {user?.name?.split(' ')[0]}
-          </h1>
-          <p className="text-[#5A5A5A]">
-            Manage your cohorts and review student submissions
-          </p>
+        <div className="mb-8 animate-fade-in flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-light tracking-tight text-[#1A1A1A] mb-2">
+              Welcome back, {user?.name?.split(' ')[0]}
+            </h1>
+            <p className="text-[#5A5A5A]">
+              Manage your cohorts and review student submissions
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/submissions')}
+            className="relative hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white border border-[#E5E5E5] hover:bg-[#F2F0ED] transition-colors"
+            data-testid="notification-bell"
+          >
+            <Bell className="w-5 h-5 text-[#5A5A5A]" />
+            {totalActionRequired > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center bg-[#DC2626] text-white text-[11px] font-semibold rounded-full px-1"
+                data-testid="notification-badge-count">
+                {totalActionRequired}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Action Required Alert */}
@@ -367,6 +406,13 @@ export default function InstructorDashboard() {
                         <Users className="w-4 h-4" />
                         {cohort.student_ids?.length || 0} students
                       </span>
+                      {cohortPendingCounts[cohort.cohort_id] > 0 && (
+                        <span className="flex items-center gap-1 text-[#DC2626]"
+                          data-testid={`cohort-pending-badge-${cohort.cohort_id}`}>
+                          <Bell className="w-3.5 h-3.5" />
+                          {cohortPendingCounts[cohort.cohort_id]} pending
+                        </span>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
