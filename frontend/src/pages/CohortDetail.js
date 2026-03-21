@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   BookOpen, 
   Users, 
@@ -43,7 +44,10 @@ import {
   Clock,
   Eye,
   EyeOff,
-  Mail
+  Mail,
+  QrCode,
+  Copy,
+  Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -65,6 +69,8 @@ export default function CohortDetail() {
   const [showUploadMaterial, setShowUploadMaterial] = useState(false);
   const [showSubmitHomework, setShowSubmitHomework] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showInviteLink, setShowInviteLink] = useState(false);
+  const [copied, setCopied] = useState(false);
   
   // Form states
   const [studentEmail, setStudentEmail] = useState('');
@@ -391,6 +397,15 @@ export default function CohortDetail() {
           
           {isInstructor && (
             <div className="flex items-center gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => setShowInviteLink(true)}
+                className="border-[#065F46] text-[#065F46] hover:bg-[#D1FAE5] rounded-lg"
+                data-testid="invite-link-btn"
+              >
+                <QrCode className="w-4 h-4 mr-2" />
+                Invite Link
+              </Button>
               <Button 
                 variant="outline"
                 onClick={() => setShowBulkImport(true)}
@@ -1139,6 +1154,63 @@ export default function CohortDetail() {
                 {importingBulk ? 'Importing...' : 'Import Students'}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Link / QR Code Dialog */}
+      <Dialog open={showInviteLink} onOpenChange={setShowInviteLink}>
+        <DialogContent className="bg-white max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-normal text-2xl">Invite Students</DialogTitle>
+            <DialogDescription>
+              Share this link or QR code so students can join {cohort?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-6">
+            {/* QR Code */}
+            <div className="flex justify-center">
+              <div className="bg-white p-4 rounded-xl border border-[#E5E5E5]">
+                <QRCodeSVG
+                  value={`${window.location.origin}/invite/${cohort?.invite_code}`}
+                  size={200}
+                  level="M"
+                  data-testid="invite-qr-code"
+                />
+              </div>
+            </div>
+
+            {/* Invite URL */}
+            <div>
+              <Label className="text-xs text-[#888] uppercase tracking-wide">Invite Link</Label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  readOnly
+                  value={`${window.location.origin}/invite/${cohort?.invite_code}`}
+                  className="flex-1 px-3 py-2 bg-[#F2F0ED] rounded-lg text-sm text-[#1A1A1A] border-0 outline-none"
+                  data-testid="invite-url-input"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="flex-shrink-0 rounded-lg"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/invite/${cohort?.invite_code}`);
+                    setCopied(true);
+                    toast.success('Link copied!');
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  data-testid="copy-invite-link"
+                >
+                  {copied ? <Check className="w-4 h-4 text-[#065F46]" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInviteLink(false)} className="rounded-lg">
+              Done
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

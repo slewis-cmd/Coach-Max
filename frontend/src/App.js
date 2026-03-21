@@ -14,6 +14,7 @@ import Submissions from "./pages/Submissions";
 import SubmissionDetail from "./pages/SubmissionDetail";
 import ProgressTracking from "./pages/ProgressTracking";
 import AdminManagement from "./pages/AdminManagement";
+import InvitePage from "./pages/InvitePage";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -124,6 +125,7 @@ const AppRouter = () => {
           <AdminManagement />
         </ProtectedRoute>
       } />
+      <Route path="/invite/:code" element={<InvitePage />} />
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -94,6 +94,7 @@ class Cohort(BaseModel):
     description: Optional[str] = None
     instructor_id: str
     student_ids: List[str] = []
+    invite_code: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CohortCreate(BaseModel):
@@ -463,6 +464,57 @@ async def get_admin_stats(user: dict = Depends(require_super_admin)):
         },
         "cohorts": total_cohorts,
         "submissions": total_submissions
+    }
+
+# ==================== PUBLIC INVITE ENDPOINTS ====================
+
+@api_router.get("/invite/{invite_code}")
+async def get_invite_info(invite_code: str):
+    """Public endpoint - get cohort info for an invite link"""
+    cohort = await db.cohorts.find_one({"invite_code": invite_code}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Invalid invite link")
+    
+    student_count = len(cohort.get("student_ids", []))
+    instructor = await db.users.find_one(
+        {"user_id": cohort["instructor_id"]},
+        {"_id": 0, "name": 1}
+    )
+    
+    return {
+        "cohort_id": cohort["cohort_id"],
+        "name": cohort["name"],
+        "description": cohort.get("description"),
+        "instructor_name": instructor.get("name", "Instructor") if instructor else "Instructor",
+        "student_count": student_count
+    }
+
+@api_router.post("/invite/{invite_code}/join")
+async def join_via_invite(invite_code: str, user: dict = Depends(get_current_user)):
+    """Join a cohort using an invite code (authenticated students)"""
+    cohort = await db.cohorts.find_one({"invite_code": invite_code}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Invalid invite link")
+    
+    if user["user_id"] in cohort.get("student_ids", []):
+        return {"message": "You're already enrolled in this cohort", "already_enrolled": True, "cohort_id": cohort["cohort_id"]}
+    
+    # Set role to student if not set
+    if not user.get("role"):
+        await db.users.update_one(
+            {"user_id": user["user_id"]},
+            {"$set": {"role": "student"}}
+        )
+    
+    await db.cohorts.update_one(
+        {"cohort_id": cohort["cohort_id"]},
+        {"$push": {"student_ids": user["user_id"]}}
+    )
+    
+    return {
+        "message": f"Welcome to {cohort['name']}!",
+        "already_enrolled": False,
+        "cohort_id": cohort["cohort_id"]
     }
 
 # ==================== COHORT ENDPOINTS ====================
