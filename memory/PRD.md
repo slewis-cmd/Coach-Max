@@ -110,6 +110,13 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All 3 download endpoints verified: materials, submissions, CSV template
 - [x] Affected files: `server.py`, `StudentDashboard.js`, `InstructorDashboard.js`, `CohortDetail.js`
 
+### CORS Fix for Downloads (March 22, 2026)
+- [x] Root cause: `withCredentials:true` in axios + proxy's `Access-Control-Allow-Origin:*` = CORS violation
+- [x] Removed `withCredentials:true` from ALL frontend code (interceptor + every individual call)
+- [x] Removed `allow_credentials=True` from backend CORS (not needed with token-based auth)
+- [x] Download functions now use native `fetch()` + blob (bypasses axios entirely)
+- [x] Students can now download materials (workbooks, case studies) from expanded week view
+
 ### Notification Badge (March 21, 2026)
 - [x] Bell icon with red badge count in instructor dashboard header (desktop + mobile)
 - [x] Per-cohort pending submission count on cohort cards
