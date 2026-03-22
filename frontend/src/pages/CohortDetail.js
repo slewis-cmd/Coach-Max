@@ -128,8 +128,8 @@ export default function CohortDetail() {
   const fetchCohort = useCallback(async () => {
     try {
       const requests = [
-        axios.get(`${API_URL}/api/cohorts/${cohortId}`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/cohorts/${cohortId}/materials`, { withCredentials: true })
+        axios.get(`${API_URL}/api/cohorts/${cohortId}`),
+        axios.get(`${API_URL}/api/cohorts/${cohortId}/materials`)
       ];
       // Instructors/admins also fetch submissions
       if (isInstructor) {
@@ -168,8 +168,7 @@ export default function CohortDetail() {
     try {
       const res = await axios.post(
         `${API_URL}/api/cohorts/${cohortId}/students`,
-        { email: studentEmail, name: studentName },
-        { withCredentials: true }
+        { email: studentEmail, name: studentName }
       );
       toast.success(res.data.invitation_sent 
         ? `${res.data.student.name} added — invitation email sent!` 
@@ -206,8 +205,7 @@ export default function CohortDetail() {
 
     try {
       await axios.delete(
-        `${API_URL}/api/cohorts/${cohortId}/students/${studentId}`,
-        { withCredentials: true }
+        `${API_URL}/api/cohorts/${cohortId}/students/${studentId}`
       );
       toast.success('Student removed');
       fetchCohort();
@@ -256,7 +254,6 @@ export default function CohortDetail() {
         `${API_URL}/api/cohorts/${cohortId}/materials?${params}`,
         formData,
         { 
-          withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' }
         }
       );
@@ -276,7 +273,7 @@ export default function CohortDetail() {
     if (!window.confirm('Delete this material?')) return;
 
     try {
-      await axios.delete(`${API_URL}/api/materials/${materialId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/materials/${materialId}`);
       toast.success('Material deleted');
       fetchCohort();
     } catch (error) {
@@ -299,7 +296,6 @@ export default function CohortDetail() {
         `${API_URL}/api/materials/${selectedHomework.material_id}/submit`,
         formData,
         { 
-          withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' }
         }
       );
@@ -386,7 +382,6 @@ export default function CohortDetail() {
         `${API_URL}/api/cohorts/${cohortId}/students/bulk`,
         formData,
         { 
-          withCredentials: true,
           headers: { 'Content-Type': 'multipart/form-data' }
         }
       );

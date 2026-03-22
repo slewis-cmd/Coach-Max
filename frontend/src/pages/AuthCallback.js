@@ -32,7 +32,7 @@ export default function AuthCallback() {
         const response = await axios.post(
           `${API_URL}/api/auth/session`,
           { session_id: sessionId },
-          { withCredentials: true }
+          
         );
 
         console.log('Auth response:', { 

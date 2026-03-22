@@ -55,8 +55,8 @@ export default function AdminManagement() {
   const fetchData = async () => {
     try {
       const [usersRes, statsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/admin/users`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/admin/stats`, { withCredentials: true })
+        axios.get(`${API_URL}/api/admin/users`),
+        axios.get(`${API_URL}/api/admin/stats`)
       ]);
       setUsers(usersRes.data);
       setStats(statsRes.data);
@@ -78,7 +78,6 @@ export default function AdminManagement() {
       const res = await axios.post(
         `${API_URL}/api/admin/invite-instructor`,
         { email: inviteEmail },
-        { withCredentials: true }
       );
       toast.success(res.data.message);
       setShowInvite(false);
@@ -100,7 +99,6 @@ export default function AdminManagement() {
       await axios.post(
         `${API_URL}/api/admin/revoke-instructor`,
         { user_id: userId },
-        { withCredentials: true }
       );
       toast.success(`${name} is now a student`);
       fetchData();

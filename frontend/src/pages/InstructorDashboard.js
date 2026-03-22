@@ -95,9 +95,9 @@ export default function InstructorDashboard() {
   const fetchData = async () => {
     try {
       const [cohortsRes, submissionsRes, analyticsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/cohorts`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/submissions`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/analytics/dashboard`, { withCredentials: true })
+        axios.get(`${API_URL}/api/cohorts`),
+        axios.get(`${API_URL}/api/submissions`),
+        axios.get(`${API_URL}/api/analytics/dashboard`)
       ]);
       setCohorts(cohortsRes.data);
       setSubmissions(submissionsRes.data);
@@ -118,7 +118,7 @@ export default function InstructorDashboard() {
 
     setCreating(true);
     try {
-      await axios.post(`${API_URL}/api/cohorts`, newCohort, { withCredentials: true });
+      await axios.post(`${API_URL}/api/cohorts`, newCohort);
       toast.success('Cohort created successfully!');
       setShowCreateCohort(false);
       setNewCohort({ name: '', description: '' });

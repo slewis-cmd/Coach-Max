@@ -1167,8 +1167,18 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                 "homework": None,
                 "submission": None,
                 "status": "no_homework",
-                "feedback": None
+                "feedback": None,
+                "materials": []
             }
+            
+            # Include all materials for download
+            for mat in week_materials:
+                week_data["materials"].append({
+                    "material_id": mat["material_id"],
+                    "title": mat.get("title", ""),
+                    "material_type": mat.get("material_type", ""),
+                    "file_name": mat.get("file_name", "")
+                })
             
             if homework_list:
                 hw = homework_list[0]
@@ -2009,7 +2019,6 @@ app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],

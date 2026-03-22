@@ -35,7 +35,7 @@ export default function Submissions() {
 
   const fetchSubmissions = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/submissions`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/submissions`);
       setSubmissions(res.data);
     } catch (error) {
       toast.error('Failed to load submissions');
@@ -50,7 +50,6 @@ export default function Submissions() {
       await axios.post(
         `${API_URL}/api/submissions/${submissionId}/review`,
         {},
-        { withCredentials: true }
       );
       toast.success('AI feedback generated! Click to review and send.');
       fetchSubmissions();

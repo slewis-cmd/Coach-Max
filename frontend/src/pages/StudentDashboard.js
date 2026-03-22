@@ -538,6 +538,31 @@ export default function StudentDashboard() {
                     {/* Expanded Feedback */}
                     {hasFeedback && isExpanded && (
                       <div className="border-t border-[#E5E5E5] p-5 md:p-6 bg-[#F0FDF4] animate-fade-in" data-testid={`feedback-content-${week.week_number}`}>
+                        {/* Week Materials - downloadable */}
+                        {week.materials && week.materials.length > 0 && (
+                          <div className="mb-4 pb-3 border-b border-[#BBF7D0]">
+                            <p className="text-xs font-medium text-[#065F46] uppercase tracking-wide mb-2">Week Materials</p>
+                            <div className="flex flex-wrap gap-2">
+                              {week.materials.map(mat => (
+                                <button
+                                  key={mat.material_id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    downloadFile(
+                                      `${API_URL}/api/materials/${mat.material_id}/download`,
+                                      mat.file_name
+                                    );
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-xs bg-white border border-[#BBF7D0] text-[#065F46] rounded-lg px-2.5 py-1.5 hover:bg-[#D1FAE5] transition-colors"
+                                  data-testid={`download-material-${mat.material_id}`}
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  {mat.file_name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="w-4 h-4 text-[#065F46]" />

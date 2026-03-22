@@ -54,7 +54,7 @@ export default function ProgressTracking() {
 
   const fetchCohorts = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/cohorts`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/cohorts`);
       setCohorts(res.data);
       if (res.data.length > 0) {
         setSelectedCohort(res.data[0].cohort_id);
@@ -68,7 +68,7 @@ export default function ProgressTracking() {
 
   const fetchCohortAnalytics = async (cohortId) => {
     try {
-      const res = await axios.get(`${API_URL}/api/analytics/cohort/${cohortId}`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/analytics/cohort/${cohortId}`);
       setAnalytics(res.data);
     } catch (error) {
       toast.error('Failed to load analytics');

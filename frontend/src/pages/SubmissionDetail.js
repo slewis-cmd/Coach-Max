@@ -46,7 +46,7 @@ export default function SubmissionDetail() {
 
   const fetchSubmission = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/submissions/${submissionId}`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/submissions/${submissionId}`);
       setSubmission(res.data);
       // Set edited feedback to instructor's version if exists, otherwise AI version
       setEditedFeedback(res.data.instructor_feedback || res.data.ai_feedback || '');
@@ -64,7 +64,6 @@ export default function SubmissionDetail() {
       const res = await axios.post(
         `${API_URL}/api/submissions/${submissionId}/review`,
         {},
-        { withCredentials: true }
       );
       toast.success('AI feedback generated! Review and edit before sending.');
       setEditedFeedback(res.data.feedback);
@@ -88,7 +87,6 @@ export default function SubmissionDetail() {
       await axios.put(
         `${API_URL}/api/submissions/${submissionId}/feedback`,
         { feedback: editedFeedback },
-        { withCredentials: true }
       );
       toast.success('Feedback saved');
       setIsEditing(false);
@@ -110,7 +108,6 @@ export default function SubmissionDetail() {
       await axios.post(
         `${API_URL}/api/submissions/${submissionId}/send-feedback`,
         {},
-        { withCredentials: true }
       );
       toast.success('Feedback sent to student!');
       fetchSubmission();
@@ -131,7 +128,6 @@ export default function SubmissionDetail() {
       await axios.post(
         `${API_URL}/api/submissions/${submissionId}/allow-resubmission`,
         {},
-        { withCredentials: true }
       );
       toast.success('Resubmission allowed. Student has been notified.');
       fetchSubmission();
