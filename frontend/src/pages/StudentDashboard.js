@@ -478,6 +478,23 @@ export default function StudentDashboard() {
                             )}
                           </p>
                         )}
+                        {week.submission && week.status !== 'waiting_on_submission' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadFile(
+                                `${API_URL}/api/submissions/${week.submission.submission_id}/download`,
+                                week.submission.file_name
+                              );
+                            }}
+                            className="inline-flex items-center gap-1.5 mt-1 text-xs text-[#065F46] hover:text-[#064E3B] transition-colors"
+                            data-testid={`download-submission-${week.week_number}`}
+                          >
+                            <File className="w-3 h-3" />
+                            Your submission: {week.submission.file_name}
+                            <Download className="w-3 h-3 ml-0.5" />
+                          </button>
+                        )}
                         {!hasHomework && (
                           <p className="text-sm text-[#888] mt-0.5">No assignment yet</p>
                         )}
@@ -498,23 +515,6 @@ export default function StudentDashboard() {
                             <Upload className="w-3.5 h-3.5 mr-1.5" />
                             Submit
                           </Button>
-                        )}
-                        {week.submission && week.status !== 'waiting_on_submission' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadFile(
-                                `${API_URL}/api/submissions/${week.submission.submission_id}/download`,
-                                week.submission.file_name
-                              );
-                            }}
-                            className="inline-flex items-center gap-1.5 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] transition-colors"
-                            data-testid={`download-submission-${week.week_number}`}
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span className="hidden md:inline">{week.submission.file_name}</span>
-                            <span className="md:hidden">Download</span>
-                          </button>
                         )}
                         {hasFeedback && (
                           <Button

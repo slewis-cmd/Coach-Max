@@ -728,29 +728,42 @@ export default function CohortDetail() {
                                   <div className="pt-2 border-t border-[#E5E5E5] space-y-2" data-testid={`submissions-${mat.material_id}`}>
                                     <p className="text-xs font-medium text-[#5A5A5A] uppercase tracking-wide">Submissions ({subs.length})</p>
                                     {subs.map(sub => (
-                                      <div key={sub.submission_id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-[#F9F8F6] group">
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-medium text-[#1A1A1A] truncate">{sub.student?.name || 'Unknown'}</p>
-                                          <p className="text-xs text-[#888] truncate">{sub.file_name}</p>
+                                      <div key={sub.submission_id} className="rounded-lg bg-[#F9F8F6] overflow-hidden" data-testid={`sub-row-${sub.submission_id}`}>
+                                        <div className="flex items-center gap-2 py-2 px-3">
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-[#1A1A1A] truncate">{sub.student?.name || 'Unknown'}</p>
+                                            <p className="text-xs text-[#888] truncate">{sub.file_name}</p>
+                                          </div>
+                                          <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                            sub.status === 'sent' ? 'bg-[#D1FAE5] text-[#065F46]' :
+                                            sub.status === 'draft' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
+                                            'bg-[#DBEAFE] text-[#1E40AF]'
+                                          }`}>
+                                            {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
+                                          </span>
+                                          <button
+                                            onClick={() => downloadFile(
+                                              `${API_URL}/api/submissions/${sub.submission_id}/download`,
+                                              sub.file_name
+                                            )}
+                                            className="text-[#065F46] hover:text-[#064E3B] p-1 flex-shrink-0"
+                                            title="Download submission"
+                                            data-testid={`download-sub-${sub.submission_id}`}
+                                          >
+                                            <Download className="w-4 h-4" />
+                                          </button>
                                         </div>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                          sub.status === 'sent' ? 'bg-[#D1FAE5] text-[#065F46]' :
-                                          sub.status === 'draft' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
-                                          'bg-[#DBEAFE] text-[#1E40AF]'
-                                        }`}>
-                                          {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
-                                        </span>
-                                        <button
-                                          onClick={() => downloadFile(
-                                            `${API_URL}/api/submissions/${sub.submission_id}/download`,
-                                            sub.file_name
-                                          )}
-                                          className="text-[#065F46] hover:text-[#064E3B] p-1"
-                                          title="Download submission"
-                                          data-testid={`download-sub-${sub.submission_id}`}
-                                        >
-                                          <Download className="w-4 h-4" />
-                                        </button>
+                                        {/* AI Feedback */}
+                                        {(sub.ai_feedback || sub.instructor_feedback) && (
+                                          <div className="border-t border-[#E5E5E5] px-3 py-2 bg-[#F0FDF4]" data-testid={`feedback-${sub.submission_id}`}>
+                                            <p className="text-xs font-medium text-[#065F46] mb-1">
+                                              {sub.instructor_feedback ? 'Instructor Feedback' : 'AI Feedback'}
+                                            </p>
+                                            <p className="text-xs text-[#374151] whitespace-pre-wrap leading-relaxed line-clamp-6">
+                                              {sub.instructor_feedback || sub.ai_feedback}
+                                            </p>
+                                          </div>
+                                        )}
                                       </div>
                                     ))}
                                   </div>

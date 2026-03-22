@@ -117,6 +117,11 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Download functions now use native `fetch()` + blob (bypasses axios entirely)
 - [x] Students can now download materials (workbooks, case studies) from expanded week view
 
+### Student Submission Visibility & AI Feedback Display (March 22, 2026)
+- [x] Cohort Detail page now shows AI feedback inline below each student submission
+- [x] Student Dashboard prominently shows submitted homework file with download link
+- [x] Students can see "Your submission: filename.pdf" with download icon for each week
+
 ### Notification Badge (March 21, 2026)
 - [x] Bell icon with red badge count in instructor dashboard header (desktop + mobile)
 - [x] Per-cohort pending submission count on cohort cards
