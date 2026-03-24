@@ -1820,12 +1820,15 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
             file_bytes = await f.read()
         
         submission_text = extract_text_from_file(file_bytes, submission["file_name"])
+    except FileNotFoundError:
+        logger.error(f"Submission file not found: {submission['file_path']}")
+        raise HTTPException(status_code=404, detail="Submission file not found on server. Please ask the student to resubmit.")
     except Exception as e:
-        logger.error(f"Error reading submission: {e}")
-        raise HTTPException(status_code=500, detail="Error reading submission file")
+        logger.error(f"Error reading submission {submission['submission_id']}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reading submission file: {type(e).__name__}")
     
     if not submission_text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract text from submission")
+        raise HTTPException(status_code=400, detail="Could not extract text from submission. The file may be empty or in an unsupported format.")
     
     # Build context from course materials
     context_text = ""
