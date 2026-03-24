@@ -23,7 +23,8 @@ import {
   User,
   Mail,
   UserMinus,
-  BarChart3
+  BarChart3,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -39,6 +40,8 @@ export default function AdminManagement() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user?.role !== 'super_admin') {
@@ -104,6 +107,20 @@ export default function AdminManagement() {
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to revoke access');
+    }
+  };
+
+  const handleClearSubmissions = async () => {
+    setClearing(true);
+    try {
+      const res = await axios.delete(`${API_URL}/api/admin/clear-submissions`);
+      toast.success(res.data.message);
+      setShowClearConfirm(false);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to clear submissions');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -326,7 +343,60 @@ export default function AdminManagement() {
             )}
           </CardContent>
         </Card>
+
+        {/* Danger Zone */}
+        <Card className="bg-white border-red-200 mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg font-normal flex items-center gap-2 text-red-700">
+              <Trash2 className="w-5 h-5" />
+              Data Management
+            </CardTitle>
+            <CardDescription>Destructive actions — use with caution</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg">
+              <div>
+                <p className="font-medium text-[#1A1A1A]">Clear All Submissions</p>
+                <p className="text-sm text-[#888] mt-0.5">Deletes all student homework submissions, uploaded files, and AI chat history. Materials and cohorts are not affected.</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowClearConfirm(true)}
+                className="border-red-300 text-red-700 hover:bg-red-100 flex-shrink-0 ml-4"
+                data-testid="clear-submissions-btn"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear All
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </main>
+
+      {/* Clear Submissions Confirm Dialog */}
+      <Dialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+        <DialogContent className="bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-normal text-2xl text-red-700">Clear All Submissions?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete all student homework submissions, uploaded files, and AI tutor chat history. Course materials and cohorts will not be affected. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowClearConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleClearSubmissions}
+              disabled={clearing}
+              className="bg-red-600 text-white hover:bg-red-700"
+              data-testid="confirm-clear-btn"
+            >
+              {clearing ? 'Clearing...' : 'Yes, Clear All Submissions'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Invite Instructor Dialog */}
       <Dialog open={showInvite} onOpenChange={setShowInvite}>

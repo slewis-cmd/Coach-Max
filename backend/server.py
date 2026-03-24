@@ -475,6 +475,33 @@ async def get_admin_stats(user: dict = Depends(require_super_admin)):
         "submissions": total_submissions
     }
 
+@api_router.delete("/admin/clear-submissions")
+async def clear_all_submissions(user: dict = Depends(require_super_admin)):
+    """Clear all homework submissions, files, and tutor chats (super admin only)"""
+    import shutil
+    
+    # Get all submission file paths before deleting
+    submissions = await db.submissions.find({}, {"_id": 0, "file_path": 1}).to_list(1000)
+    
+    # Delete files from disk
+    deleted_files = 0
+    for sub in submissions:
+        fp = sub.get("file_path", "")
+        if fp and os.path.exists(fp):
+            os.remove(fp)
+            deleted_files += 1
+    
+    # Delete from database
+    sub_result = await db.submissions.delete_many({})
+    chat_result = await db.tutor_chats.delete_many({})
+    
+    return {
+        "message": f"Cleared {sub_result.deleted_count} submissions, {deleted_files} files, and {chat_result.deleted_count} chat sessions",
+        "submissions_deleted": sub_result.deleted_count,
+        "files_deleted": deleted_files,
+        "chats_deleted": chat_result.deleted_count
+    }
+
 # ==================== PUBLIC INVITE ENDPOINTS ====================
 
 @api_router.get("/invite/{invite_code}")
