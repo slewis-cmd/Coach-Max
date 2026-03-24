@@ -59,7 +59,7 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
     
     try:
         params = {
-            "from": SENDER_EMAIL,
+            "from": f"ThinkificAI <{SENDER_EMAIL}>",
             "to": [to_email],
             "subject": subject,
             "html": html_content
