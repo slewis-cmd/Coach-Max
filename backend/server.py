@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 resend.api_key = os.environ.get("RESEND_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").lower().strip()
+NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL", "").lower().strip()
 
 # ==================== EMAIL HELPER ====================
 
@@ -1495,7 +1496,7 @@ async def submit_homework(
         </div>
         """
         await send_email_notification(
-            instructor["email"],
+            NOTIFICATION_EMAIL or instructor["email"],
             f"{subject_prefix}: {material['title']} from {user['name']}",
             email_html
         )
