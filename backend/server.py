@@ -1412,10 +1412,6 @@ async def submit_homework(
     }, {"_id": 0})
     
     if existing:
-        # Check if resubmission is allowed
-        if not existing.get("resubmission_allowed", False):
-            raise HTTPException(status_code=400, detail="Already submitted. Request resubmission from your instructor.")
-        
         # Delete old file
         try:
             os.remove(existing["file_path"])

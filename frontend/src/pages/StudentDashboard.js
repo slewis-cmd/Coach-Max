@@ -431,8 +431,8 @@ export default function StudentDashboard() {
               const isExpanded = expandedWeek === weekKey;
               const hasFeedback = week.status === 'feedback_provided' && week.feedback;
               const hasHomework = week.status !== 'no_homework';
-              const canSubmit = week.status === 'waiting_on_submission' ||
-                (week.submission?.resubmission_allowed && week.status !== 'feedback_provided');
+              const canSubmit = hasHomework && (week.status === 'waiting_on_submission' || week.status === 'submitted' || week.status === 'under_review' || week.status === 'feedback_provided');
+              const hasSubmission = week.submission && week.status !== 'waiting_on_submission';
 
               return (
                 <Card
@@ -509,11 +509,15 @@ export default function StudentDashboard() {
                               e.stopPropagation();
                               openUpload(week.homework);
                             }}
-                            className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg text-xs md:text-sm"
+                            className={`rounded-lg text-xs md:text-sm ${
+                              hasSubmission 
+                                ? 'bg-[#854D0E] text-white hover:bg-[#713F12]' 
+                                : 'bg-[#065F46] text-white hover:bg-[#064E3B]'
+                            }`}
                             data-testid={`submit-week-${week.week_number}`}
                           >
                             <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            Submit
+                            {hasSubmission ? 'Resubmit' : 'Submit'}
                           </Button>
                         )}
                         {hasFeedback && (
