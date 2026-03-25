@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -19,12 +19,173 @@ import {
   TrendingUp,
   CheckCircle,
   Clock,
-  User
+  User,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Upload,
+  FileText,
+  MessageSquare,
+  AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+const downloadFile = async (url, filename) => {
+  const token = localStorage.getItem('thinkific_session_token');
+  if (!token) { toast.error('Please log in'); return; }
+  const separator = url.includes('?') ? '&' : '?';
+  try {
+    const response = await fetch(`${url}${separator}token=${encodeURIComponent(token)}`);
+    if (!response.ok) throw new Error('Download failed');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    toast.error('Failed to download file');
+  }
+};
+
+function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
+  const [uploading, setUploading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleResubmit = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('student_id', studentId);
+      await axios.post(
+        `${API_URL}/api/materials/${week.material_id}/submit`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+      toast.success(`Week ${week.week_number} homework resubmitted`);
+      if (onResubmitted) onResubmitted();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to resubmit');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const statusColor = {
+    sent: 'bg-[#D1FAE5] text-[#065F46]',
+    draft: 'bg-[#F3E8FF] text-[#6B21A8]',
+    pending: 'bg-[#DBEAFE] text-[#1E40AF]',
+    not_submitted: 'bg-[#F3F4F6] text-[#6B7280]',
+  };
+  const statusLabel = {
+    sent: 'Reviewed',
+    draft: 'Draft Feedback',
+    pending: 'Pending Review',
+    not_submitted: 'Not Submitted',
+  };
+
+  const feedback = week.instructor_feedback || week.ai_feedback;
+
+  return (
+    <div className="border border-[#E5E5E5] rounded-lg overflow-hidden">
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#F9F8F6] transition-colors"
+        onClick={() => setExpanded(!expanded)}
+        data-testid={`week-row-${week.week_number}-${studentId}`}
+      >
+        <div className="w-16 flex-shrink-0">
+          <span className="text-xs font-medium text-[#5A5A5A]">Week {week.week_number}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-[#1A1A1A] truncate">{week.homework_title || `Week ${week.week_number} Homework`}</p>
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${statusColor[week.status] || statusColor.not_submitted}`}>
+          {statusLabel[week.status] || week.status}
+        </span>
+        {expanded ? <ChevronUp className="w-4 h-4 text-[#888]" /> : <ChevronDown className="w-4 h-4 text-[#888]" />}
+      </div>
+
+      {expanded && (
+        <div className="border-t border-[#E5E5E5] px-3 py-3 bg-[#FAFAF9] space-y-3" data-testid={`week-detail-${week.week_number}-${studentId}`}>
+          {/* Submitted File */}
+          {week.submission_id ? (
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#5A5A5A] flex-shrink-0" />
+              <span className="text-sm text-[#1A1A1A] truncate flex-1">{week.file_name}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadFile(
+                    `${API_URL}/api/submissions/${week.submission_id}/download`,
+                    week.file_name
+                  );
+                }}
+                className="text-[#065F46] hover:text-[#064E3B] p-1"
+                title="Download submission"
+                data-testid={`download-week-${week.week_number}-${studentId}`}
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-[#888]">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">No homework submitted yet</span>
+            </div>
+          )}
+
+          {/* AI Feedback */}
+          {feedback && (
+            <div className="bg-white border border-[#E5E5E5] rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <MessageSquare className="w-3.5 h-3.5 text-[#065F46]" />
+                <span className="text-xs font-medium text-[#065F46]">
+                  {week.instructor_feedback ? 'Instructor Feedback' : 'AI Feedback'}
+                </span>
+              </div>
+              <p className="text-sm text-[#374151] whitespace-pre-wrap leading-relaxed">{feedback}</p>
+            </div>
+          )}
+
+          {/* Resubmit */}
+          <div className="flex items-center justify-end pt-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.doc,.txt"
+              onChange={handleResubmit}
+              className="hidden"
+              id={`resubmit-${week.week_number}-${studentId}`}
+            />
+            <label
+              htmlFor={`resubmit-${week.week_number}-${studentId}`}
+              className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                uploading
+                  ? 'bg-[#E5E5E5] text-[#888] cursor-wait'
+                  : 'bg-[#065F46] text-white hover:bg-[#064E3B]'
+              }`}
+              data-testid={`resubmit-week-${week.week_number}-${studentId}`}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {uploading ? 'Uploading...' : week.submission_id ? 'Resubmit' : 'Submit'}
+            </label>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProgressTracking() {
   const navigate = useNavigate();
@@ -33,6 +194,7 @@ export default function ProgressTracking() {
   const [selectedCohort, setSelectedCohort] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expandedStudents, setExpandedStudents] = useState({});
 
   useEffect(() => {
     if (!authLoading && !isInstructor) {
@@ -73,6 +235,10 @@ export default function ProgressTracking() {
     } catch (error) {
       toast.error('Failed to load analytics');
     }
+  };
+
+  const toggleStudent = (userId) => {
+    setExpandedStudents(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
   if (authLoading || loading) {
@@ -214,7 +380,7 @@ export default function ProgressTracking() {
             <Card className="bg-white border-[#E5E5E5]">
               <CardHeader>
                 <CardTitle className="text-lg font-normal">Student Progress</CardTitle>
-                <CardDescription>Individual completion rates and engagement</CardDescription>
+                <CardDescription>Click a student to see their weekly submissions and feedback</CardDescription>
               </CardHeader>
               <CardContent>
                 {analytics.student_progress?.length === 0 ? (
@@ -223,45 +389,77 @@ export default function ProgressTracking() {
                     <p className="text-[#888]">No students in this cohort</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {analytics.student_progress.map((student, index) => (
-                      <div key={student.user_id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-[#F9F8F6] transition-colors">
-                        <div className="w-8 text-center text-sm text-[#888]">
-                          {index + 1}
-                        </div>
-                        <div className="w-10 h-10 flex-shrink-0">
-                          {student.picture ? (
-                            <img src={student.picture} alt={student.name} className="w-10 h-10 rounded-full" />
-                          ) : (
-                            <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center">
-                              <User className="w-5 h-5 text-[#888]" />
+                  <div className="space-y-3">
+                    {analytics.student_progress.map((student, index) => {
+                      const isExpanded = expandedStudents[student.user_id];
+                      return (
+                        <div key={student.user_id} className="border border-[#E5E5E5] rounded-xl overflow-hidden" data-testid={`student-row-${student.user_id}`}>
+                          {/* Student Summary Row */}
+                          <div
+                            className="flex items-center gap-4 p-3 cursor-pointer hover:bg-[#F9F8F6] transition-colors"
+                            onClick={() => toggleStudent(student.user_id)}
+                          >
+                            <div className="w-6 text-center text-sm text-[#888]">
+                              {index + 1}
+                            </div>
+                            <div className="w-10 h-10 flex-shrink-0">
+                              {student.picture ? (
+                                <img src={student.picture} alt={student.name} className="w-10 h-10 rounded-full" />
+                              ) : (
+                                <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center">
+                                  <User className="w-5 h-5 text-[#888]" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-[#1A1A1A] truncate">{student.name}</p>
+                              <p className="text-xs text-[#888] truncate">{student.email}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right hidden md:block">
+                                <p className="text-sm text-[#1A1A1A]">{student.submissions} submitted</p>
+                                <p className="text-xs text-[#888]">{student.completed} reviewed</p>
+                              </div>
+                              <div className="w-24 hidden md:block">
+                                <Progress value={student.completion_rate} className="h-2" />
+                              </div>
+                              <div className="w-14 text-right">
+                                <span className={`text-sm font-medium ${
+                                  student.completion_rate >= 80 ? 'text-[#065F46]' :
+                                  student.completion_rate >= 50 ? 'text-[#854D0E]' :
+                                  'text-red-600'
+                                }`}>
+                                  {student.completion_rate}%
+                                </span>
+                              </div>
+                              {isExpanded
+                                ? <ChevronUp className="w-4 h-4 text-[#888]" />
+                                : <ChevronDown className="w-4 h-4 text-[#888]" />
+                              }
+                            </div>
+                          </div>
+
+                          {/* Expanded Week Details */}
+                          {isExpanded && student.week_details && (
+                            <div className="border-t border-[#E5E5E5] px-4 py-3 bg-[#FAFAF9] space-y-2" data-testid={`student-details-${student.user_id}`}>
+                              {student.week_details.length === 0 ? (
+                                <p className="text-sm text-[#888] text-center py-2">No homework assignments for this cohort</p>
+                              ) : (
+                                student.week_details.map(week => (
+                                  <StudentWeekRow
+                                    key={`${student.user_id}-${week.week_number}`}
+                                    week={week}
+                                    studentId={student.user_id}
+                                    cohortId={selectedCohort}
+                                    onResubmitted={() => fetchCohortAnalytics(selectedCohort)}
+                                  />
+                                ))
+                              )}
                             </div>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-[#1A1A1A] truncate">{student.name}</p>
-                          <p className="text-xs text-[#888] truncate">{student.email}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-sm text-[#1A1A1A]">{student.submissions} submitted</p>
-                            <p className="text-xs text-[#888]">{student.completed} reviewed</p>
-                          </div>
-                          <div className="w-32">
-                            <Progress value={student.completion_rate} className="h-2" />
-                          </div>
-                          <div className="w-16 text-right">
-                            <span className={`text-sm font-medium ${
-                              student.completion_rate >= 80 ? 'text-[#065F46]' :
-                              student.completion_rate >= 50 ? 'text-[#854D0E]' :
-                              'text-red-600'
-                            }`}>
-                              {student.completion_rate}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

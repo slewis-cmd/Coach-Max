@@ -122,6 +122,12 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Student Dashboard prominently shows submitted homework file with download link
 - [x] Students can see "Your submission: filename.pdf" with download icon for each week
 
+### Progress Tracking Enhancement (March 25, 2026)
+- [x] Student Progress section now has expandable rows per student
+- [x] Each student shows week-by-week details: homework title, submission file (with download), AI/instructor feedback
+- [x] Instructors can submit/resubmit homework on behalf of students from the progress view
+- [x] Backend analytics endpoint returns per-student week_details with submission data and feedback
+
 ### Notification Badge (March 21, 2026)
 - [x] Bell icon with red badge count in instructor dashboard header (desktop + mobile)
 - [x] Per-cohort pending submission count on cohort cards

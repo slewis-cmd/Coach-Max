@@ -1691,6 +1691,23 @@ async def get_cohort_analytics(cohort_id: str, user: dict = Depends(require_inst
         completed = len([s for s in student_subs if s.get("status") == "sent" or s.get("feedback_sent")])
         pending = len([s for s in student_subs if s.get("status") in ["pending", "draft"]])
         
+        # Build per-week details for this student
+        week_details = []
+        for mat in homework_materials:
+            sub = next((s for s in student_subs if s.get("material_id") == mat["material_id"]), None)
+            week_details.append({
+                "week_number": mat["week_number"],
+                "material_id": mat["material_id"],
+                "homework_title": mat.get("title", ""),
+                "submission_id": sub["submission_id"] if sub else None,
+                "file_name": sub.get("file_name") if sub else None,
+                "status": sub.get("status") if sub else "not_submitted",
+                "submitted_at": sub.get("submitted_at") if sub else None,
+                "ai_feedback": sub.get("ai_feedback") if sub else None,
+                "instructor_feedback": sub.get("instructor_feedback") if sub else None,
+            })
+        week_details.sort(key=lambda x: x["week_number"])
+        
         student_progress.append({
             "user_id": student["user_id"],
             "name": student["name"],
@@ -1699,7 +1716,8 @@ async def get_cohort_analytics(cohort_id: str, user: dict = Depends(require_inst
             "submissions": len(student_subs),
             "completed": completed,
             "pending": pending,
-            "completion_rate": round((completed / len(homework_materials) * 100) if homework_materials else 0, 1)
+            "completion_rate": round((completed / len(homework_materials) * 100) if homework_materials else 0, 1),
+            "week_details": week_details
         })
     
     # Sort by completion rate
