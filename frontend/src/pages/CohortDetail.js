@@ -753,17 +753,6 @@ export default function CohortDetail() {
                                             <Download className="w-4 h-4" />
                                           </button>
                                         </div>
-                                        {/* AI Feedback */}
-                                        {(sub.ai_feedback || sub.instructor_feedback) && (
-                                          <div className="border-t border-[#E5E5E5] px-3 py-2 bg-[#F0FDF4]" data-testid={`feedback-${sub.submission_id}`}>
-                                            <p className="text-xs font-medium text-[#065F46] mb-1">
-                                              {sub.instructor_feedback ? 'Instructor Feedback' : 'AI Feedback'}
-                                            </p>
-                                            <p className="text-xs text-[#374151] whitespace-pre-wrap leading-relaxed line-clamp-6">
-                                              {sub.instructor_feedback || sub.ai_feedback}
-                                            </p>
-                                          </div>
-                                        )}
                                       </div>
                                     ))}
                                   </div>
