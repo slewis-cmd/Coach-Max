@@ -128,6 +128,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Instructors can submit/resubmit homework on behalf of students from the progress view
 - [x] Backend analytics endpoint returns per-student week_details with submission data and feedback
 
+### Instructor Access to Submissions & Progress (Verified - March 25, 2026)
+- [x] Sidebar navigation shows Dashboard, Submissions (with badge), and Progress links for all instructors
+- [x] Backend `GET /api/submissions` scopes data to instructor's assigned cohorts only
+- [x] Backend `GET /api/analytics/dashboard` scopes stats to instructor's cohorts only
+- [x] Backend `GET /api/analytics/cohort/{id}` verifies instructor ownership via `is_cohort_manager`
+- [x] Super admins see all cohorts/submissions; instructors see only their assigned cohorts
+- [x] Verified end-to-end: instructor sees only their cohort's data on both pages
+
 ### Notification Badge (March 21, 2026)
 - [x] Bell icon with red badge count in instructor dashboard header (desktop + mobile)
 - [x] Per-cohort pending submission count on cohort cards
