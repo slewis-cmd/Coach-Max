@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -23,7 +23,6 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Upload,
   FileText,
   MessageSquare,
   AlertCircle
@@ -54,33 +53,8 @@ const downloadFile = async (url, filename) => {
   }
 };
 
-function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
-  const [uploading, setUploading] = useState(false);
+function StudentWeekRow({ week }) {
   const [expanded, setExpanded] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const handleResubmit = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('student_id', studentId);
-      await axios.post(
-        `${API_URL}/api/materials/${week.material_id}/submit`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
-      );
-      toast.success(`Week ${week.week_number} homework resubmitted`);
-      if (onResubmitted) onResubmitted();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to resubmit');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
 
   const statusColor = {
     sent: 'bg-[#D1FAE5] text-[#065F46]',
@@ -102,7 +76,7 @@ function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
       <div
         className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#F9F8F6] transition-colors"
         onClick={() => setExpanded(!expanded)}
-        data-testid={`week-row-${week.week_number}-${studentId}`}
+        data-testid={`week-row-${week.week_number}-${week.studentId}`}
       >
         <div className="w-16 flex-shrink-0">
           <span className="text-xs font-medium text-[#5A5A5A]">Week {week.week_number}</span>
@@ -117,7 +91,7 @@ function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
       </div>
 
       {expanded && (
-        <div className="border-t border-[#E5E5E5] px-3 py-3 bg-[#FAFAF9] space-y-3" data-testid={`week-detail-${week.week_number}-${studentId}`}>
+        <div className="border-t border-[#E5E5E5] px-3 py-3 bg-[#FAFAF9] space-y-3" data-testid={`week-detail-${week.week_number}-${week.studentId}`}>
           {/* Submitted File */}
           {week.submission_id ? (
             <div className="flex items-center gap-2">
@@ -133,7 +107,7 @@ function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
                 }}
                 className="text-[#065F46] hover:text-[#064E3B] p-1"
                 title="Download submission"
-                data-testid={`download-week-${week.week_number}-${studentId}`}
+                data-testid={`download-week-${week.week_number}-${week.studentId}`}
               >
                 <Download className="w-4 h-4" />
               </button>
@@ -145,8 +119,8 @@ function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
             </div>
           )}
 
-          {/* AI Feedback */}
-          {feedback && (
+          {/* AI / Instructor Feedback */}
+          {feedback ? (
             <div className="bg-white border border-[#E5E5E5] rounded-lg p-3">
               <div className="flex items-center gap-1.5 mb-2">
                 <MessageSquare className="w-3.5 h-3.5 text-[#065F46]" />
@@ -156,31 +130,12 @@ function StudentWeekRow({ week, studentId, cohortId, onResubmitted }) {
               </div>
               <p className="text-sm text-[#374151] whitespace-pre-wrap leading-relaxed">{feedback}</p>
             </div>
-          )}
-
-          {/* Resubmit */}
-          <div className="flex items-center justify-end pt-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.doc,.txt"
-              onChange={handleResubmit}
-              className="hidden"
-              id={`resubmit-${week.week_number}-${studentId}`}
-            />
-            <label
-              htmlFor={`resubmit-${week.week_number}-${studentId}`}
-              className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                uploading
-                  ? 'bg-[#E5E5E5] text-[#888] cursor-wait'
-                  : 'bg-[#065F46] text-white hover:bg-[#064E3B]'
-              }`}
-              data-testid={`resubmit-week-${week.week_number}-${studentId}`}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              {uploading ? 'Uploading...' : week.submission_id ? 'Resubmit' : 'Submit'}
-            </label>
-          </div>
+          ) : week.submission_id ? (
+            <div className="flex items-center gap-2 text-[#888]">
+              <Clock className="w-4 h-4" />
+              <span className="text-sm">Awaiting AI review</span>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
@@ -448,10 +403,7 @@ export default function ProgressTracking() {
                                 student.week_details.map(week => (
                                   <StudentWeekRow
                                     key={`${student.user_id}-${week.week_number}`}
-                                    week={week}
-                                    studentId={student.user_id}
-                                    cohortId={selectedCohort}
-                                    onResubmitted={() => fetchCohortAnalytics(selectedCohort)}
+                                    week={{ ...week, studentId: student.user_id }}
                                   />
                                 ))
                               )}
