@@ -151,8 +151,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Clicking bell navigates to submissions page
 
 ## Prioritized Backlog
-### P2 (Nice to Have - Future)
+### P1 (Next Up)
 - [ ] Discussion/comments on submissions
 - [ ] Custom feedback templates for instructors
-- [ ] Multi-cohort material sharing
+
+### P2 (Future)
 - [ ] Export submissions and feedback as PDF
+
+### Completed (March 26, 2026)
+- [x] Material Library — Central library for workbooks/case studies, linked across cohorts
+- [x] Assign Instructor to Cohort — Super admin can reassign cohorts to different instructors
+- [x] Email routing — All system emails sent from and to info@theboostpad.org
