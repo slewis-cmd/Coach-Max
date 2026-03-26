@@ -136,6 +136,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Super admins see all cohorts/submissions; instructors see only their assigned cohorts
 - [x] Verified end-to-end: instructor sees only their cohort's data on both pages
 
+### Assign Instructor to Cohort (Completed - March 25, 2026)
+- [x] POST /api/cohorts/{id}/assign-instructor — super admin can reassign a cohort to a different instructor
+- [x] GET /api/instructors — super admin can list all instructors/admins
+- [x] CohortDetail page shows "Assign Instructor" button for super admins
+- [x] Dialog lists all instructors with "Current" and "Admin" badges
+- [x] After assignment, instructor can see cohort submissions, progress, and analytics
+- [x] Cohort detail API returns instructor_name and instructor_email
+- [x] Tested: 18/18 backend + all frontend UI tests passed
+
 ### Notification Badge (March 21, 2026)
 - [x] Bell icon with red badge count in instructor dashboard header (desktop + mobile)
 - [x] Per-cohort pending submission count on cohort cards
