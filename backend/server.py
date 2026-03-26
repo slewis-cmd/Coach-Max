@@ -58,18 +58,20 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
         logger.warning("Resend API key not configured, skipping email")
         return None
     
+    recipient = NOTIFICATION_EMAIL or to_email
+    
     try:
         params = {
             "from": f"ThinkificAI <{SENDER_EMAIL}>",
-            "to": [to_email],
+            "to": [recipient],
             "subject": subject,
             "html": html_content
         }
         result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info(f"Email sent to {to_email}: {result.get('id')}")
+        logger.info(f"Email sent to {recipient}: {result.get('id')}")
         return result
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error(f"Failed to send email to {recipient}: {e}")
         return None
 
 # ==================== MODELS ====================
@@ -1540,7 +1542,7 @@ async def submit_homework(
         </div>
         """
         await send_email_notification(
-            NOTIFICATION_EMAIL or instructor["email"],
+            instructor["email"],
             f"{subject_prefix}: {material['title']} from {user['name']}",
             email_html
         )
