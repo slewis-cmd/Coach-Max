@@ -650,8 +650,13 @@ async def delete_cohort(cohort_id: str, user: dict = Depends(require_instructor)
         raise HTTPException(status_code=404, detail="Cohort not found")
     
     await db.cohorts.delete_one({"cohort_id": cohort_id})
-    await db.materials.delete_many({"cohort_id": cohort_id})
+    await db.materials.delete_many({"cohort_id": cohort_id, "is_library": {"$ne": True}})
     await db.submissions.delete_many({"cohort_id": cohort_id})
+    # Unlink library materials from this cohort
+    await db.materials.update_many(
+        {"is_library": True, "cohort_ids": cohort_id},
+        {"$pull": {"cohort_ids": cohort_id}}
+    )
     
     return {"message": "Cohort deleted"}
 

@@ -35,6 +35,7 @@ export default function AdminManagement() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [users, setUsers] = useState([]);
+  const [cohorts, setCohorts] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
@@ -57,12 +58,14 @@ export default function AdminManagement() {
 
   const fetchData = async () => {
     try {
-      const [usersRes, statsRes] = await Promise.all([
+      const [usersRes, statsRes, cohortsRes] = await Promise.all([
         axios.get(`${API_URL}/api/admin/users`),
-        axios.get(`${API_URL}/api/admin/stats`)
+        axios.get(`${API_URL}/api/admin/stats`),
+        axios.get(`${API_URL}/api/cohorts`)
       ]);
       setUsers(usersRes.data);
       setStats(statsRes.data);
+      setCohorts(cohortsRes.data);
     } catch (error) {
       toast.error('Failed to load admin data');
     } finally {
@@ -121,6 +124,17 @@ export default function AdminManagement() {
       toast.error(error.response?.data?.detail || 'Failed to clear submissions');
     } finally {
       setClearing(false);
+    }
+  };
+
+  const handleDeleteCohort = async (cohortId, cohortName) => {
+    if (!window.confirm(`Delete "${cohortName}"? This will permanently remove the cohort, its materials, and all student submissions. This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API_URL}/api/cohorts/${cohortId}`);
+      toast.success(`"${cohortName}" deleted`);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete cohort');
     }
   };
 
@@ -336,6 +350,49 @@ export default function AdminManagement() {
                     >
                       <GraduationCap className="w-4 h-4 mr-1" />
                       Promote
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Cohorts */}
+        <Card className="bg-white border-[#E5E5E5] mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg font-normal flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-[#7C3AED]" />
+              Cohorts ({cohorts.length})
+            </CardTitle>
+            <CardDescription>All cohorts on the platform</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cohorts.length === 0 ? (
+              <div className="text-center py-8">
+                <BookOpen className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
+                <p className="text-[#888]">No cohorts yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {cohorts.map((c) => (
+                  <div key={c.cohort_id} className="flex items-center gap-4 p-3 hover:bg-[#F9F8F6] rounded-lg transition-colors" data-testid={`cohort-row-${c.cohort_id}`}>
+                    <div className="w-10 h-10 bg-[#F3E8FF] rounded-full flex items-center justify-center flex-shrink-0">
+                      <BookOpen className="w-5 h-5 text-[#7C3AED]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[#1A1A1A] truncate">{c.name}</p>
+                      <p className="text-xs text-[#888]">{c.student_ids?.length || 0} students · {c.description || 'No description'}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteCohort(c.cohort_id, c.name)}
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                      data-testid={`delete-cohort-${c.cohort_id}`}
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Delete
                     </Button>
                   </div>
                 ))}
