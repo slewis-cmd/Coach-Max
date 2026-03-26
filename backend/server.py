@@ -1440,6 +1440,13 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
             {"_id": 0}
         ).to_list(100)
         
+        # Also include library materials assigned to this cohort
+        library_materials = await db.materials.find(
+            {"is_library": True, "cohort_ids": cohort["cohort_id"]},
+            {"_id": 0}
+        ).to_list(100)
+        materials.extend(library_materials)
+        
         submissions = await db.submissions.find(
             {"student_id": user["user_id"], "cohort_id": cohort["cohort_id"]},
             {"_id": 0}
@@ -1649,6 +1656,7 @@ async def get_chat_history(submission_id: str, user: dict = Depends(get_current_
 async def submit_homework(
     material_id: str,
     file: UploadFile = File(...),
+    cohort_id: str = None,
     user: dict = Depends(get_current_user)
 ):
     """Submit homework for review"""
@@ -1656,17 +1664,36 @@ async def submit_homework(
         raise HTTPException(status_code=403, detail="Only students can submit homework")
     
     material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
-    if not material or material["material_type"] != "homework":
+    if not material or material.get("material_type") != "homework":
         raise HTTPException(status_code=404, detail="Homework assignment not found")
     
-    cohort = await db.cohorts.find_one({"cohort_id": material["cohort_id"]}, {"_id": 0})
-    if not cohort or user["user_id"] not in cohort.get("student_ids", []):
-        raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
+    # Determine the cohort for this submission
+    if material.get("is_library"):
+        # Library material: use provided cohort_id or find student's cohort
+        if cohort_id:
+            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+        else:
+            # Find a cohort the student belongs to that has this library material assigned
+            cohort = await db.cohorts.find_one({
+                "student_ids": user["user_id"],
+                "cohort_id": {"$in": material.get("cohort_ids", [])}
+            }, {"_id": 0})
+        
+        if not cohort or user["user_id"] not in cohort.get("student_ids", []):
+            raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
+        submission_cohort_id = cohort["cohort_id"]
+    else:
+        # Regular cohort-specific material
+        submission_cohort_id = material["cohort_id"]
+        cohort = await db.cohorts.find_one({"cohort_id": submission_cohort_id}, {"_id": 0})
+        if not cohort or user["user_id"] not in cohort.get("student_ids", []):
+            raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
     
-    # Check for existing submission
+    # Check for existing submission (scoped to this student + material + cohort)
     existing = await db.submissions.find_one({
         "material_id": material_id,
-        "student_id": user["user_id"]
+        "student_id": user["user_id"],
+        "cohort_id": submission_cohort_id
     }, {"_id": 0})
     
     if existing:
@@ -1716,7 +1743,7 @@ async def submit_homework(
         submission = Submission(
             submission_id=submission_id,
             material_id=material_id,
-            cohort_id=material["cohort_id"],
+            cohort_id=submission_cohort_id,
             student_id=user["user_id"],
             file_path=str(file_path),
             file_name=filename

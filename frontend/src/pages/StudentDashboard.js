@@ -297,8 +297,8 @@ export default function StudentDashboard() {
     navigate('/');
   };
 
-  const openUpload = (homework) => {
-    setUploadTarget(homework);
+  const openUpload = (homework, cohortId) => {
+    setUploadTarget({ ...homework, cohort_id: cohortId });
     setUploadFile(null);
     setShowUpload(true);
   };
@@ -313,7 +313,7 @@ export default function StudentDashboard() {
       const formData = new FormData();
       formData.append('file', uploadFile);
       await axios.post(
-        `${API_URL}/api/materials/${uploadTarget.material_id}/submit`,
+        `${API_URL}/api/materials/${uploadTarget.material_id}/submit?cohort_id=${encodeURIComponent(uploadTarget.cohort_id)}`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
@@ -507,7 +507,7 @@ export default function StudentDashboard() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              openUpload(week.homework);
+                              openUpload(week.homework, activeCohort.cohort_id);
                             }}
                             className={`rounded-lg text-xs md:text-sm ${
                               hasSubmission 
