@@ -1227,8 +1227,8 @@ async def upload_library_material(
     user: dict = Depends(require_instructor)
 ):
     """Upload a material to the central library (workbooks and case studies only)"""
-    if material_type not in ["workbook", "case_study"]:
-        raise HTTPException(status_code=400, detail="Library only supports workbooks and case studies")
+    if material_type not in ["workbook", "case_study", "homework"]:
+        raise HTTPException(status_code=400, detail="Library supports workbooks, case studies, and homework")
     
     filename = file.filename or "unnamed"
     ext = filename.lower().split(".")[-1]

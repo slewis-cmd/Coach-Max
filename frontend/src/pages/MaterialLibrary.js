@@ -146,11 +146,23 @@ export default function MaterialLibrary() {
     );
   }
 
-  const typeIcon = (type) => type === 'workbook' 
-    ? <BookMarked className="w-5 h-5 text-[#075985]" />
-    : <ClipboardList className="w-5 h-5 text-[#854D0E]" />;
+  const typeIcon = (type) => {
+    if (type === 'workbook') return <BookMarked className="w-5 h-5 text-[#075985]" />;
+    if (type === 'case_study') return <ClipboardList className="w-5 h-5 text-[#854D0E]" />;
+    return <File className="w-5 h-5 text-[#7C3AED]" />;
+  };
 
-  const typeBg = (type) => type === 'workbook' ? 'bg-[#E0F2FE]' : 'bg-[#FDE047]';
+  const typeBg = (type) => {
+    if (type === 'workbook') return 'bg-[#E0F2FE]';
+    if (type === 'case_study') return 'bg-[#FDE047]';
+    return 'bg-[#F3E8FF]';
+  };
+
+  const typeLabel = (type) => {
+    if (type === 'workbook') return 'Workbook';
+    if (type === 'case_study') return 'Case Study';
+    return 'Homework';
+  };
 
   return (
     <div className="min-h-screen bg-[#F9F8F6]" data-testid="material-library">
@@ -182,7 +194,7 @@ export default function MaterialLibrary() {
             <CardContent className="p-12 text-center">
               <BookMarked className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
               <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">Library is empty</h3>
-              <p className="text-[#5A5A5A] mb-4">Upload workbooks and case studies to share across cohorts</p>
+              <p className="text-[#5A5A5A] mb-4">Upload workbooks, case studies, and homework to share across cohorts</p>
               <Button onClick={() => setShowUpload(true)} className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
                 Add First Material
               </Button>
@@ -202,7 +214,7 @@ export default function MaterialLibrary() {
                         <div>
                           <h3 className="font-medium text-[#1A1A1A]">{mat.title}</h3>
                           <p className="text-xs text-[#888]">
-                            Week {mat.week_number} · {mat.material_type === 'workbook' ? 'Workbook' : 'Case Study'} · {mat.file_name}
+                            Week {mat.week_number} · {typeLabel(mat.material_type)} · {mat.file_name}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0 ml-4">
@@ -270,7 +282,7 @@ export default function MaterialLibrary() {
         <DialogContent className="bg-white">
           <DialogHeader>
             <DialogTitle className="font-normal text-2xl">Add to Library</DialogTitle>
-            <DialogDescription>Upload a workbook or case study to share across cohorts.</DialogDescription>
+            <DialogDescription>Upload a workbook, case study, or homework to share across cohorts.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
@@ -302,6 +314,7 @@ export default function MaterialLibrary() {
                   <SelectContent>
                     <SelectItem value="workbook">Workbook</SelectItem>
                     <SelectItem value="case_study">Case Study</SelectItem>
+                    <SelectItem value="homework">Homework</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
