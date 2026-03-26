@@ -172,16 +172,17 @@ export default function CohortDetail() {
   }, [isSuperAdmin, showAssignInstructor]);
 
   const handleAssignInstructor = async (instructorId) => {
+    const isCurrentlyAssigned = cohort?.instructor_ids?.includes(instructorId);
     setAssigningInstructor(true);
     try {
       const res = await axios.post(`${API_URL}/api/cohorts/${cohortId}/assign-instructor`, {
-        instructor_id: instructorId
+        instructor_id: instructorId,
+        action: isCurrentlyAssigned ? 'remove' : 'add'
       });
       toast.success(res.data.message);
-      setShowAssignInstructor(false);
       fetchCohort();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to assign instructor');
+      toast.error(error.response?.data?.detail || 'Failed to update instructor');
     } finally {
       setAssigningInstructor(false);
     }
@@ -1307,40 +1308,39 @@ export default function CohortDetail() {
             {instructorsList.length === 0 ? (
               <p className="text-sm text-[#888] text-center py-4">No instructors found. Promote a user to instructor first.</p>
             ) : (
-              instructorsList.map((inst) => (
-                <div 
-                  key={inst.user_id}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    cohort?.instructor_id === inst.user_id 
-                      ? 'border-[#7C3AED] bg-[#F3E8FF]' 
-                      : 'border-[#E5E5E5] hover:bg-[#F9F8F6]'
-                  }`}
-                  onClick={() => {
-                    if (cohort?.instructor_id !== inst.user_id) {
-                      handleAssignInstructor(inst.user_id);
-                    }
-                  }}
-                  data-testid={`assign-instructor-${inst.user_id}`}
-                >
-                  <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center flex-shrink-0">
-                    {inst.picture ? (
-                      <img src={inst.picture} alt={inst.name} className="w-10 h-10 rounded-full" />
-                    ) : (
-                      <UserCog className="w-5 h-5 text-[#888]" />
+              instructorsList.map((inst) => {
+                const isAssigned = cohort?.instructor_ids?.includes(inst.user_id);
+                return (
+                  <div 
+                    key={inst.user_id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      isAssigned
+                        ? 'border-[#7C3AED] bg-[#F3E8FF]' 
+                        : 'border-[#E5E5E5] hover:bg-[#F9F8F6]'
+                    }`}
+                    onClick={() => handleAssignInstructor(inst.user_id)}
+                    data-testid={`assign-instructor-${inst.user_id}`}
+                  >
+                    <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center flex-shrink-0">
+                      {inst.picture ? (
+                        <img src={inst.picture} alt={inst.name} className="w-10 h-10 rounded-full" />
+                      ) : (
+                        <UserCog className="w-5 h-5 text-[#888]" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[#1A1A1A] truncate">{inst.name}</p>
+                      <p className="text-xs text-[#888] truncate">{inst.email}</p>
+                    </div>
+                    {isAssigned && (
+                      <span className="text-xs bg-[#7C3AED] text-white px-2 py-0.5 rounded-full flex-shrink-0">Assigned</span>
+                    )}
+                    {inst.role === 'super_admin' && (
+                      <span className="text-xs bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full flex-shrink-0">Admin</span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[#1A1A1A] truncate">{inst.name}</p>
-                    <p className="text-xs text-[#888] truncate">{inst.email}</p>
-                  </div>
-                  {cohort?.instructor_id === inst.user_id && (
-                    <span className="text-xs bg-[#7C3AED] text-white px-2 py-0.5 rounded-full flex-shrink-0">Current</span>
-                  )}
-                  {inst.role === 'super_admin' && (
-                    <span className="text-xs bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full flex-shrink-0">Admin</span>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
           <DialogFooter>

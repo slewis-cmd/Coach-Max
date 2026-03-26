@@ -95,7 +95,8 @@ class Cohort(BaseModel):
     cohort_id: str = Field(default_factory=lambda: f"cohort_{uuid.uuid4().hex[:12]}")
     name: str
     description: Optional[str] = None
-    instructor_id: str
+    instructor_id: Optional[str] = None
+    instructor_ids: List[str] = []
     student_ids: List[str] = []
     invite_code: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -195,7 +196,8 @@ def is_cohort_manager(user: dict, cohort: dict) -> bool:
     """Check if user can manage a cohort (super_admin or cohort instructor)"""
     if user.get("role") == "super_admin":
         return True
-    return cohort.get("instructor_id") == user.get("user_id")
+    uid = user.get("user_id")
+    return uid in cohort.get("instructor_ids", []) or cohort.get("instructor_id") == uid
 
 # ==================== AUTH ENDPOINTS ====================
 
@@ -564,7 +566,8 @@ async def create_cohort(cohort_data: CohortCreate, user: dict = Depends(require_
     cohort = Cohort(
         name=cohort_data.name,
         description=cohort_data.description,
-        instructor_id=user["user_id"]
+        instructor_id=user["user_id"],
+        instructor_ids=[user["user_id"]]
     )
     
     doc = cohort.model_dump()
@@ -582,7 +585,10 @@ async def get_cohorts(user: dict = Depends(get_current_user)):
             cohorts = await db.cohorts.find({}, {"_id": 0}).to_list(100)
         else:
             cohorts = await db.cohorts.find(
-                {"instructor_id": user["user_id"]},
+                {"$or": [
+                    {"instructor_ids": user["user_id"]},
+                    {"instructor_id": user["user_id"]}
+                ]},
                 {"_id": 0}
             ).to_list(100)
     else:
@@ -603,7 +609,7 @@ async def get_cohort(cohort_id: str, user: dict = Depends(get_current_user)):
     
     # Check access
     if user["role"] in ["instructor", "super_admin"]:
-        if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+        if user["role"] == "instructor" and not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
     elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -616,14 +622,18 @@ async def get_cohort(cohort_id: str, user: dict = Depends(get_current_user)):
         ).to_list(100)
         cohort["students"] = students
     
-    # Add instructor info
-    instructor = await db.users.find_one(
-        {"user_id": cohort.get("instructor_id")},
-        {"_id": 0, "name": 1, "email": 1}
-    )
-    if instructor:
-        cohort["instructor_name"] = instructor["name"]
-        cohort["instructor_email"] = instructor["email"]
+    # Add instructor names
+    all_instructor_ids = cohort.get("instructor_ids", [])
+    if cohort.get("instructor_id") and cohort["instructor_id"] not in all_instructor_ids:
+        all_instructor_ids.append(cohort["instructor_id"])
+    
+    instructors = await db.users.find(
+        {"user_id": {"$in": all_instructor_ids}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1}
+    ).to_list(20)
+    cohort["instructors"] = instructors
+    cohort["instructor_name"] = ", ".join([i["name"] for i in instructors]) if instructors else None
+    cohort["instructor_email"] = instructors[0]["email"] if instructors else None
     
     return cohort
 
@@ -662,9 +672,10 @@ async def delete_cohort(cohort_id: str, user: dict = Depends(require_instructor)
 
 @api_router.post("/cohorts/{cohort_id}/assign-instructor")
 async def assign_instructor_to_cohort(cohort_id: str, request: Request, user: dict = Depends(require_super_admin)):
-    """Assign an instructor to a cohort (super admin only)"""
+    """Add or remove an instructor from a cohort (super admin only)"""
     data = await request.json()
     instructor_id = data.get("instructor_id")
+    action = data.get("action", "add")  # "add" or "remove"
     
     if not instructor_id:
         raise HTTPException(status_code=400, detail="instructor_id required")
@@ -677,12 +688,32 @@ async def assign_instructor_to_cohort(cohort_id: str, request: Request, user: di
     if not instructor or instructor.get("role") not in ["instructor", "super_admin"]:
         raise HTTPException(status_code=400, detail="User is not an instructor")
     
-    await db.cohorts.update_one(
-        {"cohort_id": cohort_id},
-        {"$set": {"instructor_id": instructor_id}}
-    )
-    
-    return {"message": f"Instructor {instructor['name']} assigned to {cohort['name']}"}
+    if action == "remove":
+        await db.cohorts.update_one(
+            {"cohort_id": cohort_id},
+            {"$pull": {"instructor_ids": instructor_id}}
+        )
+        # Update instructor_id if it matches the removed one
+        if cohort.get("instructor_id") == instructor_id:
+            remaining = [i for i in cohort.get("instructor_ids", []) if i != instructor_id]
+            new_primary = remaining[0] if remaining else None
+            await db.cohorts.update_one(
+                {"cohort_id": cohort_id},
+                {"$set": {"instructor_id": new_primary}}
+            )
+        return {"message": f"{instructor['name']} removed from {cohort['name']}"}
+    else:
+        await db.cohorts.update_one(
+            {"cohort_id": cohort_id},
+            {"$addToSet": {"instructor_ids": instructor_id}}
+        )
+        # Set as primary if first instructor
+        if not cohort.get("instructor_id"):
+            await db.cohorts.update_one(
+                {"cohort_id": cohort_id},
+                {"$set": {"instructor_id": instructor_id}}
+            )
+        return {"message": f"{instructor['name']} assigned to {cohort['name']}"}
 
 @api_router.get("/instructors")
 async def list_instructors(user: dict = Depends(require_super_admin)):
@@ -1136,7 +1167,7 @@ async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(g
     
     # Check access
     if user["role"] in ["instructor", "super_admin"]:
-        if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+        if user["role"] == "instructor" and not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
     elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -1402,7 +1433,7 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
             raise HTTPException(status_code=404, detail="Cohort not found")
         
         if user["role"] in ["instructor", "super_admin"]:
-            if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+            if user["role"] == "instructor" and not is_cohort_manager(user, cohort):
                 raise HTTPException(status_code=403, detail="Access denied")
         elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
             raise HTTPException(status_code=403, detail="Access denied")
@@ -1808,7 +1839,10 @@ async def get_submissions(user: dict = Depends(get_current_user)):
     else:
         # Instructor: get all submissions for their cohorts
         cohorts = await db.cohorts.find(
-            {"instructor_id": user["user_id"]},
+            {"$or": [
+                {"instructor_ids": user["user_id"]},
+                {"instructor_id": user["user_id"]}
+            ]},
             {"_id": 0, "cohort_id": 1}
         ).to_list(100)
         cohort_ids = [c["cohort_id"] for c in cohorts]
@@ -1894,7 +1928,10 @@ async def get_dashboard_analytics(user: dict = Depends(require_instructor)):
         cohorts = await db.cohorts.find({}, {"_id": 0}).to_list(100)
     else:
         cohorts = await db.cohorts.find(
-            {"instructor_id": user["user_id"]},
+            {"$or": [
+                {"instructor_ids": user["user_id"]},
+                {"instructor_id": user["user_id"]}
+            ]},
             {"_id": 0}
         ).to_list(100)
     
@@ -2359,6 +2396,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def migrate_instructor_ids():
+    """Migrate cohorts from instructor_id to instructor_ids array"""
+    cohorts_to_migrate = await db.cohorts.find(
+        {"instructor_ids": {"$exists": False}},
+        {"_id": 0, "cohort_id": 1, "instructor_id": 1}
+    ).to_list(100)
+    for c in cohorts_to_migrate:
+        iid = c.get("instructor_id")
+        await db.cohorts.update_one(
+            {"cohort_id": c["cohort_id"]},
+            {"$set": {"instructor_ids": [iid] if iid else []}}
+        )
+    if cohorts_to_migrate:
+        logger.info(f"Migrated {len(cohorts_to_migrate)} cohorts to instructor_ids")
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
