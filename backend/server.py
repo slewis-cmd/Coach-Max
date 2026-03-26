@@ -1142,6 +1142,13 @@ async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(g
     
     materials = await db.materials.find(query, {"_id": 0}).to_list(100)
     
+    # Also include library materials assigned to this cohort
+    library_query = {"is_library": True, "cohort_ids": cohort_id}
+    if week:
+        library_query["week_number"] = week
+    library_materials = await db.materials.find(library_query, {"_id": 0}).to_list(100)
+    materials.extend(library_materials)
+    
     # Group by week
     weeks = {}
     for mat in materials:
@@ -1178,6 +1185,191 @@ async def delete_material(material_id: str, user: dict = Depends(require_instruc
     await db.materials.delete_one({"material_id": material_id})
     return {"message": "Material deleted"}
 
+
+# ==================== MATERIAL LIBRARY ====================
+
+@api_router.get("/library/materials")
+async def get_library_materials(user: dict = Depends(require_instructor)):
+    """Get all library materials"""
+    materials = await db.materials.find(
+        {"is_library": True},
+        {"_id": 0}
+    ).to_list(200)
+    
+    # Add cohort names for display
+    all_cohort_ids = set()
+    for mat in materials:
+        all_cohort_ids.update(mat.get("cohort_ids", []))
+    
+    cohorts_map = {}
+    if all_cohort_ids:
+        cohorts = await db.cohorts.find(
+            {"cohort_id": {"$in": list(all_cohort_ids)}},
+            {"_id": 0, "cohort_id": 1, "name": 1}
+        ).to_list(100)
+        cohorts_map = {c["cohort_id"]: c["name"] for c in cohorts}
+    
+    for mat in materials:
+        mat["assigned_cohorts"] = [
+            {"cohort_id": cid, "name": cohorts_map.get(cid, "Unknown")}
+            for cid in mat.get("cohort_ids", [])
+        ]
+    
+    return materials
+
+@api_router.post("/library/materials")
+async def upload_library_material(
+    week_number: int,
+    material_type: str,
+    title: str,
+    file: UploadFile = File(...),
+    description: str = "",
+    user: dict = Depends(require_instructor)
+):
+    """Upload a material to the central library (workbooks and case studies only)"""
+    if material_type not in ["workbook", "case_study"]:
+        raise HTTPException(status_code=400, detail="Library only supports workbooks and case studies")
+    
+    filename = file.filename or "unnamed"
+    ext = filename.lower().split(".")[-1]
+    if ext not in ["pdf", "docx"]:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
+    
+    material_id = f"lib_{uuid.uuid4().hex[:12]}"
+    file_path = UPLOAD_DIR / f"{material_id}_{filename}"
+    
+    async with aiofiles.open(file_path, "wb") as f:
+        content = await file.read()
+        await f.write(content)
+    
+    doc = {
+        "material_id": material_id,
+        "is_library": True,
+        "cohort_id": None,
+        "cohort_ids": [],
+        "week_number": week_number,
+        "material_type": material_type,
+        "title": title,
+        "description": description,
+        "file_path": str(file_path),
+        "file_name": filename,
+        "uploaded_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.materials.insert_one(doc)
+    
+    return {"material_id": material_id, "message": "Material added to library"}
+
+@api_router.put("/library/materials/{material_id}")
+async def update_library_material(
+    material_id: str,
+    title: str = None,
+    description: str = None,
+    week_number: int = None,
+    file: UploadFile = File(None),
+    user: dict = Depends(require_instructor)
+):
+    """Update a library material (title, description, week, or replace file)"""
+    material = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Library material not found")
+    
+    update_data = {}
+    if title is not None:
+        update_data["title"] = title
+    if description is not None:
+        update_data["description"] = description
+    if week_number is not None:
+        update_data["week_number"] = week_number
+    
+    if file and file.filename:
+        filename = file.filename
+        ext = filename.lower().split(".")[-1]
+        if ext not in ["pdf", "docx"]:
+            raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
+        
+        # Remove old file
+        try:
+            os.remove(material["file_path"])
+        except Exception:
+            pass
+        
+        file_path = UPLOAD_DIR / f"{material_id}_{filename}"
+        async with aiofiles.open(file_path, "wb") as f:
+            content = await file.read()
+            await f.write(content)
+        update_data["file_path"] = str(file_path)
+        update_data["file_name"] = filename
+    
+    if update_data:
+        await db.materials.update_one({"material_id": material_id}, {"$set": update_data})
+    
+    return {"message": "Library material updated"}
+
+@api_router.delete("/library/materials/{material_id}")
+async def delete_library_material(material_id: str, user: dict = Depends(require_instructor)):
+    """Delete a library material"""
+    material = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Library material not found")
+    
+    try:
+        os.remove(material["file_path"])
+    except Exception:
+        pass
+    
+    await db.materials.delete_one({"material_id": material_id})
+    return {"message": "Library material deleted"}
+
+@api_router.post("/library/materials/{material_id}/assign")
+async def assign_library_material(material_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Assign a library material to one or more cohorts"""
+    data = await request.json()
+    cohort_ids = data.get("cohort_ids", [])
+    
+    if not cohort_ids:
+        raise HTTPException(status_code=400, detail="cohort_ids required")
+    
+    material = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Library material not found")
+    
+    # Verify cohorts exist and user has access
+    for cid in cohort_ids:
+        cohort = await db.cohorts.find_one({"cohort_id": cid}, {"_id": 0})
+        if not cohort:
+            raise HTTPException(status_code=404, detail=f"Cohort {cid} not found")
+        if not is_cohort_manager(user, cohort):
+            raise HTTPException(status_code=403, detail=f"No access to cohort {cohort['name']}")
+    
+    await db.materials.update_one(
+        {"material_id": material_id},
+        {"$addToSet": {"cohort_ids": {"$each": cohort_ids}}}
+    )
+    
+    return {"message": f"Material assigned to {len(cohort_ids)} cohort(s)"}
+
+@api_router.post("/library/materials/{material_id}/unassign")
+async def unassign_library_material(material_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Remove a library material from a cohort"""
+    data = await request.json()
+    cohort_id = data.get("cohort_id")
+    
+    if not cohort_id:
+        raise HTTPException(status_code=400, detail="cohort_id required")
+    
+    material = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Library material not found")
+    
+    await db.materials.update_one(
+        {"material_id": material_id},
+        {"$pull": {"cohort_ids": cohort_id}}
+    )
+    
+    return {"message": "Material removed from cohort"}
+
+
 @api_router.get("/materials/{material_id}/download")
 async def download_material(material_id: str, user: dict = Depends(get_current_user)):
     """Download a material file"""
@@ -1185,16 +1377,30 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
     
-    # Check access
-    cohort = await db.cohorts.find_one({"cohort_id": material["cohort_id"]}, {"_id": 0})
-    if not cohort:
-        raise HTTPException(status_code=404, detail="Cohort not found")
-    
-    if user["role"] in ["instructor", "super_admin"]:
-        if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+    # Library materials: any instructor or student in an assigned cohort can download
+    if material.get("is_library"):
+        if user["role"] in ["instructor", "super_admin"]:
+            pass  # instructors/admins can download any library material
+        else:
+            # Student must be in at least one assigned cohort
+            assigned_cohorts = material.get("cohort_ids", [])
+            student_cohorts = await db.cohorts.find(
+                {"cohort_id": {"$in": assigned_cohorts}, "student_ids": user["user_id"]},
+                {"_id": 0, "cohort_id": 1}
+            ).to_list(1)
+            if not student_cohorts:
+                raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        # Check access via cohort
+        cohort = await db.cohorts.find_one({"cohort_id": material["cohort_id"]}, {"_id": 0})
+        if not cohort:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        
+        if user["role"] in ["instructor", "super_admin"]:
+            if user["role"] == "instructor" and cohort["instructor_id"] != user["user_id"]:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
             raise HTTPException(status_code=403, detail="Access denied")
-    elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
-        raise HTTPException(status_code=403, detail="Access denied")
     
     file_path = Path(material["file_path"])
     if not file_path.exists():

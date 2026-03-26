@@ -31,7 +31,8 @@ import {
   BarChart3,
   Shield,
   Download,
-  Bell
+  Bell,
+  Library
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -193,6 +194,14 @@ export default function InstructorDashboard() {
           >
             <BarChart3 className="w-5 h-5" />
             Progress
+          </Link>
+          <Link 
+            to="/library"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+            data-testid="library-link"
+          >
+            <Library className="w-5 h-5" />
+            Library
           </Link>
           {isSuperAdmin && (
             <Link 

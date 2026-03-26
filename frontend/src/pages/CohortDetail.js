@@ -610,7 +610,9 @@ export default function CohortDetail() {
                             </div>
                           </div>
                           <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
-                          <CardDescription className="text-xs uppercase tracking-wide">Workbook</CardDescription>
+                          <CardDescription className="text-xs uppercase tracking-wide">
+                            Workbook{mat.is_library ? ' · Shared from Library' : ''}
+                          </CardDescription>
                         </CardHeader>
                         <CardContent>
                           <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
@@ -664,7 +666,9 @@ export default function CohortDetail() {
                             </div>
                           </div>
                           <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
-                          <CardDescription className="text-xs uppercase tracking-wide">Case Study</CardDescription>
+                          <CardDescription className="text-xs uppercase tracking-wide">
+                            Case Study{mat.is_library ? ' · Shared from Library' : ''}
+                          </CardDescription>
                         </CardHeader>
                         <CardContent>
                           <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
