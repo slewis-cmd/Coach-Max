@@ -47,7 +47,8 @@ import {
   Mail,
   QrCode,
   Copy,
-  Check
+  Check,
+  UserCog
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -86,6 +87,7 @@ export default function CohortDetail() {
   const { cohortId } = useParams();
   const navigate = useNavigate();
   const { user, isInstructor, loading: authLoading } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
   
   const [cohort, setCohort] = useState(null);
   const [materials, setMaterials] = useState([]);
@@ -99,6 +101,9 @@ export default function CohortDetail() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showInviteLink, setShowInviteLink] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showAssignInstructor, setShowAssignInstructor] = useState(false);
+  const [instructorsList, setInstructorsList] = useState([]);
+  const [assigningInstructor, setAssigningInstructor] = useState(false);
   
   // Form states
   const [studentEmail, setStudentEmail] = useState('');
@@ -157,6 +162,30 @@ export default function CohortDetail() {
       fetchCohort();
     }
   }, [authLoading, user, fetchCohort]);
+
+  useEffect(() => {
+    if (isSuperAdmin && showAssignInstructor) {
+      axios.get(`${API_URL}/api/instructors`).then(res => {
+        setInstructorsList(res.data);
+      }).catch(() => toast.error('Failed to load instructors'));
+    }
+  }, [isSuperAdmin, showAssignInstructor]);
+
+  const handleAssignInstructor = async (instructorId) => {
+    setAssigningInstructor(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/cohorts/${cohortId}/assign-instructor`, {
+        instructor_id: instructorId
+      });
+      toast.success(res.data.message);
+      setShowAssignInstructor(false);
+      fetchCohort();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to assign instructor');
+    } finally {
+      setAssigningInstructor(false);
+    }
+  };
 
   const handleAddStudent = async () => {
     if (!studentEmail.trim()) {
@@ -419,12 +448,25 @@ export default function CohortDetail() {
             </Link>
             <div>
               <h1 className="text-lg font-medium text-[#1A1A1A]">{cohort?.name}</h1>
-              <p className="text-sm text-[#888]">{cohort?.description || 'No description'}</p>
+              <p className="text-sm text-[#888]">
+                {cohort?.instructor_name ? `Instructor: ${cohort.instructor_name}` : (cohort?.description || 'No description')}
+              </p>
             </div>
           </div>
           
           {isInstructor && (
             <div className="flex items-center gap-2">
+              {isSuperAdmin && (
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowAssignInstructor(true)}
+                  className="border-[#7C3AED] text-[#7C3AED] hover:bg-[#F3E8FF] rounded-lg"
+                  data-testid="assign-instructor-btn"
+                >
+                  <UserCog className="w-4 h-4 mr-2" />
+                  Assign Instructor
+                </Button>
+              )}
               <Button 
                 variant="outline"
                 onClick={() => setShowInviteLink(true)}
@@ -1243,6 +1285,63 @@ export default function CohortDetail() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowInviteLink(false)} className="rounded-lg">
               Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Instructor Dialog */}
+      <Dialog open={showAssignInstructor} onOpenChange={setShowAssignInstructor}>
+        <DialogContent className="bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-normal text-2xl">Assign Instructor</DialogTitle>
+            <DialogDescription>
+              Choose an instructor to manage this cohort. They will be able to see submissions and track student progress.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4 max-h-[400px] overflow-y-auto">
+            {instructorsList.length === 0 ? (
+              <p className="text-sm text-[#888] text-center py-4">No instructors found. Promote a user to instructor first.</p>
+            ) : (
+              instructorsList.map((inst) => (
+                <div 
+                  key={inst.user_id}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    cohort?.instructor_id === inst.user_id 
+                      ? 'border-[#7C3AED] bg-[#F3E8FF]' 
+                      : 'border-[#E5E5E5] hover:bg-[#F9F8F6]'
+                  }`}
+                  onClick={() => {
+                    if (cohort?.instructor_id !== inst.user_id) {
+                      handleAssignInstructor(inst.user_id);
+                    }
+                  }}
+                  data-testid={`assign-instructor-${inst.user_id}`}
+                >
+                  <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center flex-shrink-0">
+                    {inst.picture ? (
+                      <img src={inst.picture} alt={inst.name} className="w-10 h-10 rounded-full" />
+                    ) : (
+                      <UserCog className="w-5 h-5 text-[#888]" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-[#1A1A1A] truncate">{inst.name}</p>
+                    <p className="text-xs text-[#888] truncate">{inst.email}</p>
+                  </div>
+                  {cohort?.instructor_id === inst.user_id && (
+                    <span className="text-xs bg-[#7C3AED] text-white px-2 py-0.5 rounded-full flex-shrink-0">Current</span>
+                  )}
+                  {inst.role === 'super_admin' && (
+                    <span className="text-xs bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full flex-shrink-0">Admin</span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssignInstructor(false)} className="rounded-lg">
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

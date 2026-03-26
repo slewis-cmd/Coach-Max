@@ -614,6 +614,15 @@ async def get_cohort(cohort_id: str, user: dict = Depends(get_current_user)):
         ).to_list(100)
         cohort["students"] = students
     
+    # Add instructor info
+    instructor = await db.users.find_one(
+        {"user_id": cohort.get("instructor_id")},
+        {"_id": 0, "name": 1, "email": 1}
+    )
+    if instructor:
+        cohort["instructor_name"] = instructor["name"]
+        cohort["instructor_email"] = instructor["email"]
+    
     return cohort
 
 @api_router.put("/cohorts/{cohort_id}")
@@ -643,6 +652,41 @@ async def delete_cohort(cohort_id: str, user: dict = Depends(require_instructor)
     await db.submissions.delete_many({"cohort_id": cohort_id})
     
     return {"message": "Cohort deleted"}
+
+@api_router.post("/cohorts/{cohort_id}/assign-instructor")
+async def assign_instructor_to_cohort(cohort_id: str, request: Request, user: dict = Depends(require_super_admin)):
+    """Assign an instructor to a cohort (super admin only)"""
+    data = await request.json()
+    instructor_id = data.get("instructor_id")
+    
+    if not instructor_id:
+        raise HTTPException(status_code=400, detail="instructor_id required")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    instructor = await db.users.find_one({"user_id": instructor_id}, {"_id": 0})
+    if not instructor or instructor.get("role") not in ["instructor", "super_admin"]:
+        raise HTTPException(status_code=400, detail="User is not an instructor")
+    
+    await db.cohorts.update_one(
+        {"cohort_id": cohort_id},
+        {"$set": {"instructor_id": instructor_id}}
+    )
+    
+    return {"message": f"Instructor {instructor['name']} assigned to {cohort['name']}"}
+
+@api_router.get("/instructors")
+async def list_instructors(user: dict = Depends(require_super_admin)):
+    """List all users with instructor or super_admin role"""
+    instructors = await db.users.find(
+        {"role": {"$in": ["instructor", "super_admin"]}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
+    ).to_list(100)
+    return instructors
+
+
 
 @api_router.post("/cohorts/{cohort_id}/students")
 async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
