@@ -839,7 +839,7 @@ async def bulk_import_students(
     content = await file.read()
     try:
         text = content.decode('utf-8')
-    except:
+    except Exception:
         text = content.decode('latin-1')
     
     reader = csv.DictReader(io.StringIO(text))
@@ -1064,7 +1064,7 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         # Try as plain text if PDF parsing fails
         try:
             return file_bytes.decode('utf-8', errors='ignore').strip()
-        except:
+        except Exception:
             return ""
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
@@ -1080,30 +1080,30 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         # Try as plain text if DOCX parsing fails
         try:
             return file_bytes.decode('utf-8', errors='ignore').strip()
-        except:
+        except Exception:
             return ""
 
 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
     """Extract text from file based on extension"""
     ext = filename.lower().split(".")[-1] if "." in filename else ""
+    text = ""
     
     if ext == "pdf":
         text = extract_text_from_pdf(file_bytes)
     elif ext in ["docx", "doc"]:
         text = extract_text_from_docx(file_bytes)
     else:
-        # Try plain text
         try:
             text = file_bytes.decode('utf-8', errors='ignore').strip()
-        except:
+        except (UnicodeDecodeError, AttributeError):
             text = ""
     
     # If still empty, try plain text as fallback
     if not text:
         try:
             text = file_bytes.decode('utf-8', errors='ignore').strip()
-        except:
-            pass
+        except (UnicodeDecodeError, AttributeError):
+            text = ""
     
     return text
 
@@ -1217,7 +1217,7 @@ async def delete_material(material_id: str, user: dict = Depends(require_instruc
     # Delete file
     try:
         os.remove(material["file_path"])
-    except:
+    except Exception:
         pass
     
     await db.materials.delete_one({"material_id": material_id})
@@ -1605,7 +1605,7 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
                     mat_bytes = await f.read()
                 mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
                 context_text += f"\n--- {mat['title']} ---\n{mat_text[:3000]}"
-            except:
+            except Exception:
                 pass
     
     # Get student's submission text
@@ -1614,13 +1614,14 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
         async with aiofiles.open(submission["file_path"], "rb") as f:
             file_bytes = await f.read()
         submission_text = extract_text_from_file(file_bytes, submission["file_name"])
-    except:
+    except Exception:
         pass
     
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
     
+    response = ""
     try:
         chat = LlmChat(
             api_key=api_key,
@@ -1733,7 +1734,7 @@ async def submit_homework(
         # Delete old file
         try:
             os.remove(existing["file_path"])
-        except:
+        except Exception:
             pass
     
     # Validate file
@@ -1823,6 +1824,7 @@ async def submit_homework(
 @api_router.get("/submissions")
 async def get_submissions(user: dict = Depends(get_current_user)):
     """Get submissions for current user"""
+    submissions = []
     if user["role"] == "student":
         submissions = await db.submissions.find(
             {"student_id": user["user_id"]},
@@ -2205,7 +2207,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
             mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
             
             context_text += f"\n\n--- {mat['material_type'].upper()}: {mat['title']} ---\n{mat_text[:5000]}"
-        except:
+        except Exception:
             pass
     
     # Call GPT-5.2 for review
@@ -2213,6 +2215,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
     
+    feedback = ""
     try:
         chat = LlmChat(
             api_key=api_key,
@@ -2394,7 +2397,7 @@ async def health():
 
 # ==================== THINKIFIC INTEGRATION ====================
 
-THINKIFIC_BASE_URL = f"https://api.thinkific.com/api/public/v1"
+THINKIFIC_BASE_URL = "https://api.thinkific.com/api/public/v1"
 THINKIFIC_HEADERS = {
     "X-Auth-API-Key": THINKIFIC_API_KEY,
     "X-Auth-Subdomain": THINKIFIC_SUBDOMAIN,

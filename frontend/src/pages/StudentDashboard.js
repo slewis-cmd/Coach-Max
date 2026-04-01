@@ -58,7 +58,6 @@ const downloadFile = async (url, filename) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   } catch (err) {
-    console.error('Download error:', err);
     toast.error('Failed to download file');
   }
 };
@@ -116,7 +115,6 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
         ])).flat();
         setMessages(history);
       } catch (e) {
-        console.error('Error loading chat history:', e);
       } finally {
         setLoadingHistory(false);
       }
@@ -194,7 +192,7 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
           )}
 
           {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'}`}>
+            <div key={`${msg.role}-${i}-${msg.text?.slice(0,20)}`} className={`flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 msg.role === 'student'
                   ? 'bg-[#000000] text-white rounded-br-md'
@@ -280,7 +278,6 @@ export default function StudentDashboard() {
       const res = await axios.get(`${API_URL}/api/student/dashboard`);
       setDashboardData(res.data);
     } catch (error) {
-      console.error('Error fetching dashboard:', error);
     } finally {
       setLoadingData(false);
     }

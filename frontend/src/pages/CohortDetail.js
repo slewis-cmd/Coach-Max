@@ -78,7 +78,6 @@ const downloadFile = async (url, filename) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   } catch (err) {
-    console.error('Download error:', err);
     toast.error('Failed to download file');
   }
 };
@@ -149,7 +148,6 @@ export default function CohortDetail() {
         setCohortSubmissions(results[2].data);
       }
     } catch (error) {
-      console.error('Error fetching cohort:', error);
       toast.error('Failed to load cohort');
       navigate('/dashboard');
     } finally {
@@ -363,7 +361,6 @@ export default function CohortDetail() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      console.error('Download error:', err);
       toast.error('Failed to download file');
     }
   };
@@ -390,7 +387,6 @@ export default function CohortDetail() {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      console.error('Download error:', err);
       toast.error('Failed to download template');
     }
   };
@@ -786,7 +782,9 @@ export default function CohortDetail() {
                                             sub.status === 'draft' ? 'bg-[#E1F0FF] text-[#6B21A8]' :
                                             'bg-[#DBEAFE] text-[#1E40AF]'
                                           }`}>
-                                            {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
+                                            {sub.status === 'sent' ? 'Reviewed' 
+                                              : sub.status === 'draft' ? 'Draft' 
+                                              : 'Pending'}
                                           </span>
                                           <button
                                             onClick={() => downloadFile(

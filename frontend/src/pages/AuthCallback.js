@@ -22,7 +22,6 @@ export default function AuthCallback() {
       const sessionIdMatch = hash.match(/session_id=([^&]+)/);
       
       if (!sessionIdMatch) {
-        console.error('No session_id found in hash');
         navigate('/');
         return;
       }
@@ -53,7 +52,6 @@ export default function AuthCallback() {
           }
           return;
         } catch (err) {
-          console.error(`Auth attempt ${attempt} failed:`, err.response?.data || err.message);
           if (attempt < 2) {
             await new Promise(r => setTimeout(r, 1000));
           }

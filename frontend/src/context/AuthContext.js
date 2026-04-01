@@ -73,7 +73,6 @@ export const AuthProvider = ({ children }) => {
     try {
       await axios.post(`${API_URL}/api/auth/logout`, {});
     } catch (error) {
-      console.error('Logout error:', error);
     }
     setUser(null);
     clearToken();
@@ -89,7 +88,6 @@ export const AuthProvider = ({ children }) => {
       setUser(prev => ({ ...prev, role }));
       return true;
     } catch (error) {
-      console.error('Set role error:', error);
       return false;
     }
   };

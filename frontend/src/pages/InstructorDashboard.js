@@ -63,7 +63,6 @@ const downloadFile = async (url, filename) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   } catch (err) {
-    console.error('Download error:', err);
     toast.error('Failed to download file');
   }
 };
@@ -105,7 +104,6 @@ export default function InstructorDashboard() {
       setSubmissions(submissionsRes.data);
       setAnalytics(analyticsRes.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoadingData(false);
