@@ -165,7 +165,7 @@ export default function InstructorDashboard() {
           <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
             <BookOpen className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-[#000000]">ThinkificAI</span>
+          <span className="font-semibold text-[#000000]">The Boost Pad</span>
         </div>
 
         <nav className="space-y-2">
@@ -245,7 +245,7 @@ export default function InstructorDashboard() {
             <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold">ThinkificAI</span>
+            <span className="font-semibold">The Boost Pad</span>
           </div>
           <div className="flex items-center gap-2">
             <button

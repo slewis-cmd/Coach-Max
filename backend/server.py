@@ -62,7 +62,7 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
     
     try:
         params = {
-            "from": f"ThinkificAI <{SENDER_EMAIL}>",
+            "from": f"The Boost Pad <{SENDER_EMAIL}>",
             "to": [recipient],
             "subject": subject,
             "html": html_content
@@ -404,7 +404,7 @@ async def invite_instructor(request: Request, user: dict = Depends(require_super
                 Hi <strong>{target_user['name'].split()[0]}</strong>,
             </p>
             <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
-                Great news! <strong>{user['name']}</strong> has promoted you to an instructor on ThinkificAI.
+                Great news! <strong>{user['name']}</strong> has promoted you to an instructor on The Boost Pad.
             </p>
             <p style="color: #5A5A5A; font-size: 14px;">
                 You can now create cohorts, upload course materials, and review student submissions with AI-powered feedback.
@@ -417,7 +417,7 @@ async def invite_instructor(request: Request, user: dict = Depends(require_super
     """
     await send_email_notification(
         target_user["email"],
-        "You've Been Promoted to Instructor - ThinkificAI",
+        "You've Been Promoted to Instructor - The Boost Pad",
         email_html
     )
     
@@ -779,7 +779,7 @@ async def add_student_to_cohort(cohort_id: str, request: Request, user: dict = D
                 Hi {student['name']},
             </p>
             <p style="color: #5A5A5A; line-height: 1.6;">
-                You've been invited to join <strong>{cohort['name']}</strong> on ThinkificAI Tutor. 
+                You've been invited to join <strong>{cohort['name']}</strong> on The Boost Pad. 
                 Sign in to access your course materials, submit homework, and receive personalized feedback.
             </p>
             <p style="text-align: center; margin: 32px 0;">
@@ -909,7 +909,7 @@ async def bulk_import_students(
                         Hi {student.get('name', 'there')},
                     </p>
                     <p style="color: #5A5A5A; line-height: 1.6;">
-                        You've been invited to join <strong>{cohort['name']}</strong> on ThinkificAI Tutor.
+                        You've been invited to join <strong>{cohort['name']}</strong> on The Boost Pad.
                         Sign in to access your course materials, submit homework, and receive personalized feedback.
                     </p>
                     <p style="text-align: center; margin: 32px 0;">
@@ -979,7 +979,7 @@ async def invite_all_students(cohort_id: str, request: Request, user: dict = Dep
                     Hi {student.get('name', 'there')},
                 </p>
                 <p style="color: #5A5A5A; line-height: 1.6;">
-                    You've been invited to join <strong>{cohort['name']}</strong> on ThinkificAI Tutor.
+                    You've been invited to join <strong>{cohort['name']}</strong> on The Boost Pad.
                     Sign in to access your course materials, submit homework, and receive personalized feedback.
                 </p>
                 <p style="text-align: center; margin: 32px 0;">
@@ -1805,7 +1805,7 @@ async def submit_homework(
                     <p style="margin: 8px 0 0 0; color: #888; font-size: 14px;">Week {material['week_number']} • {cohort['name']}</p>
                 </div>
                 <p style="color: #5A5A5A; font-size: 14px;">
-                    Log in to ThinkificAI to review this submission and provide AI-powered feedback.
+                    Log in to The Boost Pad to review this submission and provide AI-powered feedback.
                 </p>
             </div>
         </div>
@@ -1905,7 +1905,7 @@ async def allow_resubmission(submission_id: str, user: dict = Depends(require_in
                     Your instructor has allowed you to resubmit your homework for <strong>{material['title'] if material else 'the assignment'}</strong>.
                 </p>
                 <p style="color: #5A5A5A; font-size: 14px;">
-                    Log in to ThinkificAI to submit your updated work.
+                    Log in to The Boost Pad to submit your updated work.
                 </p>
             </div>
         </div>
@@ -2353,7 +2353,7 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
         </div>
         <div style="background-color: #E5E5E5; padding: 16px; border-radius: 0 0 12px 12px; text-align: center;">
             <p style="color: #888; font-size: 12px; margin: 0;">
-                ThinkificAI Tutor • {cohort['name']}
+                The Boost Pad • {cohort['name']}
             </p>
         </div>
     </div>
@@ -2381,7 +2381,7 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
 
 @api_router.get("/")
 async def root():
-    return {"message": "ThinkificAI Tutor API"}
+    return {"message": "The Boost Pad API"}
 
 @api_router.get("/health")
 async def health():

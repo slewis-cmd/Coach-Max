@@ -351,7 +351,7 @@ export default function StudentDashboard() {
           <div className="w-8 h-8 bg-[#000000] rounded-lg flex items-center justify-center">
             <BookOpen className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-[#000000]">ThinkificAI</span>
+          <span className="font-semibold text-[#000000]">The Boost Pad</span>
         </div>
 
         <nav className="space-y-2">
@@ -391,7 +391,7 @@ export default function StudentDashboard() {
             <div className="w-8 h-8 bg-[#000000] rounded-lg flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold">ThinkificAI</span>
+            <span className="font-semibold">The Boost Pad</span>
           </div>
           <Button variant="ghost" size="icon" onClick={handleLogout}>
             <LogOut className="w-5 h-5" />

@@ -32,7 +32,7 @@ export default function Landing() {
             <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-[#000000]">ThinkificAI</span>
+            <span className="font-semibold text-[#000000]">The Boost Pad</span>
           </div>
           <Button 
             data-testid="login-button"
@@ -183,7 +183,7 @@ export default function Landing() {
             <div className="w-6 h-6 bg-[#22438E] rounded flex items-center justify-center">
               <BookOpen className="w-3 h-3 text-white" />
             </div>
-            <span className="text-sm text-[#666666]">ThinkificAI Tutor</span>
+            <span className="text-sm text-[#666666]">The Boost Pad</span>
           </div>
           <p className="text-sm text-[#666666]">© 2024 All rights reserved.</p>
         </div>

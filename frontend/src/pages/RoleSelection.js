@@ -45,7 +45,7 @@ export default function RoleSelection() {
             Welcome, {user?.name?.split(' ')[0]}!
           </h1>
           <p className="text-lg text-[#333333]">
-            How would you like to use ThinkificAI?
+            How would you like to use The Boost Pad?
           </p>
         </div>
 
