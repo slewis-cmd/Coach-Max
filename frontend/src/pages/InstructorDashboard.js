@@ -352,13 +352,13 @@ export default function InstructorDashboard() {
               <p className="text-2xl font-light text-[#22438E]">{analytics?.submissions?.draft || draftSubmissions.length}</p>
             </CardContent>
           </Card>
-          <Card className="bg-[#D1FAE5] border-[#BBF7D0]">
+          <Card className="bg-[#E1F0FF] border-[#B8D4E8]">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[#065F46]" />
-                <p className="text-sm text-[#065F46]">Feedback Sent</p>
+                <Mail className="w-4 h-4 text-[#22438E]" />
+                <p className="text-sm text-[#22438E]">Feedback Sent</p>
               </div>
-              <p className="text-2xl font-light text-[#065F46]">
+              <p className="text-2xl font-light text-[#22438E]">
                 {analytics?.submissions?.sent || submissions.filter(s => s.status === 'sent' || s.feedback_sent).length}
               </p>
             </CardContent>
@@ -370,7 +370,7 @@ export default function InstructorDashboard() {
           <Card className="bg-white border-[#B8D4E8] mb-8">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-normal flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#065F46]" />
+                <TrendingUp className="w-5 h-5 text-[#22438E]" />
                 This Week
               </CardTitle>
             </CardHeader>
@@ -495,7 +495,7 @@ export default function InstructorDashboard() {
                         <Download className="w-3.5 h-3.5" />
                         Homework
                       </button>
-                      <Button size="sm" className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg">
+                      <Button size="sm" className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
                         Review & Send
                       </Button>
                     </div>

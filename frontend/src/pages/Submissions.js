@@ -183,7 +183,7 @@ export default function Submissions() {
                       </div>
                     </div>
                     <Button 
-                      className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg"
+                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/submission/${sub.submission_id}`);
@@ -203,7 +203,7 @@ export default function Submissions() {
         {sentSubmissions.length > 0 && (
           <div>
             <h2 className="text-xl font-light text-[#000000] mb-4 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-[#065F46]" />
+              <Mail className="w-5 h-5 text-[#22438E]" />
               {isInstructor ? 'Feedback Sent' : 'Received Feedback'}
             </h2>
             <div className="space-y-4">
@@ -216,8 +216,8 @@ export default function Submissions() {
                 >
                   <CardContent className="p-6">
                     <div className="flex items-start gap-4 mb-4">
-                      <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center flex-shrink-0">
-                        <CheckCircle className="w-5 h-5 text-[#065F46]" />
+                      <div className="w-10 h-10 bg-[#E1F0FF] rounded-lg flex items-center justify-center flex-shrink-0">
+                        <CheckCircle className="w-5 h-5 text-[#22438E]" />
                       </div>
                       <div>
                         <p className="font-medium text-[#000000]">
@@ -232,7 +232,7 @@ export default function Submissions() {
                       </div>
                     </div>
                     {(sub.instructor_feedback || sub.ai_feedback) && (
-                      <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg p-4">
+                      <div className="bg-[#F0FDF4] border border-[#B8D4E8] rounded-lg p-4">
                         <p className="text-sm text-[#166534] feedback-letter line-clamp-3">
                           {(sub.instructor_feedback || sub.ai_feedback).substring(0, 200)}...
                         </p>

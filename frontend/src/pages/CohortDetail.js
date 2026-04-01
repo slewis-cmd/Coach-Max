@@ -559,7 +559,7 @@ export default function CohortDetail() {
                         onClick={() => handleToggleWeek(week.week_number)}
                         className={`ml-auto rounded-lg text-xs ${
                           (cohort?.released_weeks || []).includes(week.week_number)
-                            ? 'text-[#065F46] hover:bg-[#D1FAE5]'
+                            ? 'text-[#22438E] hover:bg-[#E1F0FF]'
                             : 'text-[#666666] hover:bg-[#D0E6F9]'
                         }`}
                         data-testid={`toggle-week-${week.week_number}`}
@@ -625,7 +625,7 @@ export default function CohortDetail() {
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              className="text-[#22438E] hover:text-[#064E3B] h-7 px-2"
+                              className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
                               onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                             >
                               <Download className="w-3 h-3 mr-1" />
@@ -697,8 +697,8 @@ export default function CohortDetail() {
                       <Card key={mat.material_id} className="bg-white border-[#B8D4E8] group">
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
-                            <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center">
-                              <Upload className="w-5 h-5 text-[#065F46]" />
+                            <div className="w-10 h-10 bg-[#E1F0FF] rounded-lg flex items-center justify-center">
+                              <Upload className="w-5 h-5 text-[#22438E]" />
                             </div>
                             <div className="flex items-center gap-1">
                               <Button 
@@ -708,7 +708,7 @@ export default function CohortDetail() {
                                 onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                                 data-testid={`download-${mat.material_id}`}
                               >
-                                <Download className="w-4 h-4 text-[#065F46]" />
+                                <Download className="w-4 h-4 text-[#22438E]" />
                               </Button>
                               {isInstructor && (
                                 <Button 
@@ -743,7 +743,7 @@ export default function CohortDetail() {
                                 setSelectedHomework(mat);
                                 setShowSubmitHomework(true);
                               }}
-                              className="w-full bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg"
+                              className="w-full bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                               data-testid={`submit-homework-${mat.material_id}`}
                             >
                               Submit Homework
@@ -758,7 +758,7 @@ export default function CohortDetail() {
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
-                                  className="text-[#065F46] hover:text-[#064E3B] h-7 px-2"
+                                  className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
                                   onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                                 >
                                   <Download className="w-3 h-3 mr-1" />
@@ -782,7 +782,7 @@ export default function CohortDetail() {
                                             <p className="text-xs text-[#666666] truncate">{sub.file_name}</p>
                                           </div>
                                           <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                            sub.status === 'sent' ? 'bg-[#D1FAE5] text-[#065F46]' :
+                                            sub.status === 'sent' ? 'bg-[#E1F0FF] text-[#22438E]' :
                                             sub.status === 'draft' ? 'bg-[#E1F0FF] text-[#6B21A8]' :
                                             'bg-[#DBEAFE] text-[#1E40AF]'
                                           }`}>
@@ -793,7 +793,7 @@ export default function CohortDetail() {
                                               `${API_URL}/api/submissions/${sub.submission_id}/download`,
                                               sub.file_name
                                             )}
-                                            className="text-[#065F46] hover:text-[#064E3B] p-1 flex-shrink-0"
+                                            className="text-[#22438E] hover:text-[#1A3A7A] p-1 flex-shrink-0"
                                             title="Download submission"
                                             data-testid={`download-sub-${sub.submission_id}`}
                                           >
@@ -1020,7 +1020,7 @@ export default function CohortDetail() {
                 <label htmlFor="material-file" className="cursor-pointer block">
                   {materialForm.file ? (
                     <div className="flex items-center justify-center gap-2">
-                      <File className="w-5 h-5 text-[#065F46]" />
+                      <File className="w-5 h-5 text-[#22438E]" />
                       <span className="text-sm text-[#000000]">{materialForm.file.name}</span>
                     </div>
                   ) : (
@@ -1072,7 +1072,7 @@ export default function CohortDetail() {
               <label htmlFor="homework-file" className="cursor-pointer block">
                 {homeworkFile ? (
                   <div className="flex items-center justify-center gap-2">
-                    <File className="w-5 h-5 text-[#065F46]" />
+                    <File className="w-5 h-5 text-[#22438E]" />
                     <span className="text-sm text-[#000000]">{homeworkFile.name}</span>
                   </div>
                 ) : (
@@ -1101,7 +1101,7 @@ export default function CohortDetail() {
               data-testid="submit-homework-btn"
               onClick={handleSubmitHomework}
               disabled={submittingHomework}
-              className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {submittingHomework ? 'Submitting...' : 'Submit'}
             </Button>
@@ -1149,7 +1149,7 @@ export default function CohortDetail() {
                 <label htmlFor="bulk-file" className="cursor-pointer block">
                   {bulkFile ? (
                     <div className="flex items-center justify-center gap-2">
-                      <File className="w-5 h-5 text-[#065F46]" />
+                      <File className="w-5 h-5 text-[#22438E]" />
                       <span className="text-sm text-[#000000]">{bulkFile.name}</span>
                     </div>
                   ) : (
@@ -1175,13 +1175,13 @@ export default function CohortDetail() {
             {importResults && (
               <div className="space-y-3">
                 {importResults.added?.length > 0 && (
-                  <div className="flex items-start gap-2 p-3 bg-[#D1FAE5] rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-[#065F46] mt-0.5" />
+                  <div className="flex items-start gap-2 p-3 bg-[#E1F0FF] rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-[#22438E] mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-[#065F46]">
+                      <p className="text-sm font-medium text-[#22438E]">
                         {importResults.added.length} students added
                       </p>
-                      <p className="text-xs text-[#065F46]">
+                      <p className="text-xs text-[#22438E]">
                         {importResults.added.map(s => s.name || s.email).join(', ')}
                       </p>
                     </div>
@@ -1282,7 +1282,7 @@ export default function CohortDetail() {
                   }}
                   data-testid="copy-invite-link"
                 >
-                  {copied ? <Check className="w-4 h-4 text-[#065F46]" /> : <Copy className="w-4 h-4" />}
+                  {copied ? <Check className="w-4 h-4 text-[#22438E]" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
             </div>

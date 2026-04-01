@@ -57,7 +57,7 @@ function StudentWeekRow({ week }) {
   const [expanded, setExpanded] = useState(false);
 
   const statusColor = {
-    sent: 'bg-[#D1FAE5] text-[#065F46]',
+    sent: 'bg-[#E1F0FF] text-[#22438E]',
     draft: 'bg-[#E1F0FF] text-[#6B21A8]',
     pending: 'bg-[#DBEAFE] text-[#1E40AF]',
     not_submitted: 'bg-[#F3F4F6] text-[#6B7280]',
@@ -105,7 +105,7 @@ function StudentWeekRow({ week }) {
                     week.file_name
                   );
                 }}
-                className="text-[#065F46] hover:text-[#064E3B] p-1"
+                className="text-[#22438E] hover:text-[#1A3A7A] p-1"
                 title="Download submission"
                 data-testid={`download-week-${week.week_number}-${week.studentId}`}
               >
@@ -123,8 +123,8 @@ function StudentWeekRow({ week }) {
           {feedback ? (
             <div className="bg-white border border-[#B8D4E8] rounded-lg p-3">
               <div className="flex items-center gap-1.5 mb-2">
-                <MessageSquare className="w-3.5 h-3.5 text-[#065F46]" />
-                <span className="text-xs font-medium text-[#065F46]">
+                <MessageSquare className="w-3.5 h-3.5 text-[#22438E]" />
+                <span className="text-xs font-medium text-[#22438E]">
                   {week.instructor_feedback ? 'Instructor Feedback' : 'AI Feedback'}
                 </span>
               </div>
@@ -277,19 +277,19 @@ export default function ProgressTracking() {
               <Card className="bg-white border-[#B8D4E8]">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-[#065F46]" />
+                    <CheckCircle className="w-4 h-4 text-[#22438E]" />
                     <p className="text-sm text-[#666666]">Completed</p>
                   </div>
-                  <p className="text-3xl font-light text-[#065F46]">{analytics.overview.completed_reviews}</p>
+                  <p className="text-3xl font-light text-[#22438E]">{analytics.overview.completed_reviews}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-[#D1FAE5] border-[#BBF7D0]">
+              <Card className="bg-[#E1F0FF] border-[#B8D4E8]">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="w-4 h-4 text-[#065F46]" />
-                    <p className="text-sm text-[#065F46]">Avg Completion</p>
+                    <TrendingUp className="w-4 h-4 text-[#22438E]" />
+                    <p className="text-sm text-[#22438E]">Avg Completion</p>
                   </div>
-                  <p className="text-3xl font-light text-[#065F46]">{analytics.overview.avg_completion_rate}%</p>
+                  <p className="text-3xl font-light text-[#22438E]">{analytics.overview.avg_completion_rate}%</p>
                 </CardContent>
               </Card>
             </div>
@@ -316,7 +316,7 @@ export default function ProgressTracking() {
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs text-[#666666]">{week.submitted} submitted</span>
-                              <span className="text-xs text-[#065F46]">{week.reviewed} reviewed</span>
+                              <span className="text-xs text-[#22438E]">{week.reviewed} reviewed</span>
                             </div>
                             <Progress value={completionRate} className="h-2" />
                           </div>
@@ -380,7 +380,7 @@ export default function ProgressTracking() {
                               </div>
                               <div className="w-14 text-right">
                                 <span className={`text-sm font-medium ${
-                                  student.completion_rate >= 80 ? 'text-[#065F46]' :
+                                  student.completion_rate >= 80 ? 'text-[#22438E]' :
                                   student.completion_rate >= 50 ? 'text-[#1A75BA]' :
                                   'text-red-600'
                                 }`}>

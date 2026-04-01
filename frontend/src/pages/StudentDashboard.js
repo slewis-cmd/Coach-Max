@@ -82,7 +82,7 @@ const STATUS_CONFIG = {
   },
   feedback_provided: {
     label: 'Feedback Provided',
-    color: 'bg-[#D1FAE5] text-[#065F46]',
+    color: 'bg-[#E1F0FF] text-[#22438E]',
     icon: CheckCircle
   }
 };
@@ -159,7 +159,7 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
         {/* Header */}
         <div className="bg-[#000000] text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#065F46] rounded-full flex items-center justify-center">
+            <div className="w-9 h-9 bg-[#22438E] rounded-full flex items-center justify-center">
               <MessageCircle className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -177,8 +177,8 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
           {/* Welcome message */}
           {messages.length === 0 && !loadingHistory && (
             <div className="text-center py-8">
-              <div className="w-14 h-14 bg-[#D1FAE5] rounded-full flex items-center justify-center mx-auto mb-3">
-                <MessageCircle className="w-7 h-7 text-[#065F46]" />
+              <div className="w-14 h-14 bg-[#E1F0FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                <MessageCircle className="w-7 h-7 text-[#22438E]" />
               </div>
               <h4 className="font-medium text-[#000000] mb-1">Hi! I'm Coach Max</h4>
               <p className="text-sm text-[#333333] max-w-xs mx-auto">
@@ -189,7 +189,7 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
 
           {loadingHistory && (
             <div className="flex justify-center py-8">
-              <div className="w-6 h-6 border-2 border-[#065F46] border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-6 h-6 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
             </div>
           )}
 
@@ -201,7 +201,7 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
                   : 'bg-white border border-[#B8D4E8] text-[#000000] rounded-bl-md shadow-sm'
               }`}>
                 {msg.role === 'coach' && (
-                  <p className="text-xs font-medium text-[#065F46] mb-1">Coach Max</p>
+                  <p className="text-xs font-medium text-[#22438E] mb-1">Coach Max</p>
                 )}
                 <div className="whitespace-pre-wrap">{msg.text}</div>
               </div>
@@ -211,11 +211,11 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
           {sending && (
             <div className="flex justify-start">
               <div className="bg-white border border-[#B8D4E8] rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                <p className="text-xs font-medium text-[#065F46] mb-1">Coach Max</p>
+                <p className="text-xs font-medium text-[#22438E] mb-1">Coach Max</p>
                 <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-[#065F46] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-[#065F46] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-[#065F46] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="w-2 h-2 bg-[#22438E] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-[#22438E] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-[#22438E] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                 </div>
               </div>
             </div>
@@ -232,7 +232,7 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="Ask Coach Max a question..."
-            className="flex-1 px-4 py-2.5 bg-[#D0E6F9] rounded-full text-sm outline-none focus:ring-2 focus:ring-[#065F46]/20"
+            className="flex-1 px-4 py-2.5 bg-[#D0E6F9] rounded-full text-sm outline-none focus:ring-2 focus:ring-[#22438E]/20"
             disabled={sending}
             data-testid="coach-max-input"
           />
@@ -240,7 +240,7 @@ function CoachMaxChat({ submissionId, weekNumber, onClose }) {
             size="icon"
             onClick={handleSend}
             disabled={sending || !input.trim()}
-            className="bg-[#065F46] text-white hover:bg-[#064E3B] rounded-full w-10 h-10 flex-shrink-0"
+            className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-full w-10 h-10 flex-shrink-0"
             data-testid="coach-max-send"
           >
             <Send className="w-4 h-4" />
@@ -451,7 +451,7 @@ export default function StudentDashboard() {
                       {/* Week Number */}
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0 ${
                         week.status === 'feedback_provided'
-                          ? 'bg-[#065F46] text-white'
+                          ? 'bg-[#22438E] text-white'
                           : week.status === 'no_homework'
                             ? 'bg-[#B8D4E8] text-[#666666]'
                             : 'bg-[#000000] text-white'
@@ -487,7 +487,7 @@ export default function StudentDashboard() {
                                 week.submission.file_name
                               );
                             }}
-                            className="inline-flex items-center gap-1.5 mt-1 text-xs text-[#065F46] hover:text-[#064E3B] transition-colors"
+                            className="inline-flex items-center gap-1.5 mt-1 text-xs text-[#22438E] hover:text-[#1A3A7A] transition-colors"
                             data-testid={`download-submission-${week.week_number}`}
                           >
                             <File className="w-3 h-3" />
@@ -512,7 +512,7 @@ export default function StudentDashboard() {
                             className={`rounded-lg text-xs md:text-sm ${
                               hasSubmission 
                                 ? 'bg-[#1A75BA] text-white hover:bg-[#713F12]' 
-                                : 'bg-[#065F46] text-white hover:bg-[#064E3B]'
+                                : 'bg-[#22438E] text-white hover:bg-[#1A3A7A]'
                             }`}
                             data-testid={`submit-week-${week.week_number}`}
                           >
@@ -524,7 +524,7 @@ export default function StudentDashboard() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-[#065F46] hover:bg-[#D1FAE5]"
+                            className="text-[#22438E] hover:bg-[#E1F0FF]"
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleFeedback(weekKey);
@@ -544,8 +544,8 @@ export default function StudentDashboard() {
                       <div className="border-t border-[#B8D4E8] p-5 md:p-6 bg-[#F0FDF4] animate-fade-in" data-testid={`feedback-content-${week.week_number}`}>
                         {/* Week Materials - downloadable */}
                         {week.materials && week.materials.length > 0 && (
-                          <div className="mb-4 pb-3 border-b border-[#BBF7D0]">
-                            <p className="text-xs font-medium text-[#065F46] uppercase tracking-wide mb-2">Week Materials</p>
+                          <div className="mb-4 pb-3 border-b border-[#B8D4E8]">
+                            <p className="text-xs font-medium text-[#22438E] uppercase tracking-wide mb-2">Week Materials</p>
                             <div className="flex flex-wrap gap-2">
                               {week.materials.map(mat => (
                                 <button
@@ -557,7 +557,7 @@ export default function StudentDashboard() {
                                       mat.file_name
                                     );
                                   }}
-                                  className="inline-flex items-center gap-1.5 text-xs bg-white border border-[#BBF7D0] text-[#065F46] rounded-lg px-2.5 py-1.5 hover:bg-[#D1FAE5] transition-colors"
+                                  className="inline-flex items-center gap-1.5 text-xs bg-white border border-[#B8D4E8] text-[#22438E] rounded-lg px-2.5 py-1.5 hover:bg-[#E1F0FF] transition-colors"
                                   data-testid={`download-material-${mat.material_id}`}
                                 >
                                   <FileText className="w-3 h-3" />
@@ -569,8 +569,8 @@ export default function StudentDashboard() {
                         )}
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-[#065F46]" />
-                            <span className="text-sm font-medium text-[#065F46]">Instructor Feedback</span>
+                            <CheckCircle className="w-4 h-4 text-[#22438E]" />
+                            <span className="text-sm font-medium text-[#22438E]">Instructor Feedback</span>
                           </div>
                           <Button
                             size="sm"
@@ -617,7 +617,7 @@ export default function StudentDashboard() {
               <label htmlFor="student-homework-file" className="cursor-pointer block">
                 {uploadFile ? (
                   <div className="flex items-center justify-center gap-2">
-                    <File className="w-5 h-5 text-[#065F46]" />
+                    <File className="w-5 h-5 text-[#22438E]" />
                     <span className="text-sm text-[#000000]">{uploadFile.name}</span>
                   </div>
                 ) : (
@@ -646,7 +646,7 @@ export default function StudentDashboard() {
               data-testid="submit-homework-btn"
               onClick={handleSubmit}
               disabled={submitting}
-              className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {submitting ? 'Submitting...' : 'Submit'}
             </Button>

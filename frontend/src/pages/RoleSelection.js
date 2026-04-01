@@ -56,8 +56,8 @@ export default function RoleSelection() {
             onClick={() => handleSelectRole('student')}
           >
             <CardHeader className="text-center pb-2">
-              <div className="w-16 h-16 bg-[#D1FAE5] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="w-8 h-8 text-[#065F46]" />
+              <div className="w-16 h-16 bg-[#E1F0FF] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <BookOpen className="w-8 h-8 text-[#22438E]" />
               </div>
               <CardTitle className="text-2xl font-normal">I'm a Student</CardTitle>
               <CardDescription className="text-base">

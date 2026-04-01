@@ -94,8 +94,8 @@ export default function Landing() {
               {/* Floating card */}
               <div className="absolute -bottom-6 -left-6 bg-white rounded-xl p-4 shadow-lg border border-[#B8D4E8] animate-fade-in" style={{ animationDelay: '0.4s' }}>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#D1FAE5] rounded-full flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-[#065F46]" />
+                  <div className="w-10 h-10 bg-[#E1F0FF] rounded-full flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-[#22438E]" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[#000000]">AI Feedback</p>
@@ -144,8 +144,8 @@ export default function Landing() {
 
             {/* Feature 3 */}
             <div className="bg-[#E1F0FF] rounded-xl p-8 hover:-translate-y-1 transition-transform duration-300">
-              <div className="w-12 h-12 bg-[#D1FAE5] rounded-xl flex items-center justify-center mb-6">
-                <Sparkles className="w-6 h-6 text-[#065F46]" />
+              <div className="w-12 h-12 bg-[#E1F0FF] rounded-xl flex items-center justify-center mb-6">
+                <Sparkles className="w-6 h-6 text-[#22438E]" />
               </div>
               <h3 className="text-xl font-normal text-[#000000] mb-3">AI Reviews</h3>
               <p className="text-[#333333] leading-relaxed">

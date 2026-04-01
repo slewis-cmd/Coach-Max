@@ -243,7 +243,7 @@ export default function MaterialLibrary() {
                         <span className="text-xs text-[#666666] mr-1">Assigned to:</span>
                         {mat.assigned_cohorts?.length > 0 ? (
                           mat.assigned_cohorts.map((c) => (
-                            <span key={c.cohort_id} className="inline-flex items-center gap-1 text-xs bg-[#D1FAE5] text-[#065F46] px-2 py-1 rounded-full">
+                            <span key={c.cohort_id} className="inline-flex items-center gap-1 text-xs bg-[#E1F0FF] text-[#22438E] px-2 py-1 rounded-full">
                               <CheckCircle className="w-3 h-3" />
                               {c.name}
                               <button
@@ -361,7 +361,7 @@ export default function MaterialLibrary() {
                   <div 
                     key={cohort.cohort_id}
                     className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isAssigned ? 'border-[#065F46] bg-[#D1FAE5]' : 'border-[#B8D4E8] hover:bg-[#E1F0FF]'
+                      isAssigned ? 'border-[#22438E] bg-[#E1F0FF]' : 'border-[#B8D4E8] hover:bg-[#E1F0FF]'
                     }`}
                     onClick={() => {
                       if (isAssigned) {
@@ -377,7 +377,7 @@ export default function MaterialLibrary() {
                       <p className="text-xs text-[#666666]">{cohort.student_ids?.length || 0} students</p>
                     </div>
                     {isAssigned ? (
-                      <span className="text-xs bg-[#065F46] text-white px-2 py-0.5 rounded-full">Assigned</span>
+                      <span className="text-xs bg-[#22438E] text-white px-2 py-0.5 rounded-full">Assigned</span>
                     ) : (
                       <span className="text-xs text-[#666666]">Click to assign</span>
                     )}

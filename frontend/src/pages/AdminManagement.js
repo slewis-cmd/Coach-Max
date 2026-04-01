@@ -210,13 +210,13 @@ export default function AdminManagement() {
                 <p className="text-3xl font-light text-[#22438E]">{stats.users.instructors}</p>
               </CardContent>
             </Card>
-            <Card className="bg-[#D1FAE5] border-[#BBF7D0]">
+            <Card className="bg-[#E1F0FF] border-[#B8D4E8]">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <BookOpen className="w-4 h-4 text-[#065F46]" />
-                  <p className="text-sm text-[#065F46]">Students</p>
+                  <BookOpen className="w-4 h-4 text-[#22438E]" />
+                  <p className="text-sm text-[#22438E]">Students</p>
                 </div>
-                <p className="text-3xl font-light text-[#065F46]">{stats.users.students}</p>
+                <p className="text-3xl font-light text-[#22438E]">{stats.users.students}</p>
               </CardContent>
             </Card>
           </div>
@@ -313,7 +313,7 @@ export default function AdminManagement() {
         <Card className="bg-white border-[#B8D4E8]">
           <CardHeader>
             <CardTitle className="text-lg font-normal flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-[#065F46]" />
+              <BookOpen className="w-5 h-5 text-[#22438E]" />
               Students ({students.length})
             </CardTitle>
             <CardDescription>Users who can enroll in cohorts and submit homework</CardDescription>
@@ -331,8 +331,8 @@ export default function AdminManagement() {
                     {u.picture ? (
                       <img src={u.picture} alt={u.name} className="w-10 h-10 rounded-full" />
                     ) : (
-                      <div className="w-10 h-10 bg-[#D1FAE5] rounded-full flex items-center justify-center">
-                        <User className="w-5 h-5 text-[#065F46]" />
+                      <div className="w-10 h-10 bg-[#E1F0FF] rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5 text-[#22438E]" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">

@@ -91,8 +91,8 @@ export default function InvitePage() {
         <CardContent className="p-8 text-center">
           {joined ? (
             <>
-              <div className="w-16 h-16 bg-[#D1FAE5] rounded-2xl flex items-center justify-center mx-auto mb-4 animate-fade-in">
-                <CheckCircle className="w-8 h-8 text-[#065F46]" />
+              <div className="w-16 h-16 bg-[#E1F0FF] rounded-2xl flex items-center justify-center mx-auto mb-4 animate-fade-in">
+                <CheckCircle className="w-8 h-8 text-[#22438E]" />
               </div>
               <h2 className="text-2xl font-light text-[#000000] mb-2">You're In!</h2>
               <p className="text-[#333333]">Redirecting to your dashboard...</p>
@@ -120,7 +120,7 @@ export default function InvitePage() {
                 <Button
                   onClick={handleJoin}
                   disabled={joining}
-                  className="w-full bg-[#065F46] text-white hover:bg-[#064E3B] rounded-lg py-3 text-base"
+                  className="w-full bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg py-3 text-base"
                   data-testid="join-cohort-btn"
                 >
                   {joining ? 'Joining...' : (

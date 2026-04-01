@@ -229,7 +229,7 @@ export default function SubmissionDetail() {
               </div>
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
                 isSent 
-                  ? 'bg-[#D1FAE5] text-[#065F46]' 
+                  ? 'bg-[#E1F0FF] text-[#22438E]' 
                   : isDraft
                     ? 'bg-[#E1F0FF] text-[#22438E]'
                     : 'bg-[#FEF9C3] text-[#1A75BA]'
@@ -302,7 +302,7 @@ export default function SubmissionDetail() {
               <h2 className="text-xl font-light text-[#000000] flex items-center gap-2">
                 {isSent ? (
                   <>
-                    <CheckCircle className="w-5 h-5 text-[#065F46]" />
+                    <CheckCircle className="w-5 h-5 text-[#22438E]" />
                     Feedback Sent
                   </>
                 ) : (
@@ -330,7 +330,7 @@ export default function SubmissionDetail() {
                   <Button 
                     onClick={handleSendFeedback}
                     disabled={sending}
-                    className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+                    className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
                     data-testid="send-feedback-btn"
                   >
                     {sending ? (
@@ -388,7 +388,7 @@ export default function SubmissionDetail() {
                         }
                       }}
                       disabled={saving || sending}
-                      className="bg-[#065F46] text-white hover:bg-[#064E3B]"
+                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
                     >
                       <Send className="w-4 h-4 mr-2" />
                       Save & Send
@@ -397,13 +397,13 @@ export default function SubmissionDetail() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className={isSent ? "bg-[#F0FDF4] border-[#BBF7D0]" : "bg-[#F0F9FF] border-[#BAE6FD]"}>
+              <Card className={isSent ? "bg-[#F0FDF4] border-[#B8D4E8]" : "bg-[#F0F9FF] border-[#BAE6FD]"}>
                 <CardContent className="p-8">
                   <div className="feedback-letter text-[#166534] whitespace-pre-wrap leading-relaxed">
                     {currentFeedback}
                   </div>
-                  <div className="mt-6 pt-6 border-t border-[#BBF7D0] text-right">
-                    <p className="text-sm text-[#065F46] italic">
+                  <div className="mt-6 pt-6 border-t border-[#B8D4E8] text-right">
+                    <p className="text-sm text-[#22438E] italic">
                       {isSent ? '— Feedback sent to student' : '— Draft (Not yet sent to student)'}
                     </p>
                   </div>
@@ -432,16 +432,16 @@ export default function SubmissionDetail() {
           <div className="mt-6 p-4 bg-[#D0E6F9] rounded-lg">
             <h3 className="text-sm font-medium text-[#000000] mb-2">Review Workflow</h3>
             <ol className="text-sm text-[#333333] space-y-1">
-              <li className={`flex items-center gap-2 ${currentFeedback ? 'text-[#065F46]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${currentFeedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#B8D4E8] text-[#666666]'}`}>1</span>
+              <li className={`flex items-center gap-2 ${currentFeedback ? 'text-[#22438E]' : ''}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${currentFeedback ? 'bg-[#E1F0FF] text-[#22438E]' : 'bg-[#B8D4E8] text-[#666666]'}`}>1</span>
                 Generate AI feedback
               </li>
-              <li className={`flex items-center gap-2 ${submission.instructor_feedback ? 'text-[#065F46]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${submission.instructor_feedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#B8D4E8] text-[#666666]'}`}>2</span>
+              <li className={`flex items-center gap-2 ${submission.instructor_feedback ? 'text-[#22438E]' : ''}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${submission.instructor_feedback ? 'bg-[#E1F0FF] text-[#22438E]' : 'bg-[#B8D4E8] text-[#666666]'}`}>2</span>
                 Review and edit feedback
               </li>
-              <li className={`flex items-center gap-2 ${isSent ? 'text-[#065F46]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSent ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#B8D4E8] text-[#666666]'}`}>3</span>
+              <li className={`flex items-center gap-2 ${isSent ? 'text-[#22438E]' : ''}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSent ? 'bg-[#E1F0FF] text-[#22438E]' : 'bg-[#B8D4E8] text-[#666666]'}`}>3</span>
                 Send feedback to student via email
               </li>
             </ol>
