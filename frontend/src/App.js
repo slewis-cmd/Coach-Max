@@ -14,6 +14,7 @@ import Submissions from "./pages/Submissions";
 import SubmissionDetail from "./pages/SubmissionDetail";
 import ProgressTracking from "./pages/ProgressTracking";
 import MaterialLibrary from "./pages/MaterialLibrary";
+import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
 import InvitePage from "./pages/InvitePage";
 
@@ -124,6 +125,11 @@ const AppRouter = () => {
       <Route path="/library" element={
         <ProtectedRoute>
           <MaterialLibrary />
+        </ProtectedRoute>
+      } />
+      <Route path="/thinkific" element={
+        <ProtectedRoute>
+          <ThinkificSync />
         </ProtectedRoute>
       } />
       <Route path="/admin" element={

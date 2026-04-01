@@ -32,7 +32,8 @@ import {
   Shield,
   Download,
   Bell,
-  Library
+  Library,
+  Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -202,6 +203,14 @@ export default function InstructorDashboard() {
           >
             <Library className="w-5 h-5" />
             Library
+          </Link>
+          <Link 
+            to="/thinkific"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
+            data-testid="thinkific-link"
+          >
+            <Link2 className="w-5 h-5" />
+            Thinkific
           </Link>
           {isSuperAdmin && (
             <Link 

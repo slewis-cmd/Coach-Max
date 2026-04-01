@@ -49,6 +49,8 @@ resend.api_key = os.environ.get("RESEND_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").lower().strip()
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL", "").lower().strip()
+THINKIFIC_API_KEY = os.environ.get("THINKIFIC_API_KEY", "")
+THINKIFIC_SUBDOMAIN = os.environ.get("THINKIFIC_SUBDOMAIN", "")
 
 # ==================== EMAIL HELPER ====================
 
@@ -2387,7 +2389,320 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-# Include the router
+# Include the router (AFTER all route definitions)
+# app.include_router moved to end of file
+
+# ==================== THINKIFIC INTEGRATION ====================
+
+THINKIFIC_BASE_URL = f"https://api.thinkific.com/api/public/v1"
+THINKIFIC_HEADERS = {
+    "X-Auth-API-Key": THINKIFIC_API_KEY,
+    "X-Auth-Subdomain": THINKIFIC_SUBDOMAIN,
+    "Content-Type": "application/json"
+}
+
+async def thinkific_get(path: str, params: dict = None) -> dict:
+    """Make GET request to Thinkific API"""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{THINKIFIC_BASE_URL}{path}",
+            headers=THINKIFIC_HEADERS,
+            params=params,
+            timeout=30
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+@api_router.get("/thinkific/courses")
+async def get_thinkific_courses(user: dict = Depends(require_instructor)):
+    """List all courses from Thinkific"""
+    if not THINKIFIC_API_KEY:
+        raise HTTPException(status_code=400, detail="Thinkific API not configured")
+    data = await thinkific_get("/courses", {"limit": 50})
+    courses = []
+    for c in data.get("items", []):
+        courses.append({
+            "id": c["id"],
+            "name": c["name"],
+            "slug": c.get("slug"),
+            "description": c.get("description", ""),
+            "chapter_ids": c.get("chapter_ids", []),
+            "image_url": c.get("course_card_image_url", "")
+        })
+    return courses
+
+@api_router.get("/thinkific/courses/{course_id}/chapters")
+async def get_thinkific_chapters(course_id: int, user: dict = Depends(require_instructor)):
+    """List chapters (weeks) for a Thinkific course"""
+    if not THINKIFIC_API_KEY:
+        raise HTTPException(status_code=400, detail="Thinkific API not configured")
+    data = await thinkific_get(f"/courses/{course_id}/chapters")
+    chapters = []
+    for ch in data.get("items", []):
+        chapters.append({
+            "id": ch["id"],
+            "name": ch["name"],
+            "position": ch.get("position"),
+            "content_ids": ch.get("content_ids", [])
+        })
+    return chapters
+
+@api_router.get("/thinkific/enrollments")
+async def get_thinkific_enrollments(course_id: int = None, user: dict = Depends(require_instructor)):
+    """List enrollments from Thinkific, optionally filtered by course"""
+    if not THINKIFIC_API_KEY:
+        raise HTTPException(status_code=400, detail="Thinkific API not configured")
+    params = {"limit": 100}
+    if course_id:
+        params["course_id"] = course_id
+    data = await thinkific_get("/enrollments", params)
+    enrollments = []
+    for e in data.get("items", []):
+        enrollments.append({
+            "id": e["id"],
+            "user_id": e.get("user_id"),
+            "user_name": e.get("user_name"),
+            "user_email": e.get("user_email"),
+            "course_id": e.get("course_id"),
+            "course_name": e.get("course_name"),
+            "percentage_completed": e.get("percentage_completed", 0),
+            "completed": e.get("completed", False),
+            "started_at": e.get("started_at"),
+            "completed_at": e.get("completed_at")
+        })
+    return enrollments
+
+@api_router.post("/thinkific/sync-students/{cohort_id}")
+async def sync_thinkific_students(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Sync Thinkific course enrollments to a Coach Max cohort"""
+    if not THINKIFIC_API_KEY:
+        raise HTTPException(status_code=400, detail="Thinkific API not configured")
+    
+    data = await request.json()
+    course_id = data.get("course_id")
+    if not course_id:
+        raise HTTPException(status_code=400, detail="course_id required")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    if not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Save the Thinkific course mapping
+    await db.cohorts.update_one(
+        {"cohort_id": cohort_id},
+        {"$set": {"thinkific_course_id": course_id}}
+    )
+    
+    # Get all enrollments for this course
+    all_enrollments = []
+    page = 1
+    while True:
+        enroll_data = await thinkific_get("/enrollments", {"course_id": course_id, "limit": 100, "page": page})
+        items = enroll_data.get("items", [])
+        all_enrollments.extend(items)
+        if len(items) < 100:
+            break
+        page += 1
+    
+    synced = 0
+    created = 0
+    
+    for enrollment in all_enrollments:
+        email = enrollment.get("user_email", "").lower().strip()
+        if not email:
+            continue
+        
+        # Find or create user in Coach Max
+        existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+        if existing_user:
+            user_id = existing_user["user_id"]
+        else:
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            new_user = {
+                "user_id": user_id,
+                "email": email,
+                "name": enrollment.get("user_name", email.split("@")[0]),
+                "role": "student",
+                "picture": "",
+                "thinkific_user_id": enrollment.get("user_id")
+            }
+            await db.users.insert_one(new_user)
+            created += 1
+        
+        # Store Thinkific user ID mapping
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"thinkific_user_id": enrollment.get("user_id")}}
+        )
+        
+        # Add to cohort if not already a member
+        if user_id not in cohort.get("student_ids", []):
+            await db.cohorts.update_one(
+                {"cohort_id": cohort_id},
+                {"$addToSet": {"student_ids": user_id}}
+            )
+            synced += 1
+        
+        # Store enrollment progress
+        await db.thinkific_progress.update_one(
+            {"cohort_id": cohort_id, "user_id": user_id, "thinkific_course_id": course_id},
+            {"$set": {
+                "thinkific_enrollment_id": enrollment.get("id"),
+                "percentage_completed": enrollment.get("percentage_completed", 0),
+                "completed": enrollment.get("completed", False),
+                "started_at": enrollment.get("started_at"),
+                "completed_at": enrollment.get("completed_at"),
+                "synced_at": datetime.now(timezone.utc).isoformat()
+            }},
+            upsert=True
+        )
+    
+    return {
+        "message": f"Synced {synced} new students, created {created} new accounts. {len(all_enrollments)} total enrollments found.",
+        "total_enrollments": len(all_enrollments),
+        "new_students_added": synced,
+        "new_accounts_created": created
+    }
+
+@api_router.get("/thinkific/progress/{cohort_id}")
+async def get_thinkific_progress(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Get Thinkific progress for students in a cohort"""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    if not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    progress = await db.thinkific_progress.find(
+        {"cohort_id": cohort_id},
+        {"_id": 0}
+    ).to_list(500)
+    
+    # Enrich with user names
+    user_ids = list(set(p["user_id"] for p in progress))
+    users = await db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1}
+    ).to_list(500)
+    user_map = {u["user_id"]: u for u in users}
+    
+    for p in progress:
+        u = user_map.get(p["user_id"], {})
+        p["student_name"] = u.get("name", "Unknown")
+        p["student_email"] = u.get("email", "")
+    
+    return progress
+
+@api_router.post("/thinkific/refresh-progress/{cohort_id}")
+async def refresh_thinkific_progress(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Refresh Thinkific progress for a cohort by re-fetching enrollments"""
+    if not THINKIFIC_API_KEY:
+        raise HTTPException(status_code=400, detail="Thinkific API not configured")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    if not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    course_id = cohort.get("thinkific_course_id")
+    if not course_id:
+        raise HTTPException(status_code=400, detail="No Thinkific course linked to this cohort")
+    
+    # Get all enrollments for the linked course
+    all_enrollments = []
+    page = 1
+    while True:
+        enroll_data = await thinkific_get("/enrollments", {"course_id": course_id, "limit": 100, "page": page})
+        items = enroll_data.get("items", [])
+        all_enrollments.extend(items)
+        if len(items) < 100:
+            break
+        page += 1
+    
+    updated = 0
+    for enrollment in all_enrollments:
+        email = enrollment.get("user_email", "").lower().strip()
+        existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+        if not existing_user:
+            continue
+        
+        await db.thinkific_progress.update_one(
+            {"cohort_id": cohort_id, "user_id": existing_user["user_id"], "thinkific_course_id": course_id},
+            {"$set": {
+                "percentage_completed": enrollment.get("percentage_completed", 0),
+                "completed": enrollment.get("completed", False),
+                "started_at": enrollment.get("started_at"),
+                "completed_at": enrollment.get("completed_at"),
+                "synced_at": datetime.now(timezone.utc).isoformat()
+            }},
+            upsert=True
+        )
+        updated += 1
+    
+    return {"message": f"Refreshed progress for {updated} students", "updated": updated}
+
+@api_router.post("/webhooks/thinkific")
+async def thinkific_webhook(request: Request):
+    """Receive webhooks from Thinkific (lesson completed, enrollment progress)"""
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    
+    resource = payload.get("resource")
+    action = payload.get("action")
+    data = payload.get("payload", {})
+    
+    logger.info(f"Thinkific webhook: {resource}.{action}")
+    
+    if resource == "enrollment" and action == "progress":
+        course_id = data.get("course_id")
+        user_email = data.get("user_email", "").lower().strip()
+        percentage = data.get("percentage_completed", 0)
+        
+        if course_id and user_email:
+            existing_user = await db.users.find_one({"email": user_email}, {"_id": 0})
+            if existing_user:
+                cohort = await db.cohorts.find_one(
+                    {"thinkific_course_id": course_id, "student_ids": existing_user["user_id"]},
+                    {"_id": 0}
+                )
+                if cohort:
+                    await db.thinkific_progress.update_one(
+                        {"cohort_id": cohort["cohort_id"], "user_id": existing_user["user_id"], "thinkific_course_id": course_id},
+                        {"$set": {
+                            "percentage_completed": percentage,
+                            "completed": data.get("completed", False),
+                            "synced_at": datetime.now(timezone.utc).isoformat()
+                        }},
+                        upsert=True
+                    )
+    
+    elif resource == "lesson" and action == "completed":
+        user_email = data.get("user_email", "").lower().strip()
+        course_id = data.get("course_id")
+        lesson_name = data.get("lesson_name", "")
+        chapter_name = data.get("chapter_name", "")
+        
+        if user_email and course_id:
+            existing_user = await db.users.find_one({"email": user_email}, {"_id": 0})
+            if existing_user:
+                await db.thinkific_events.insert_one({
+                    "event_type": "lesson_completed",
+                    "user_id": existing_user["user_id"],
+                    "user_email": user_email,
+                    "course_id": course_id,
+                    "lesson_name": lesson_name,
+                    "chapter_name": chapter_name,
+                    "received_at": datetime.now(timezone.utc).isoformat()
+                })
+    
+    return {"status": "ok"}
+
+# Include the router AFTER all routes are defined
 app.include_router(api_router)
 
 app.add_middleware(
