@@ -151,53 +151,53 @@ export default function InstructorDashboard() {
 
   if (loading || loadingData) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="instructor-dashboard">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="instructor-dashboard">
       {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#F2F0ED] border-r border-[#E5E5E5] p-6 hidden md:block">
+      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#D0E6F9] border-r border-[#B8D4E8] p-6 hidden md:block">
         <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
             <BookOpen className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-[#1A1A1A]">ThinkificAI</span>
+          <span className="font-semibold text-[#000000]">ThinkificAI</span>
         </div>
 
         <nav className="space-y-2">
           <Link 
             to="/dashboard"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-[#1A1A1A] font-medium"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-[#000000] font-medium"
           >
             <FileText className="w-5 h-5" />
             Dashboard
           </Link>
           <Link 
             to="/submissions"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
           >
             <ClipboardList className="w-5 h-5" />
             Submissions
             {totalActionRequired > 0 && (
-              <span className="ml-auto bg-[#FDE047] text-[#1A1A1A] text-xs px-2 py-0.5 rounded-full">
+              <span className="ml-auto bg-[#22438E] text-white text-xs px-2 py-0.5 rounded-full">
                 {totalActionRequired}
               </span>
             )}
           </Link>
           <Link 
             to="/progress"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
           >
             <BarChart3 className="w-5 h-5" />
             Progress
           </Link>
           <Link 
             to="/library"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
             data-testid="library-link"
           >
             <Library className="w-5 h-5" />
@@ -206,7 +206,7 @@ export default function InstructorDashboard() {
           {isSuperAdmin && (
             <Link 
               to="/admin"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#5A5A5A] hover:bg-white hover:text-[#1A1A1A] transition-colors"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
               data-testid="admin-link"
             >
               <Shield className="w-5 h-5" />
@@ -221,13 +221,13 @@ export default function InstructorDashboard() {
               <img src={user.picture} alt={user.name} className="w-10 h-10 rounded-full" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#1A1A1A] truncate">{user?.name}</p>
-              <p className="text-xs text-[#888] truncate">{user?.email}</p>
+              <p className="text-sm font-medium text-[#000000] truncate">{user?.name}</p>
+              <p className="text-xs text-[#666666] truncate">{user?.email}</p>
             </div>
           </div>
           <Button 
             variant="ghost" 
-            className="w-full justify-start text-[#5A5A5A] hover:text-[#1A1A1A]"
+            className="w-full justify-start text-[#333333] hover:text-[#000000]"
             onClick={handleLogout}
             data-testid="logout-btn"
           >
@@ -242,7 +242,7 @@ export default function InstructorDashboard() {
         {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-white" />
             </div>
             <span className="font-semibold">ThinkificAI</span>
@@ -250,10 +250,10 @@ export default function InstructorDashboard() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate('/submissions')}
-              className="relative flex items-center justify-center w-9 h-9 rounded-full bg-white border border-[#E5E5E5]"
+              className="relative flex items-center justify-center w-9 h-9 rounded-full bg-white border border-[#B8D4E8]"
               data-testid="notification-bell-mobile"
             >
-              <Bell className="w-4 h-4 text-[#5A5A5A]" />
+              <Bell className="w-4 h-4 text-[#333333]" />
               {totalActionRequired > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-[#DC2626] text-white text-[10px] font-semibold rounded-full px-0.5">
                   {totalActionRequired}
@@ -269,19 +269,19 @@ export default function InstructorDashboard() {
         {/* Header */}
         <div className="mb-8 animate-fade-in flex items-start justify-between">
           <div>
-            <h1 className="text-3xl md:text-4xl font-light tracking-tight text-[#1A1A1A] mb-2">
+            <h1 className="text-3xl md:text-4xl font-light tracking-tight text-[#000000] mb-2">
               Welcome back, {user?.name?.split(' ')[0]}
             </h1>
-            <p className="text-[#5A5A5A]">
+            <p className="text-[#333333]">
               Manage your cohorts and review student submissions
             </p>
           </div>
           <button
             onClick={() => navigate('/submissions')}
-            className="relative hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white border border-[#E5E5E5] hover:bg-[#F2F0ED] transition-colors"
+            className="relative hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white border border-[#B8D4E8] hover:bg-[#D0E6F9] transition-colors"
             data-testid="notification-bell"
           >
-            <Bell className="w-5 h-5 text-[#5A5A5A]" />
+            <Bell className="w-5 h-5 text-[#333333]" />
             {totalActionRequired > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center bg-[#DC2626] text-white text-[11px] font-semibold rounded-full px-1"
                 data-testid="notification-badge-count">
@@ -293,14 +293,14 @@ export default function InstructorDashboard() {
 
         {/* Action Required Alert */}
         {totalActionRequired > 0 && (
-          <Card className="bg-[#FEF3C7] border-[#FDE047] mb-6 animate-fade-in">
+          <Card className="bg-[#FEF3C7] border-[#7CBAE6] mb-6 animate-fade-in">
             <CardContent className="p-4">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-[#FDE047] rounded-full flex items-center justify-center">
-                  <AlertCircle className="w-5 h-5 text-[#854D0E]" />
+                <div className="w-10 h-10 bg-[#7CBAE6] rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-[#1A75BA]" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-[#854D0E]">Action Required</p>
+                  <p className="font-medium text-[#1A75BA]">Action Required</p>
                   <p className="text-sm text-[#92400E]">
                     {pendingSubmissions.length > 0 && `${pendingSubmissions.length} submission${pendingSubmissions.length > 1 ? 's' : ''} need AI review`}
                     {pendingSubmissions.length > 0 && draftSubmissions.length > 0 && ' • '}
@@ -309,7 +309,7 @@ export default function InstructorDashboard() {
                 </div>
                 <Button 
                   onClick={() => navigate('/submissions')}
-                  className="bg-[#854D0E] text-white hover:bg-[#713F12]"
+                  className="bg-[#1A75BA] text-white hover:bg-[#713F12]"
                 >
                   Review Now
                 </Button>
@@ -320,36 +320,36 @@ export default function InstructorDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8 stagger-children">
-          <Card className="bg-white border-[#E5E5E5]">
+          <Card className="bg-white border-[#B8D4E8]">
             <CardContent className="p-4">
-              <p className="text-sm text-[#888] mb-1">Cohorts</p>
-              <p className="text-2xl font-light text-[#1A1A1A]">{analytics?.cohorts || cohorts.length}</p>
+              <p className="text-sm text-[#666666] mb-1">Cohorts</p>
+              <p className="text-2xl font-light text-[#000000]">{analytics?.cohorts || cohorts.length}</p>
             </CardContent>
           </Card>
-          <Card className="bg-white border-[#E5E5E5]">
+          <Card className="bg-white border-[#B8D4E8]">
             <CardContent className="p-4">
-              <p className="text-sm text-[#888] mb-1">Students</p>
-              <p className="text-2xl font-light text-[#1A1A1A]">
+              <p className="text-sm text-[#666666] mb-1">Students</p>
+              <p className="text-2xl font-light text-[#000000]">
                 {analytics?.total_students || cohorts.reduce((acc, c) => acc + (c.student_ids?.length || 0), 0)}
               </p>
             </CardContent>
           </Card>
-          <Card className="bg-[#FEF9C3] border-[#FDE047]">
+          <Card className="bg-[#FEF9C3] border-[#7CBAE6]">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-[#854D0E]" />
-                <p className="text-sm text-[#854D0E]">Needs Review</p>
+                <Upload className="w-4 h-4 text-[#1A75BA]" />
+                <p className="text-sm text-[#1A75BA]">Needs Review</p>
               </div>
-              <p className="text-2xl font-light text-[#854D0E]">{analytics?.submissions?.pending || pendingSubmissions.length}</p>
+              <p className="text-2xl font-light text-[#1A75BA]">{analytics?.submissions?.pending || pendingSubmissions.length}</p>
             </CardContent>
           </Card>
-          <Card className="bg-[#E0F2FE] border-[#BAE6FD]">
+          <Card className="bg-[#E1F0FF] border-[#BAE6FD]">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <FileEdit className="w-4 h-4 text-[#075985]" />
-                <p className="text-sm text-[#075985]">Drafts to Send</p>
+                <FileEdit className="w-4 h-4 text-[#22438E]" />
+                <p className="text-sm text-[#22438E]">Drafts to Send</p>
               </div>
-              <p className="text-2xl font-light text-[#075985]">{analytics?.submissions?.draft || draftSubmissions.length}</p>
+              <p className="text-2xl font-light text-[#22438E]">{analytics?.submissions?.draft || draftSubmissions.length}</p>
             </CardContent>
           </Card>
           <Card className="bg-[#D1FAE5] border-[#BBF7D0]">
@@ -367,7 +367,7 @@ export default function InstructorDashboard() {
 
         {/* Weekly Activity */}
         {analytics?.recent_activity && (
-          <Card className="bg-white border-[#E5E5E5] mb-8">
+          <Card className="bg-white border-[#B8D4E8] mb-8">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-normal flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-[#065F46]" />
@@ -375,8 +375,8 @@ export default function InstructorDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-light text-[#1A1A1A]">{analytics.recent_activity.submissions_this_week}</p>
-              <p className="text-sm text-[#888]">new submissions received</p>
+              <p className="text-3xl font-light text-[#000000]">{analytics.recent_activity.submissions_this_week}</p>
+              <p className="text-sm text-[#666666]">new submissions received</p>
             </CardContent>
           </Card>
         )}
@@ -384,11 +384,11 @@ export default function InstructorDashboard() {
         {/* Cohorts Section */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-light text-[#1A1A1A]">Your Cohorts</h2>
+            <h2 className="text-2xl font-light text-[#000000]">Your Cohorts</h2>
             <Button 
               data-testid="create-cohort-btn"
               onClick={() => setShowCreateCohort(true)}
-              className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
             >
               <Plus className="w-4 h-4 mr-2" />
               New Cohort
@@ -396,14 +396,14 @@ export default function InstructorDashboard() {
           </div>
 
           {cohorts.length === 0 ? (
-            <Card className="bg-white border-[#E5E5E5] border-dashed">
+            <Card className="bg-white border-[#B8D4E8] border-dashed">
               <CardContent className="p-12 text-center">
-                <Users className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No cohorts yet</h3>
-                <p className="text-[#5A5A5A] mb-4">Create your first cohort to get started</p>
+                <Users className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-[#000000] mb-2">No cohorts yet</h3>
+                <p className="text-[#333333] mb-4">Create your first cohort to get started</p>
                 <Button 
                   onClick={() => setShowCreateCohort(true)}
-                  className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+                  className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                 >
                   Create Cohort
                 </Button>
@@ -414,7 +414,7 @@ export default function InstructorDashboard() {
               {cohorts.map((cohort, index) => (
                 <Card 
                   key={cohort.cohort_id}
-                  className="bg-white border-[#E5E5E5] hover:shadow-md transition-shadow cursor-pointer group"
+                  className="bg-white border-[#B8D4E8] hover:shadow-md transition-shadow cursor-pointer group"
                   onClick={() => navigate(`/cohort/${cohort.cohort_id}`)}
                   style={{ animationDelay: `${index * 0.1}s` }}
                   data-testid={`cohort-card-${cohort.cohort_id}`}
@@ -422,12 +422,12 @@ export default function InstructorDashboard() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg font-normal flex items-center justify-between">
                       {cohort.name}
-                      <ChevronRight className="w-5 h-5 text-[#C4C4C4] group-hover:text-[#1A1A1A] transition-colors" />
+                      <ChevronRight className="w-5 h-5 text-[#94B8D9] group-hover:text-[#000000] transition-colors" />
                     </CardTitle>
                     <CardDescription>{cohort.description || 'No description'}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center gap-4 text-sm text-[#5A5A5A]">
+                    <div className="flex items-center gap-4 text-sm text-[#333333]">
                       <span className="flex items-center gap-1">
                         <Users className="w-4 h-4" />
                         {cohort.student_ids?.length || 0} students
@@ -451,10 +451,10 @@ export default function InstructorDashboard() {
         {(pendingSubmissions.length > 0 || draftSubmissions.length > 0) && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-light text-[#1A1A1A]">Action Required</h2>
+              <h2 className="text-2xl font-light text-[#000000]">Action Required</h2>
               <Link 
                 to="/submissions"
-                className="text-sm text-[#5A5A5A] hover:text-[#1A1A1A] flex items-center gap-1"
+                className="text-sm text-[#333333] hover:text-[#000000] flex items-center gap-1"
               >
                 View all <ChevronRight className="w-4 h-4" />
               </Link>
@@ -470,12 +470,12 @@ export default function InstructorDashboard() {
                 >
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#E0F2FE] rounded-lg flex items-center justify-center">
-                        <FileEdit className="w-5 h-5 text-[#075985]" />
+                      <div className="w-10 h-10 bg-[#E1F0FF] rounded-lg flex items-center justify-center">
+                        <FileEdit className="w-5 h-5 text-[#22438E]" />
                       </div>
                       <div>
-                        <p className="font-medium text-[#1A1A1A]">{sub.student?.name || 'Unknown'}</p>
-                        <p className="text-sm text-[#888]">
+                        <p className="font-medium text-[#000000]">{sub.student?.name || 'Unknown'}</p>
+                        <p className="text-sm text-[#666666]">
                           {sub.material?.title || 'Homework'} • Ready to send
                         </p>
                       </div>
@@ -489,7 +489,7 @@ export default function InstructorDashboard() {
                             sub.file_name || 'homework'
                           );
                         }}
-                        className="inline-flex items-center gap-1 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] border border-[#E5E5E5] rounded-lg px-2.5 py-1.5"
+                        className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
                         data-testid={`download-draft-${sub.submission_id}`}
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -506,18 +506,18 @@ export default function InstructorDashboard() {
               {pendingSubmissions.slice(0, 3).map((sub) => (
                 <Card 
                   key={sub.submission_id}
-                  className="bg-white border-[#E5E5E5] hover:shadow-sm transition-shadow cursor-pointer"
+                  className="bg-white border-[#B8D4E8] hover:shadow-sm transition-shadow cursor-pointer"
                   onClick={() => navigate(`/submission/${sub.submission_id}`)}
                   data-testid={`submission-${sub.submission_id}`}
                 >
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#FDE047] rounded-lg flex items-center justify-center">
-                        <Upload className="w-5 h-5 text-[#1A1A1A]" />
+                      <div className="w-10 h-10 bg-[#7CBAE6] rounded-lg flex items-center justify-center">
+                        <Upload className="w-5 h-5 text-[#000000]" />
                       </div>
                       <div>
-                        <p className="font-medium text-[#1A1A1A]">{sub.student?.name || 'Unknown'}</p>
-                        <p className="text-sm text-[#888]">
+                        <p className="font-medium text-[#000000]">{sub.student?.name || 'Unknown'}</p>
+                        <p className="text-sm text-[#666666]">
                           {sub.material?.title || 'Homework'} • Week {sub.material?.week_number || '?'}
                         </p>
                       </div>
@@ -531,13 +531,13 @@ export default function InstructorDashboard() {
                             sub.file_name || 'homework'
                           );
                         }}
-                        className="inline-flex items-center gap-1 text-xs text-[#5A5A5A] hover:text-[#1A1A1A] border border-[#E5E5E5] rounded-lg px-2.5 py-1.5"
+                        className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
                         data-testid={`download-pending-${sub.submission_id}`}
                       >
                         <Download className="w-3.5 h-3.5" />
                         Homework
                       </button>
-                      <Button size="sm" className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
+                      <Button size="sm" className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
                         Generate Review
                       </Button>
                     </div>
@@ -591,7 +591,7 @@ export default function InstructorDashboard() {
               data-testid="create-cohort-submit"
               onClick={handleCreateCohort}
               disabled={creating}
-              className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {creating ? 'Creating...' : 'Create Cohort'}
             </Button>

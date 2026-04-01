@@ -58,7 +58,7 @@ function StudentWeekRow({ week }) {
 
   const statusColor = {
     sent: 'bg-[#D1FAE5] text-[#065F46]',
-    draft: 'bg-[#F3E8FF] text-[#6B21A8]',
+    draft: 'bg-[#E1F0FF] text-[#6B21A8]',
     pending: 'bg-[#DBEAFE] text-[#1E40AF]',
     not_submitted: 'bg-[#F3F4F6] text-[#6B7280]',
   };
@@ -72,31 +72,31 @@ function StudentWeekRow({ week }) {
   const feedback = week.instructor_feedback || week.ai_feedback;
 
   return (
-    <div className="border border-[#E5E5E5] rounded-lg overflow-hidden">
+    <div className="border border-[#B8D4E8] rounded-lg overflow-hidden">
       <div
-        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#F9F8F6] transition-colors"
+        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#E1F0FF] transition-colors"
         onClick={() => setExpanded(!expanded)}
         data-testid={`week-row-${week.week_number}-${week.studentId}`}
       >
         <div className="w-16 flex-shrink-0">
-          <span className="text-xs font-medium text-[#5A5A5A]">Week {week.week_number}</span>
+          <span className="text-xs font-medium text-[#333333]">Week {week.week_number}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-[#1A1A1A] truncate">{week.homework_title || `Week ${week.week_number} Homework`}</p>
+          <p className="text-sm text-[#000000] truncate">{week.homework_title || `Week ${week.week_number} Homework`}</p>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${statusColor[week.status] || statusColor.not_submitted}`}>
           {statusLabel[week.status] || week.status}
         </span>
-        {expanded ? <ChevronUp className="w-4 h-4 text-[#888]" /> : <ChevronDown className="w-4 h-4 text-[#888]" />}
+        {expanded ? <ChevronUp className="w-4 h-4 text-[#666666]" /> : <ChevronDown className="w-4 h-4 text-[#666666]" />}
       </div>
 
       {expanded && (
-        <div className="border-t border-[#E5E5E5] px-3 py-3 bg-[#FAFAF9] space-y-3" data-testid={`week-detail-${week.week_number}-${week.studentId}`}>
+        <div className="border-t border-[#B8D4E8] px-3 py-3 bg-[#FAFAF9] space-y-3" data-testid={`week-detail-${week.week_number}-${week.studentId}`}>
           {/* Submitted File */}
           {week.submission_id ? (
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-[#5A5A5A] flex-shrink-0" />
-              <span className="text-sm text-[#1A1A1A] truncate flex-1">{week.file_name}</span>
+              <FileText className="w-4 h-4 text-[#333333] flex-shrink-0" />
+              <span className="text-sm text-[#000000] truncate flex-1">{week.file_name}</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -113,7 +113,7 @@ function StudentWeekRow({ week }) {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[#888]">
+            <div className="flex items-center gap-2 text-[#666666]">
               <AlertCircle className="w-4 h-4" />
               <span className="text-sm">No homework submitted yet</span>
             </div>
@@ -121,7 +121,7 @@ function StudentWeekRow({ week }) {
 
           {/* AI / Instructor Feedback */}
           {feedback ? (
-            <div className="bg-white border border-[#E5E5E5] rounded-lg p-3">
+            <div className="bg-white border border-[#B8D4E8] rounded-lg p-3">
               <div className="flex items-center gap-1.5 mb-2">
                 <MessageSquare className="w-3.5 h-3.5 text-[#065F46]" />
                 <span className="text-xs font-medium text-[#065F46]">
@@ -131,7 +131,7 @@ function StudentWeekRow({ week }) {
               <p className="text-sm text-[#374151] whitespace-pre-wrap leading-relaxed">{feedback}</p>
             </div>
           ) : week.submission_id ? (
-            <div className="flex items-center gap-2 text-[#888]">
+            <div className="flex items-center gap-2 text-[#666666]">
               <Clock className="w-4 h-4" />
               <span className="text-sm">Awaiting AI review</span>
             </div>
@@ -198,27 +198,27 @@ export default function ProgressTracking() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="progress-tracking">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="progress-tracking">
       {/* Header */}
-      <header className="bg-white border-b border-[#E5E5E5] sticky top-0 z-10">
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
               to="/dashboard"
-              className="p-2 hover:bg-[#F2F0ED] rounded-lg transition-colors"
+              className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-[#5A5A5A]" />
+              <ArrowLeft className="w-5 h-5 text-[#333333]" />
             </Link>
             <div>
-              <h1 className="text-lg font-medium text-[#1A1A1A]">Progress Tracking</h1>
-              <p className="text-sm text-[#888]">Monitor student engagement and completion</p>
+              <h1 className="text-lg font-medium text-[#000000]">Progress Tracking</h1>
+              <p className="text-sm text-[#666666]">Monitor student engagement and completion</p>
             </div>
           </div>
           
@@ -241,11 +241,11 @@ export default function ProgressTracking() {
 
       <main className="max-w-7xl mx-auto px-6 md:px-12 py-8">
         {!analytics ? (
-          <Card className="bg-white border-[#E5E5E5] border-dashed">
+          <Card className="bg-white border-[#B8D4E8] border-dashed">
             <CardContent className="p-12 text-center">
-              <BarChart3 className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No data available</h3>
-              <p className="text-[#5A5A5A]">
+              <BarChart3 className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-[#000000] mb-2">No data available</h3>
+              <p className="text-[#333333]">
                 {cohorts.length === 0 
                   ? 'Create a cohort and add students to see progress'
                   : 'Select a cohort to view progress'}
@@ -256,29 +256,29 @@ export default function ProgressTracking() {
           <>
             {/* Overview Stats */}
             <div className="grid md:grid-cols-4 gap-4 mb-8">
-              <Card className="bg-white border-[#E5E5E5]">
+              <Card className="bg-white border-[#B8D4E8]">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4 text-[#888]" />
-                    <p className="text-sm text-[#888]">Students</p>
+                    <Users className="w-4 h-4 text-[#666666]" />
+                    <p className="text-sm text-[#666666]">Students</p>
                   </div>
-                  <p className="text-3xl font-light text-[#1A1A1A]">{analytics.cohort.total_students}</p>
+                  <p className="text-3xl font-light text-[#000000]">{analytics.cohort.total_students}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white border-[#E5E5E5]">
+              <Card className="bg-white border-[#B8D4E8]">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <BookOpen className="w-4 h-4 text-[#888]" />
-                    <p className="text-sm text-[#888]">Assignments</p>
+                    <BookOpen className="w-4 h-4 text-[#666666]" />
+                    <p className="text-sm text-[#666666]">Assignments</p>
                   </div>
-                  <p className="text-3xl font-light text-[#1A1A1A]">{analytics.cohort.total_homework}</p>
+                  <p className="text-3xl font-light text-[#000000]">{analytics.cohort.total_homework}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white border-[#E5E5E5]">
+              <Card className="bg-white border-[#B8D4E8]">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle className="w-4 h-4 text-[#065F46]" />
-                    <p className="text-sm text-[#888]">Completed</p>
+                    <p className="text-sm text-[#666666]">Completed</p>
                   </div>
                   <p className="text-3xl font-light text-[#065F46]">{analytics.overview.completed_reviews}</p>
                 </CardContent>
@@ -296,7 +296,7 @@ export default function ProgressTracking() {
 
             {/* Weekly Progress */}
             {analytics.weekly_progress?.length > 0 && (
-              <Card className="bg-white border-[#E5E5E5] mb-8">
+              <Card className="bg-white border-[#B8D4E8] mb-8">
                 <CardHeader>
                   <CardTitle className="text-lg font-normal">Weekly Progress</CardTitle>
                   <CardDescription>Submissions and reviews by week</CardDescription>
@@ -310,18 +310,18 @@ export default function ProgressTracking() {
                       return (
                         <div key={week.week} className="flex items-center gap-4">
                           <div className="w-20 flex-shrink-0">
-                            <p className="text-sm font-medium text-[#1A1A1A]">Week {week.week}</p>
-                            <p className="text-xs text-[#888]">{week.assignments} assignment{week.assignments !== 1 ? 's' : ''}</p>
+                            <p className="text-sm font-medium text-[#000000]">Week {week.week}</p>
+                            <p className="text-xs text-[#666666]">{week.assignments} assignment{week.assignments !== 1 ? 's' : ''}</p>
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-[#888]">{week.submitted} submitted</span>
+                              <span className="text-xs text-[#666666]">{week.submitted} submitted</span>
                               <span className="text-xs text-[#065F46]">{week.reviewed} reviewed</span>
                             </div>
                             <Progress value={completionRate} className="h-2" />
                           </div>
                           <div className="w-16 text-right">
-                            <span className="text-sm font-medium text-[#1A1A1A]">{completionRate}%</span>
+                            <span className="text-sm font-medium text-[#000000]">{completionRate}%</span>
                           </div>
                         </div>
                       );
@@ -332,7 +332,7 @@ export default function ProgressTracking() {
             )}
 
             {/* Student Progress */}
-            <Card className="bg-white border-[#E5E5E5]">
+            <Card className="bg-white border-[#B8D4E8]">
               <CardHeader>
                 <CardTitle className="text-lg font-normal">Student Progress</CardTitle>
                 <CardDescription>Click a student to see their weekly submissions and feedback</CardDescription>
@@ -340,40 +340,40 @@ export default function ProgressTracking() {
               <CardContent>
                 {analytics.student_progress?.length === 0 ? (
                   <div className="text-center py-8">
-                    <Users className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                    <p className="text-[#888]">No students in this cohort</p>
+                    <Users className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                    <p className="text-[#666666]">No students in this cohort</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {analytics.student_progress.map((student, index) => {
                       const isExpanded = expandedStudents[student.user_id];
                       return (
-                        <div key={student.user_id} className="border border-[#E5E5E5] rounded-xl overflow-hidden" data-testid={`student-row-${student.user_id}`}>
+                        <div key={student.user_id} className="border border-[#B8D4E8] rounded-xl overflow-hidden" data-testid={`student-row-${student.user_id}`}>
                           {/* Student Summary Row */}
                           <div
-                            className="flex items-center gap-4 p-3 cursor-pointer hover:bg-[#F9F8F6] transition-colors"
+                            className="flex items-center gap-4 p-3 cursor-pointer hover:bg-[#E1F0FF] transition-colors"
                             onClick={() => toggleStudent(student.user_id)}
                           >
-                            <div className="w-6 text-center text-sm text-[#888]">
+                            <div className="w-6 text-center text-sm text-[#666666]">
                               {index + 1}
                             </div>
                             <div className="w-10 h-10 flex-shrink-0">
                               {student.picture ? (
                                 <img src={student.picture} alt={student.name} className="w-10 h-10 rounded-full" />
                               ) : (
-                                <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center">
-                                  <User className="w-5 h-5 text-[#888]" />
+                                <div className="w-10 h-10 bg-[#D0E6F9] rounded-full flex items-center justify-center">
+                                  <User className="w-5 h-5 text-[#666666]" />
                                 </div>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-[#1A1A1A] truncate">{student.name}</p>
-                              <p className="text-xs text-[#888] truncate">{student.email}</p>
+                              <p className="font-medium text-[#000000] truncate">{student.name}</p>
+                              <p className="text-xs text-[#666666] truncate">{student.email}</p>
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="text-right hidden md:block">
-                                <p className="text-sm text-[#1A1A1A]">{student.submissions} submitted</p>
-                                <p className="text-xs text-[#888]">{student.completed} reviewed</p>
+                                <p className="text-sm text-[#000000]">{student.submissions} submitted</p>
+                                <p className="text-xs text-[#666666]">{student.completed} reviewed</p>
                               </div>
                               <div className="w-24 hidden md:block">
                                 <Progress value={student.completion_rate} className="h-2" />
@@ -381,24 +381,24 @@ export default function ProgressTracking() {
                               <div className="w-14 text-right">
                                 <span className={`text-sm font-medium ${
                                   student.completion_rate >= 80 ? 'text-[#065F46]' :
-                                  student.completion_rate >= 50 ? 'text-[#854D0E]' :
+                                  student.completion_rate >= 50 ? 'text-[#1A75BA]' :
                                   'text-red-600'
                                 }`}>
                                   {student.completion_rate}%
                                 </span>
                               </div>
                               {isExpanded
-                                ? <ChevronUp className="w-4 h-4 text-[#888]" />
-                                : <ChevronDown className="w-4 h-4 text-[#888]" />
+                                ? <ChevronUp className="w-4 h-4 text-[#666666]" />
+                                : <ChevronDown className="w-4 h-4 text-[#666666]" />
                               }
                             </div>
                           </div>
 
                           {/* Expanded Week Details */}
                           {isExpanded && student.week_details && (
-                            <div className="border-t border-[#E5E5E5] px-4 py-3 bg-[#FAFAF9] space-y-2" data-testid={`student-details-${student.user_id}`}>
+                            <div className="border-t border-[#B8D4E8] px-4 py-3 bg-[#FAFAF9] space-y-2" data-testid={`student-details-${student.user_id}`}>
                               {student.week_details.length === 0 ? (
-                                <p className="text-sm text-[#888] text-center py-2">No homework assignments for this cohort</p>
+                                <p className="text-sm text-[#666666] text-center py-2">No homework assignments for this cohort</p>
                               ) : (
                                 student.week_details.map(week => (
                                   <StudentWeekRow

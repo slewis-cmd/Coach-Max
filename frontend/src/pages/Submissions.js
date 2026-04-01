@@ -62,8 +62,8 @@ export default function Submissions() {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -73,21 +73,21 @@ export default function Submissions() {
   const sentSubmissions = submissions.filter(s => s.status === 'sent' || s.feedback_sent);
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="submissions-page">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="submissions-page">
       {/* Header */}
-      <header className="bg-white border-b border-[#E5E5E5] sticky top-0 z-10">
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 md:px-12 h-16 flex items-center gap-4">
           <Link 
             to="/dashboard"
-            className="p-2 hover:bg-[#F2F0ED] rounded-lg transition-colors"
+            className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors"
           >
-            <ArrowLeft className="w-5 h-5 text-[#5A5A5A]" />
+            <ArrowLeft className="w-5 h-5 text-[#333333]" />
           </Link>
           <div>
-            <h1 className="text-lg font-medium text-[#1A1A1A]">
+            <h1 className="text-lg font-medium text-[#000000]">
               {isInstructor ? 'Student Submissions' : 'My Submissions'}
             </h1>
-            <p className="text-sm text-[#888]">
+            <p className="text-sm text-[#666666]">
               {isInstructor ? 'Review homework and send feedback' : 'Track your homework submissions'}
             </p>
           </div>
@@ -98,28 +98,28 @@ export default function Submissions() {
         {/* Pending */}
         {pendingSubmissions.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-[#FDE047]" />
+            <h2 className="text-xl font-light text-[#000000] mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-[#7CBAE6]" />
               {isInstructor ? 'Needs AI Review' : 'Awaiting Review'}
-              <span className="text-sm bg-[#FEF9C3] text-[#854D0E] px-2 py-0.5 rounded-full">{pendingSubmissions.length}</span>
+              <span className="text-sm bg-[#FEF9C3] text-[#1A75BA] px-2 py-0.5 rounded-full">{pendingSubmissions.length}</span>
             </h2>
             <div className="space-y-3">
               {pendingSubmissions.map((sub) => (
                 <Card 
                   key={sub.submission_id}
-                  className="bg-white border-[#E5E5E5]"
+                  className="bg-white border-[#B8D4E8]"
                   data-testid={`submission-${sub.submission_id}`}
                 >
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#FDE047] rounded-lg flex items-center justify-center">
-                        <Upload className="w-5 h-5 text-[#1A1A1A]" />
+                      <div className="w-10 h-10 bg-[#7CBAE6] rounded-lg flex items-center justify-center">
+                        <Upload className="w-5 h-5 text-[#000000]" />
                       </div>
                       <div>
-                        <p className="font-medium text-[#1A1A1A]">
+                        <p className="font-medium text-[#000000]">
                           {isInstructor ? sub.student?.name : sub.material?.title}
                         </p>
-                        <p className="text-sm text-[#888]">
+                        <p className="text-sm text-[#666666]">
                           {isInstructor 
                             ? `${sub.material?.title || 'Homework'} • Week ${sub.material?.week_number || '?'}`
                             : `Week ${sub.material?.week_number || '?'} • Submitted`
@@ -131,7 +131,7 @@ export default function Submissions() {
                       <Button 
                         onClick={() => handleReview(sub.submission_id)}
                         disabled={reviewing === sub.submission_id}
-                        className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+                        className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                         data-testid={`review-btn-${sub.submission_id}`}
                       >
                         {reviewing === sub.submission_id ? (
@@ -157,10 +157,10 @@ export default function Submissions() {
         {/* Draft - Needs Review */}
         {isInstructor && draftSubmissions.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
-              <FileEdit className="w-5 h-5 text-[#075985]" />
+            <h2 className="text-xl font-light text-[#000000] mb-4 flex items-center gap-2">
+              <FileEdit className="w-5 h-5 text-[#22438E]" />
               Ready to Review & Send
-              <span className="text-sm bg-[#E0F2FE] text-[#075985] px-2 py-0.5 rounded-full">{draftSubmissions.length}</span>
+              <span className="text-sm bg-[#E1F0FF] text-[#22438E] px-2 py-0.5 rounded-full">{draftSubmissions.length}</span>
             </h2>
             <div className="space-y-3">
               {draftSubmissions.map((sub) => (
@@ -172,12 +172,12 @@ export default function Submissions() {
                 >
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#E0F2FE] rounded-lg flex items-center justify-center">
-                        <FileEdit className="w-5 h-5 text-[#075985]" />
+                      <div className="w-10 h-10 bg-[#E1F0FF] rounded-lg flex items-center justify-center">
+                        <FileEdit className="w-5 h-5 text-[#22438E]" />
                       </div>
                       <div>
-                        <p className="font-medium text-[#1A1A1A]">{sub.student?.name}</p>
-                        <p className="text-sm text-[#888]">
+                        <p className="font-medium text-[#000000]">{sub.student?.name}</p>
+                        <p className="text-sm text-[#666666]">
                           {sub.material?.title || 'Homework'} • Week {sub.material?.week_number || '?'}
                         </p>
                       </div>
@@ -202,7 +202,7 @@ export default function Submissions() {
         {/* Sent */}
         {sentSubmissions.length > 0 && (
           <div>
-            <h2 className="text-xl font-light text-[#1A1A1A] mb-4 flex items-center gap-2">
+            <h2 className="text-xl font-light text-[#000000] mb-4 flex items-center gap-2">
               <Mail className="w-5 h-5 text-[#065F46]" />
               {isInstructor ? 'Feedback Sent' : 'Received Feedback'}
             </h2>
@@ -210,7 +210,7 @@ export default function Submissions() {
               {sentSubmissions.map((sub) => (
                 <Card 
                   key={sub.submission_id}
-                  className="bg-white border-[#E5E5E5] cursor-pointer hover:shadow-sm transition-shadow"
+                  className="bg-white border-[#B8D4E8] cursor-pointer hover:shadow-sm transition-shadow"
                   onClick={() => navigate(`/submission/${sub.submission_id}`)}
                   data-testid={`sent-${sub.submission_id}`}
                 >
@@ -220,10 +220,10 @@ export default function Submissions() {
                         <CheckCircle className="w-5 h-5 text-[#065F46]" />
                       </div>
                       <div>
-                        <p className="font-medium text-[#1A1A1A]">
+                        <p className="font-medium text-[#000000]">
                           {isInstructor ? sub.student?.name : sub.material?.title}
                         </p>
-                        <p className="text-sm text-[#888]">
+                        <p className="text-sm text-[#666666]">
                           {isInstructor 
                             ? `${sub.material?.title || 'Homework'} • Week ${sub.material?.week_number || '?'}`
                             : `Week ${sub.material?.week_number || '?'}`
@@ -246,11 +246,11 @@ export default function Submissions() {
         )}
 
         {submissions.length === 0 && (
-          <Card className="bg-white border-[#E5E5E5] border-dashed">
+          <Card className="bg-white border-[#B8D4E8] border-dashed">
             <CardContent className="p-12 text-center">
-              <Upload className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No submissions yet</h3>
-              <p className="text-[#5A5A5A]">
+              <Upload className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-[#000000] mb-2">No submissions yet</h3>
+              <p className="text-[#333333]">
                 {isInstructor 
                   ? 'Student submissions will appear here' 
                   : 'Submit your first homework to get AI feedback'}

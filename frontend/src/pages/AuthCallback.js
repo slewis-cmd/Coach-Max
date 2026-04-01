@@ -69,16 +69,16 @@ export default function AuthCallback() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
         <div className="text-center max-w-sm mx-auto px-4">
           <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-red-600 text-xl">!</span>
           </div>
-          <p className="text-[#1A1A1A] font-medium mb-2">Sign In Failed</p>
-          <p className="text-sm text-[#5A5A5A] mb-6">{error}</p>
+          <p className="text-[#000000] font-medium mb-2">Sign In Failed</p>
+          <p className="text-sm text-[#333333] mb-6">{error}</p>
           <Button
             onClick={login}
-            className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+            className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
             data-testid="retry-sign-in-btn"
           >
             Try Again
@@ -89,10 +89,10 @@ export default function AuthCallback() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
+    <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
       <div className="text-center">
-        <div className="w-12 h-12 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-[#5A5A5A]">Signing you in...</p>
+        <div className="w-12 h-12 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-[#333333]">Signing you in...</p>
       </div>
     </div>
   );

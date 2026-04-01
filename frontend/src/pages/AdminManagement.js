@@ -140,8 +140,8 @@ export default function AdminManagement() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -151,26 +151,26 @@ export default function AdminManagement() {
   const superAdmins = users.filter(u => u.role === 'super_admin');
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="admin-management">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="admin-management">
       {/* Header */}
-      <header className="bg-white border-b border-[#E5E5E5] sticky top-0 z-10">
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
               to="/dashboard"
-              className="p-2 hover:bg-[#F2F0ED] rounded-lg transition-colors"
+              className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-[#5A5A5A]" />
+              <ArrowLeft className="w-5 h-5 text-[#333333]" />
             </Link>
             <div>
-              <h1 className="text-lg font-medium text-[#1A1A1A]">Admin Management</h1>
-              <p className="text-sm text-[#888]">Manage instructors and platform users</p>
+              <h1 className="text-lg font-medium text-[#000000]">Admin Management</h1>
+              <p className="text-sm text-[#666666]">Manage instructors and platform users</p>
             </div>
           </div>
           
           <Button 
             onClick={() => setShowInvite(true)}
-            className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+            className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
             data-testid="invite-instructor-btn"
           >
             <UserPlus className="w-4 h-4 mr-2" />
@@ -183,31 +183,31 @@ export default function AdminManagement() {
         {/* Stats */}
         {stats && (
           <div className="grid md:grid-cols-4 gap-4 mb-8">
-            <Card className="bg-white border-[#E5E5E5]">
+            <Card className="bg-white border-[#B8D4E8]">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Users className="w-4 h-4 text-[#888]" />
-                  <p className="text-sm text-[#888]">Total Users</p>
+                  <Users className="w-4 h-4 text-[#666666]" />
+                  <p className="text-sm text-[#666666]">Total Users</p>
                 </div>
-                <p className="text-3xl font-light text-[#1A1A1A]">{stats.users.total}</p>
+                <p className="text-3xl font-light text-[#000000]">{stats.users.total}</p>
               </CardContent>
             </Card>
-            <Card className="bg-[#FEF3C7] border-[#FDE047]">
+            <Card className="bg-[#FEF3C7] border-[#7CBAE6]">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Shield className="w-4 h-4 text-[#854D0E]" />
-                  <p className="text-sm text-[#854D0E]">Super Admins</p>
+                  <Shield className="w-4 h-4 text-[#1A75BA]" />
+                  <p className="text-sm text-[#1A75BA]">Super Admins</p>
                 </div>
-                <p className="text-3xl font-light text-[#854D0E]">{stats.users.super_admins}</p>
+                <p className="text-3xl font-light text-[#1A75BA]">{stats.users.super_admins}</p>
               </CardContent>
             </Card>
-            <Card className="bg-[#E0F2FE] border-[#BAE6FD]">
+            <Card className="bg-[#E1F0FF] border-[#BAE6FD]">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <GraduationCap className="w-4 h-4 text-[#075985]" />
-                  <p className="text-sm text-[#075985]">Instructors</p>
+                  <GraduationCap className="w-4 h-4 text-[#22438E]" />
+                  <p className="text-sm text-[#22438E]">Instructors</p>
                 </div>
-                <p className="text-3xl font-light text-[#075985]">{stats.users.instructors}</p>
+                <p className="text-3xl font-light text-[#22438E]">{stats.users.instructors}</p>
               </CardContent>
             </Card>
             <Card className="bg-[#D1FAE5] border-[#BBF7D0]">
@@ -223,10 +223,10 @@ export default function AdminManagement() {
         )}
 
         {/* Super Admins */}
-        <Card className="bg-white border-[#E5E5E5] mb-6">
+        <Card className="bg-white border-[#B8D4E8] mb-6">
           <CardHeader>
             <CardTitle className="text-lg font-normal flex items-center gap-2">
-              <Shield className="w-5 h-5 text-[#854D0E]" />
+              <Shield className="w-5 h-5 text-[#1A75BA]" />
               Super Admins
             </CardTitle>
             <CardDescription>Platform administrators with full access</CardDescription>
@@ -238,15 +238,15 @@ export default function AdminManagement() {
                   {u.picture ? (
                     <img src={u.picture} alt={u.name} className="w-10 h-10 rounded-full" />
                   ) : (
-                    <div className="w-10 h-10 bg-[#FDE047] rounded-full flex items-center justify-center">
-                      <Shield className="w-5 h-5 text-[#854D0E]" />
+                    <div className="w-10 h-10 bg-[#7CBAE6] rounded-full flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-[#1A75BA]" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[#1A1A1A] truncate">{u.name}</p>
-                    <p className="text-sm text-[#888] truncate">{u.email}</p>
+                    <p className="font-medium text-[#000000] truncate">{u.name}</p>
+                    <p className="text-sm text-[#666666] truncate">{u.email}</p>
                   </div>
-                  <span className="text-xs bg-[#FDE047] text-[#854D0E] px-2 py-1 rounded">
+                  <span className="text-xs bg-[#7CBAE6] text-[#1A75BA] px-2 py-1 rounded">
                     Super Admin
                   </span>
                 </div>
@@ -256,10 +256,10 @@ export default function AdminManagement() {
         </Card>
 
         {/* Instructors */}
-        <Card className="bg-white border-[#E5E5E5] mb-6">
+        <Card className="bg-white border-[#B8D4E8] mb-6">
           <CardHeader>
             <CardTitle className="text-lg font-normal flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-[#075985]" />
+              <GraduationCap className="w-5 h-5 text-[#22438E]" />
               Instructors ({instructors.length})
             </CardTitle>
             <CardDescription>Users who can create cohorts and review submissions</CardDescription>
@@ -267,8 +267,8 @@ export default function AdminManagement() {
           <CardContent>
             {instructors.length === 0 ? (
               <div className="text-center py-8">
-                <GraduationCap className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                <p className="text-[#888]">No instructors yet</p>
+                <GraduationCap className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                <p className="text-[#666666]">No instructors yet</p>
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -281,17 +281,17 @@ export default function AdminManagement() {
             ) : (
               <div className="space-y-3">
                 {instructors.map((u) => (
-                  <div key={u.user_id} className="flex items-center gap-4 p-3 hover:bg-[#F9F8F6] rounded-lg transition-colors">
+                  <div key={u.user_id} className="flex items-center gap-4 p-3 hover:bg-[#E1F0FF] rounded-lg transition-colors">
                     {u.picture ? (
                       <img src={u.picture} alt={u.name} className="w-10 h-10 rounded-full" />
                     ) : (
-                      <div className="w-10 h-10 bg-[#E0F2FE] rounded-full flex items-center justify-center">
-                        <GraduationCap className="w-5 h-5 text-[#075985]" />
+                      <div className="w-10 h-10 bg-[#E1F0FF] rounded-full flex items-center justify-center">
+                        <GraduationCap className="w-5 h-5 text-[#22438E]" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-[#1A1A1A] truncate">{u.name}</p>
-                      <p className="text-sm text-[#888] truncate">{u.email}</p>
+                      <p className="font-medium text-[#000000] truncate">{u.name}</p>
+                      <p className="text-sm text-[#666666] truncate">{u.email}</p>
                     </div>
                     <Button 
                       variant="ghost" 
@@ -310,7 +310,7 @@ export default function AdminManagement() {
         </Card>
 
         {/* Students */}
-        <Card className="bg-white border-[#E5E5E5]">
+        <Card className="bg-white border-[#B8D4E8]">
           <CardHeader>
             <CardTitle className="text-lg font-normal flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-[#065F46]" />
@@ -321,13 +321,13 @@ export default function AdminManagement() {
           <CardContent>
             {students.length === 0 ? (
               <div className="text-center py-8">
-                <BookOpen className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                <p className="text-[#888]">No students yet</p>
+                <BookOpen className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                <p className="text-[#666666]">No students yet</p>
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {students.map((u) => (
-                  <div key={u.user_id} className="flex items-center gap-4 p-3 hover:bg-[#F9F8F6] rounded-lg transition-colors">
+                  <div key={u.user_id} className="flex items-center gap-4 p-3 hover:bg-[#E1F0FF] rounded-lg transition-colors">
                     {u.picture ? (
                       <img src={u.picture} alt={u.name} className="w-10 h-10 rounded-full" />
                     ) : (
@@ -336,8 +336,8 @@ export default function AdminManagement() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-[#1A1A1A] truncate">{u.name}</p>
-                      <p className="text-sm text-[#888] truncate">{u.email}</p>
+                      <p className="font-medium text-[#000000] truncate">{u.name}</p>
+                      <p className="text-sm text-[#666666] truncate">{u.email}</p>
                     </div>
                     <Button 
                       variant="outline" 
@@ -346,7 +346,7 @@ export default function AdminManagement() {
                         setInviteEmail(u.email);
                         setShowInvite(true);
                       }}
-                      className="border-[#E5E5E5]"
+                      className="border-[#B8D4E8]"
                     >
                       <GraduationCap className="w-4 h-4 mr-1" />
                       Promote
@@ -359,10 +359,10 @@ export default function AdminManagement() {
         </Card>
 
         {/* Cohorts */}
-        <Card className="bg-white border-[#E5E5E5] mt-6">
+        <Card className="bg-white border-[#B8D4E8] mt-6">
           <CardHeader>
             <CardTitle className="text-lg font-normal flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-[#7C3AED]" />
+              <BookOpen className="w-5 h-5 text-[#22438E]" />
               Cohorts ({cohorts.length})
             </CardTitle>
             <CardDescription>All cohorts on the platform</CardDescription>
@@ -370,19 +370,19 @@ export default function AdminManagement() {
           <CardContent>
             {cohorts.length === 0 ? (
               <div className="text-center py-8">
-                <BookOpen className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                <p className="text-[#888]">No cohorts yet</p>
+                <BookOpen className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                <p className="text-[#666666]">No cohorts yet</p>
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {cohorts.map((c) => (
-                  <div key={c.cohort_id} className="flex items-center gap-4 p-3 hover:bg-[#F9F8F6] rounded-lg transition-colors" data-testid={`cohort-row-${c.cohort_id}`}>
-                    <div className="w-10 h-10 bg-[#F3E8FF] rounded-full flex items-center justify-center flex-shrink-0">
-                      <BookOpen className="w-5 h-5 text-[#7C3AED]" />
+                  <div key={c.cohort_id} className="flex items-center gap-4 p-3 hover:bg-[#E1F0FF] rounded-lg transition-colors" data-testid={`cohort-row-${c.cohort_id}`}>
+                    <div className="w-10 h-10 bg-[#E1F0FF] rounded-full flex items-center justify-center flex-shrink-0">
+                      <BookOpen className="w-5 h-5 text-[#22438E]" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-[#1A1A1A] truncate">{c.name}</p>
-                      <p className="text-xs text-[#888]">{c.student_ids?.length || 0} students · {c.description || 'No description'}</p>
+                      <p className="font-medium text-[#000000] truncate">{c.name}</p>
+                      <p className="text-xs text-[#666666]">{c.student_ids?.length || 0} students · {c.description || 'No description'}</p>
                     </div>
                     <Button
                       variant="ghost"
@@ -413,8 +413,8 @@ export default function AdminManagement() {
           <CardContent>
             <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg">
               <div>
-                <p className="font-medium text-[#1A1A1A]">Clear All Submissions</p>
-                <p className="text-sm text-[#888] mt-0.5">Deletes all student homework submissions, uploaded files, and AI chat history. Materials and cohorts are not affected.</p>
+                <p className="font-medium text-[#000000]">Clear All Submissions</p>
+                <p className="text-sm text-[#666666] mt-0.5">Deletes all student homework submissions, uploaded files, and AI chat history. Materials and cohorts are not affected.</p>
               </div>
               <Button
                 variant="outline"
@@ -484,7 +484,7 @@ export default function AdminManagement() {
               data-testid="invite-submit-btn"
               onClick={handleInviteInstructor}
               disabled={inviting}
-              className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {inviting ? 'Promoting...' : 'Promote to Instructor'}
             </Button>

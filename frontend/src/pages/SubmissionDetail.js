@@ -140,8 +140,8 @@ export default function SubmissionDetail() {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -153,22 +153,22 @@ export default function SubmissionDetail() {
   const isSent = submission.status === 'sent' || submission.feedback_sent;
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="submission-detail">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="submission-detail">
       {/* Header */}
-      <header className="bg-white border-b border-[#E5E5E5] sticky top-0 z-10">
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
               to="/submissions"
-              className="p-2 hover:bg-[#F2F0ED] rounded-lg transition-colors"
+              className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 text-[#5A5A5A]" />
+              <ArrowLeft className="w-5 h-5 text-[#333333]" />
             </Link>
             <div>
-              <h1 className="text-lg font-medium text-[#1A1A1A]">
+              <h1 className="text-lg font-medium text-[#000000]">
                 {submission.material?.title || 'Homework Submission'}
               </h1>
-              <p className="text-sm text-[#888]">Week {submission.material?.week_number}</p>
+              <p className="text-sm text-[#666666]">Week {submission.material?.week_number}</p>
             </div>
           </div>
           
@@ -176,7 +176,7 @@ export default function SubmissionDetail() {
             <Button 
               onClick={handleReview}
               disabled={reviewing}
-              className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
               data-testid="generate-review-btn"
             >
               {reviewing ? (
@@ -197,7 +197,7 @@ export default function SubmissionDetail() {
 
       <main className="max-w-4xl mx-auto px-6 md:px-12 py-8">
         {/* Submission Info */}
-        <Card className="bg-white border-[#E5E5E5] mb-6">
+        <Card className="bg-white border-[#B8D4E8] mb-6">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
@@ -210,20 +210,20 @@ export default function SubmissionDetail() {
                         className="w-12 h-12 rounded-full"
                       />
                     ) : (
-                      <div className="w-12 h-12 bg-[#F2F0ED] rounded-full flex items-center justify-center">
-                        <User className="w-6 h-6 text-[#888]" />
+                      <div className="w-12 h-12 bg-[#D0E6F9] rounded-full flex items-center justify-center">
+                        <User className="w-6 h-6 text-[#666666]" />
                       </div>
                     )}
                     <div>
-                      <p className="font-medium text-[#1A1A1A]">{submission.student.name}</p>
-                      <p className="text-sm text-[#888]">{submission.student.email}</p>
+                      <p className="font-medium text-[#000000]">{submission.student.name}</p>
+                      <p className="text-sm text-[#666666]">{submission.student.email}</p>
                     </div>
                   </>
                 )}
                 {!isInstructor && (
                   <div>
-                    <p className="font-medium text-[#1A1A1A]">{submission.material?.title}</p>
-                    <p className="text-sm text-[#888]">Week {submission.material?.week_number}</p>
+                    <p className="font-medium text-[#000000]">{submission.material?.title}</p>
+                    <p className="text-sm text-[#666666]">Week {submission.material?.week_number}</p>
                   </div>
                 )}
               </div>
@@ -231,8 +231,8 @@ export default function SubmissionDetail() {
                 isSent 
                   ? 'bg-[#D1FAE5] text-[#065F46]' 
                   : isDraft
-                    ? 'bg-[#E0F2FE] text-[#075985]'
-                    : 'bg-[#FEF9C3] text-[#854D0E]'
+                    ? 'bg-[#E1F0FF] text-[#22438E]'
+                    : 'bg-[#FEF9C3] text-[#1A75BA]'
               }`}>
                 {isSent ? (
                   <>
@@ -254,11 +254,11 @@ export default function SubmissionDetail() {
             </div>
             
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-[#5A5A5A]">
+              <div className="flex items-center gap-2 text-sm text-[#333333]">
                 <File className="w-4 h-4" />
                 {submission.file_name}
                 {submission.resubmission_count > 0 && (
-                  <span className="bg-[#E0F2FE] text-[#075985] px-2 py-0.5 rounded text-xs ml-2">
+                  <span className="bg-[#E1F0FF] text-[#22438E] px-2 py-0.5 rounded text-xs ml-2">
                     Resubmission #{submission.resubmission_count}
                   </span>
                 )}
@@ -269,7 +269,7 @@ export default function SubmissionDetail() {
                   size="sm"
                   onClick={handleAllowResubmission}
                   disabled={allowingResubmission}
-                  className="border-[#E5E5E5] text-[#5A5A5A]"
+                  className="border-[#B8D4E8] text-[#333333]"
                   data-testid="allow-resubmission-btn"
                 >
                   {allowingResubmission ? (
@@ -286,7 +286,7 @@ export default function SubmissionDetail() {
                 </Button>
               )}
               {submission.resubmission_allowed && (
-                <span className="text-sm text-[#075985] flex items-center gap-1">
+                <span className="text-sm text-[#22438E] flex items-center gap-1">
                   <RotateCcw className="w-4 h-4" />
                   Resubmission allowed
                 </span>
@@ -299,7 +299,7 @@ export default function SubmissionDetail() {
         {currentFeedback || isDraft ? (
           <div className="animate-fade-in">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-light text-[#1A1A1A] flex items-center gap-2">
+              <h2 className="text-xl font-light text-[#000000] flex items-center gap-2">
                 {isSent ? (
                   <>
                     <CheckCircle className="w-5 h-5 text-[#065F46]" />
@@ -307,7 +307,7 @@ export default function SubmissionDetail() {
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-5 h-5 text-[#075985]" />
+                    <Sparkles className="w-5 h-5 text-[#22438E]" />
                     {isEditing ? 'Edit Feedback' : 'AI Feedback (Draft)'}
                   </>
                 )}
@@ -321,7 +321,7 @@ export default function SubmissionDetail() {
                       setEditedFeedback(currentFeedback);
                       setIsEditing(true);
                     }}
-                    className="border-[#E5E5E5]"
+                    className="border-[#B8D4E8]"
                     data-testid="edit-feedback-btn"
                   >
                     <Edit3 className="w-4 h-4 mr-2" />
@@ -350,9 +350,9 @@ export default function SubmissionDetail() {
             </div>
 
             {isEditing ? (
-              <Card className="bg-white border-[#E5E5E5]">
+              <Card className="bg-white border-[#B8D4E8]">
                 <CardContent className="p-6">
-                  <Label className="text-sm text-[#5A5A5A] mb-2 block">
+                  <Label className="text-sm text-[#333333] mb-2 block">
                     Review and edit the AI-generated feedback before sending to the student
                   </Label>
                   <Textarea
@@ -375,7 +375,7 @@ export default function SubmissionDetail() {
                     <Button 
                       onClick={handleSaveFeedback}
                       disabled={saving}
-                      className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
                       data-testid="save-feedback-btn"
                     >
                       {saving ? 'Saving...' : 'Save Changes'}
@@ -412,13 +412,13 @@ export default function SubmissionDetail() {
             )}
           </div>
         ) : (
-          <Card className="bg-white border-[#E5E5E5] border-dashed">
+          <Card className="bg-white border-[#B8D4E8] border-dashed">
             <CardContent className="p-12 text-center">
-              <div className="w-16 h-16 bg-[#FDE047] rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-soft">
-                <Sparkles className="w-8 h-8 text-[#1A1A1A]" />
+              <div className="w-16 h-16 bg-[#7CBAE6] rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-soft">
+                <Sparkles className="w-8 h-8 text-[#000000]" />
               </div>
-              <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">Awaiting Review</h3>
-              <p className="text-[#5A5A5A]">
+              <h3 className="text-lg font-medium text-[#000000] mb-2">Awaiting Review</h3>
+              <p className="text-[#333333]">
                 {isInstructor 
                   ? 'Click "Generate AI Feedback" to create a draft for review'
                   : 'Your instructor will review this submission soon'}
@@ -429,19 +429,19 @@ export default function SubmissionDetail() {
 
         {/* Workflow info for instructors */}
         {isInstructor && !isSent && (
-          <div className="mt-6 p-4 bg-[#F2F0ED] rounded-lg">
-            <h3 className="text-sm font-medium text-[#1A1A1A] mb-2">Review Workflow</h3>
-            <ol className="text-sm text-[#5A5A5A] space-y-1">
+          <div className="mt-6 p-4 bg-[#D0E6F9] rounded-lg">
+            <h3 className="text-sm font-medium text-[#000000] mb-2">Review Workflow</h3>
+            <ol className="text-sm text-[#333333] space-y-1">
               <li className={`flex items-center gap-2 ${currentFeedback ? 'text-[#065F46]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${currentFeedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#E5E5E5] text-[#888]'}`}>1</span>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${currentFeedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#B8D4E8] text-[#666666]'}`}>1</span>
                 Generate AI feedback
               </li>
               <li className={`flex items-center gap-2 ${submission.instructor_feedback ? 'text-[#065F46]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${submission.instructor_feedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#E5E5E5] text-[#888]'}`}>2</span>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${submission.instructor_feedback ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#B8D4E8] text-[#666666]'}`}>2</span>
                 Review and edit feedback
               </li>
               <li className={`flex items-center gap-2 ${isSent ? 'text-[#065F46]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSent ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#E5E5E5] text-[#888]'}`}>3</span>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSent ? 'bg-[#D1FAE5] text-[#065F46]' : 'bg-[#B8D4E8] text-[#666666]'}`}>3</span>
                 Send feedback to student via email
               </li>
             </ol>

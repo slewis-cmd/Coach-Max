@@ -428,28 +428,28 @@ export default function CohortDetail() {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="cohort-detail">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="cohort-detail">
       {/* Header */}
-      <header className="bg-white border-b border-[#E5E5E5] sticky top-0 z-10">
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
               to="/dashboard"
-              className="p-2 hover:bg-[#F2F0ED] rounded-lg transition-colors"
+              className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors"
               data-testid="back-to-dashboard"
             >
-              <ArrowLeft className="w-5 h-5 text-[#5A5A5A]" />
+              <ArrowLeft className="w-5 h-5 text-[#333333]" />
             </Link>
             <div>
-              <h1 className="text-lg font-medium text-[#1A1A1A]">{cohort?.name}</h1>
-              <p className="text-sm text-[#888]">
+              <h1 className="text-lg font-medium text-[#000000]">{cohort?.name}</h1>
+              <p className="text-sm text-[#666666]">
                 {cohort?.instructor_name ? `Instructor: ${cohort.instructor_name}` : (cohort?.description || 'No description')}
               </p>
             </div>
@@ -461,7 +461,7 @@ export default function CohortDetail() {
                 <Button 
                   variant="outline"
                   onClick={() => setShowAssignInstructor(true)}
-                  className="border-[#7C3AED] text-[#7C3AED] hover:bg-[#F3E8FF] rounded-lg"
+                  className="border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF] rounded-lg"
                   data-testid="assign-instructor-btn"
                 >
                   <UserCog className="w-4 h-4 mr-2" />
@@ -471,7 +471,7 @@ export default function CohortDetail() {
               <Button 
                 variant="outline"
                 onClick={() => setShowInviteLink(true)}
-                className="border-[#065F46] text-[#065F46] hover:bg-[#D1FAE5] rounded-lg"
+                className="border-[#1A75BA] text-[#1A75BA] hover:bg-[#E1F0FF] rounded-lg"
                 data-testid="invite-link-btn"
               >
                 <QrCode className="w-4 h-4 mr-2" />
@@ -480,7 +480,7 @@ export default function CohortDetail() {
               <Button 
                 variant="outline"
                 onClick={() => setShowBulkImport(true)}
-                className="border-[#E5E5E5] rounded-lg"
+                className="border-[#B8D4E8] rounded-lg"
                 data-testid="bulk-import-btn"
               >
                 <FileUp className="w-4 h-4 mr-2" />
@@ -489,7 +489,7 @@ export default function CohortDetail() {
               <Button 
                 variant="outline"
                 onClick={() => setShowAddStudent(true)}
-                className="border-[#E5E5E5] rounded-lg"
+                className="border-[#B8D4E8] rounded-lg"
                 data-testid="add-student-btn"
               >
                 <UserPlus className="w-4 h-4 mr-2" />
@@ -497,7 +497,7 @@ export default function CohortDetail() {
               </Button>
               <Button 
                 onClick={() => setShowUploadMaterial(true)}
-                className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+                className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                 data-testid="upload-material-btn"
               >
                 <Upload className="w-4 h-4 mr-2" />
@@ -511,7 +511,7 @@ export default function CohortDetail() {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-6 md:px-12 py-8">
         <Tabs defaultValue="materials" className="space-y-6">
-          <TabsList className="bg-[#F2F0ED]">
+          <TabsList className="bg-[#D0E6F9]">
             <TabsTrigger value="materials" className="data-[state=active]:bg-white">
               <FileText className="w-4 h-4 mr-2" />
               Materials
@@ -527,17 +527,17 @@ export default function CohortDetail() {
           {/* Materials Tab */}
           <TabsContent value="materials" className="space-y-8">
             {materials.length === 0 ? (
-              <Card className="bg-white border-[#E5E5E5] border-dashed">
+              <Card className="bg-white border-[#B8D4E8] border-dashed">
                 <CardContent className="p-12 text-center">
-                  <FileText className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No materials yet</h3>
-                  <p className="text-[#5A5A5A] mb-4">
+                  <FileText className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-[#000000] mb-2">No materials yet</h3>
+                  <p className="text-[#333333] mb-4">
                     {isInstructor ? 'Upload your first workbook, case study, or homework assignment' : 'Your instructor will upload materials soon'}
                   </p>
                   {isInstructor && (
                     <Button 
                       onClick={() => setShowUploadMaterial(true)}
-                      className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                     >
                       Upload Material
                     </Button>
@@ -548,10 +548,10 @@ export default function CohortDetail() {
               materials.sort((a, b) => a.week_number - b.week_number).map((week) => (
                 <div key={week.week_number} className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#1A1A1A] text-white rounded-full flex items-center justify-center font-medium">
+                    <div className="w-10 h-10 bg-[#000000] text-white rounded-full flex items-center justify-center font-medium">
                       {week.week_number}
                     </div>
-                    <h2 className="text-xl font-light text-[#1A1A1A]">Week {week.week_number}</h2>
+                    <h2 className="text-xl font-light text-[#000000]">Week {week.week_number}</h2>
                     {isInstructor && (
                       <Button
                         variant="ghost"
@@ -560,7 +560,7 @@ export default function CohortDetail() {
                         className={`ml-auto rounded-lg text-xs ${
                           (cohort?.released_weeks || []).includes(week.week_number)
                             ? 'text-[#065F46] hover:bg-[#D1FAE5]'
-                            : 'text-[#888] hover:bg-[#F2F0ED]'
+                            : 'text-[#666666] hover:bg-[#D0E6F9]'
                         }`}
                         data-testid={`toggle-week-${week.week_number}`}
                       >
@@ -582,11 +582,11 @@ export default function CohortDetail() {
                   <div className="grid md:grid-cols-3 gap-4 pl-12">
                     {/* Workbooks */}
                     {week.workbooks?.map((mat) => (
-                      <Card key={mat.material_id} className="bg-white border-[#E5E5E5] group">
+                      <Card key={mat.material_id} className="bg-white border-[#B8D4E8] group">
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
-                            <div className="w-10 h-10 bg-[#E0F2FE] rounded-lg flex items-center justify-center">
-                              <BookMarked className="w-5 h-5 text-[#075985]" />
+                            <div className="w-10 h-10 bg-[#E1F0FF] rounded-lg flex items-center justify-center">
+                              <BookMarked className="w-5 h-5 text-[#22438E]" />
                             </div>
                             <div className="flex items-center gap-1">
                               <Button 
@@ -596,7 +596,7 @@ export default function CohortDetail() {
                                 onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                                 data-testid={`download-${mat.material_id}`}
                               >
-                                <Download className="w-4 h-4 text-[#075985]" />
+                                <Download className="w-4 h-4 text-[#22438E]" />
                               </Button>
                               {isInstructor && (
                                 <Button 
@@ -616,16 +616,16 @@ export default function CohortDetail() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
+                          <p className="text-sm text-[#333333] mb-3">{mat.description || 'No description'}</p>
                           <div className="flex items-center justify-between">
-                            <p className="text-xs text-[#888]">
+                            <p className="text-xs text-[#666666]">
                               <File className="w-3 h-3 inline mr-1" />
                               {mat.file_name}
                             </p>
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              className="text-[#075985] hover:text-[#064E3B] h-7 px-2"
+                              className="text-[#22438E] hover:text-[#064E3B] h-7 px-2"
                               onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                             >
                               <Download className="w-3 h-3 mr-1" />
@@ -638,11 +638,11 @@ export default function CohortDetail() {
 
                     {/* Case Studies */}
                     {week.case_studies?.map((mat) => (
-                      <Card key={mat.material_id} className="bg-white border-[#E5E5E5] group">
+                      <Card key={mat.material_id} className="bg-white border-[#B8D4E8] group">
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
-                            <div className="w-10 h-10 bg-[#FDE047] rounded-lg flex items-center justify-center">
-                              <ClipboardList className="w-5 h-5 text-[#1A1A1A]" />
+                            <div className="w-10 h-10 bg-[#7CBAE6] rounded-lg flex items-center justify-center">
+                              <ClipboardList className="w-5 h-5 text-[#000000]" />
                             </div>
                             <div className="flex items-center gap-1">
                               <Button 
@@ -652,7 +652,7 @@ export default function CohortDetail() {
                                 onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                                 data-testid={`download-${mat.material_id}`}
                               >
-                                <Download className="w-4 h-4 text-[#854D0E]" />
+                                <Download className="w-4 h-4 text-[#1A75BA]" />
                               </Button>
                               {isInstructor && (
                                 <Button 
@@ -672,16 +672,16 @@ export default function CohortDetail() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
+                          <p className="text-sm text-[#333333] mb-3">{mat.description || 'No description'}</p>
                           <div className="flex items-center justify-between">
-                            <p className="text-xs text-[#888]">
+                            <p className="text-xs text-[#666666]">
                               <File className="w-3 h-3 inline mr-1" />
                               {mat.file_name}
                             </p>
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              className="text-[#854D0E] hover:text-[#713F12] h-7 px-2"
+                              className="text-[#1A75BA] hover:text-[#713F12] h-7 px-2"
                               onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
                             >
                               <Download className="w-3 h-3 mr-1" />
@@ -694,7 +694,7 @@ export default function CohortDetail() {
 
                     {/* Homework */}
                     {week.homework?.map((mat) => (
-                      <Card key={mat.material_id} className="bg-white border-[#E5E5E5] group">
+                      <Card key={mat.material_id} className="bg-white border-[#B8D4E8] group">
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
                             <div className="w-10 h-10 bg-[#D1FAE5] rounded-lg flex items-center justify-center">
@@ -726,7 +726,7 @@ export default function CohortDetail() {
                           <CardDescription className="text-xs uppercase tracking-wide">Homework Assignment</CardDescription>
                           {mat.due_date && (
                             <div className={`flex items-center gap-1 mt-2 text-xs ${
-                              new Date(mat.due_date) < new Date() ? 'text-red-500' : 'text-[#854D0E]'
+                              new Date(mat.due_date) < new Date() ? 'text-red-500' : 'text-[#1A75BA]'
                             }`}>
                               <Calendar className="w-3 h-3" />
                               Due: {new Date(mat.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -735,7 +735,7 @@ export default function CohortDetail() {
                           )}
                         </CardHeader>
                         <CardContent>
-                          <p className="text-sm text-[#5A5A5A] mb-3">{mat.description || 'No description'}</p>
+                          <p className="text-sm text-[#333333] mb-3">{mat.description || 'No description'}</p>
                           {!isInstructor ? (
                             <Button 
                               size="sm"
@@ -751,7 +751,7 @@ export default function CohortDetail() {
                           ) : (
                             <>
                               <div className="flex items-center justify-between mb-3">
-                                <p className="text-xs text-[#888]">
+                                <p className="text-xs text-[#666666]">
                                   <File className="w-3 h-3 inline mr-1" />
                                   {mat.file_name}
                                 </p>
@@ -769,21 +769,21 @@ export default function CohortDetail() {
                               {(() => {
                                 const subs = cohortSubmissions.filter(s => s.material_id === mat.material_id);
                                 if (subs.length === 0) return (
-                                  <p className="text-xs text-[#888] italic pt-2 border-t border-[#E5E5E5]">No submissions yet</p>
+                                  <p className="text-xs text-[#666666] italic pt-2 border-t border-[#B8D4E8]">No submissions yet</p>
                                 );
                                 return (
-                                  <div className="pt-2 border-t border-[#E5E5E5] space-y-2" data-testid={`submissions-${mat.material_id}`}>
-                                    <p className="text-xs font-medium text-[#5A5A5A] uppercase tracking-wide">Submissions ({subs.length})</p>
+                                  <div className="pt-2 border-t border-[#B8D4E8] space-y-2" data-testid={`submissions-${mat.material_id}`}>
+                                    <p className="text-xs font-medium text-[#333333] uppercase tracking-wide">Submissions ({subs.length})</p>
                                     {subs.map(sub => (
-                                      <div key={sub.submission_id} className="rounded-lg bg-[#F9F8F6] overflow-hidden" data-testid={`sub-row-${sub.submission_id}`}>
+                                      <div key={sub.submission_id} className="rounded-lg bg-[#E1F0FF] overflow-hidden" data-testid={`sub-row-${sub.submission_id}`}>
                                         <div className="flex items-center gap-2 py-2 px-3">
                                           <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-[#1A1A1A] truncate">{sub.student?.name || 'Unknown'}</p>
-                                            <p className="text-xs text-[#888] truncate">{sub.file_name}</p>
+                                            <p className="text-sm font-medium text-[#000000] truncate">{sub.student?.name || 'Unknown'}</p>
+                                            <p className="text-xs text-[#666666] truncate">{sub.file_name}</p>
                                           </div>
                                           <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
                                             sub.status === 'sent' ? 'bg-[#D1FAE5] text-[#065F46]' :
-                                            sub.status === 'draft' ? 'bg-[#F3E8FF] text-[#6B21A8]' :
+                                            sub.status === 'draft' ? 'bg-[#E1F0FF] text-[#6B21A8]' :
                                             'bg-[#DBEAFE] text-[#1E40AF]'
                                           }`}>
                                             {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
@@ -826,7 +826,7 @@ export default function CohortDetail() {
                     size="sm"
                     onClick={handleInviteAll}
                     disabled={invitingAll}
-                    className="border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#F2F0ED] rounded-lg"
+                    className="border-[#000000] text-[#000000] hover:bg-[#D0E6F9] rounded-lg"
                     data-testid="invite-all-btn"
                   >
                     <Mail className="w-4 h-4 mr-1.5" />
@@ -835,14 +835,14 @@ export default function CohortDetail() {
                 </div>
               )}
               {cohort?.students?.length === 0 ? (
-                <Card className="bg-white border-[#E5E5E5] border-dashed">
+                <Card className="bg-white border-[#B8D4E8] border-dashed">
                   <CardContent className="p-12 text-center">
-                    <Users className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">No students yet</h3>
-                    <p className="text-[#5A5A5A] mb-4">Add students by their email address</p>
+                    <Users className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-[#000000] mb-2">No students yet</h3>
+                    <p className="text-[#333333] mb-4">Add students by their email address</p>
                     <Button 
                       onClick={() => setShowAddStudent(true)}
-                      className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
                     >
                       Add Student
                     </Button>
@@ -851,19 +851,19 @@ export default function CohortDetail() {
               ) : (
                 <div className="space-y-3">
                   {cohort?.students?.map((student) => (
-                    <Card key={student.user_id} className="bg-white border-[#E5E5E5]">
+                    <Card key={student.user_id} className="bg-white border-[#B8D4E8]">
                       <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           {student.picture ? (
                             <img src={student.picture} alt={student.name} className="w-10 h-10 rounded-full" />
                           ) : (
-                            <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center">
-                              <Users className="w-5 h-5 text-[#888]" />
+                            <div className="w-10 h-10 bg-[#D0E6F9] rounded-full flex items-center justify-center">
+                              <Users className="w-5 h-5 text-[#666666]" />
                             </div>
                           )}
                           <div>
-                            <p className="font-medium text-[#1A1A1A]">{student.name}</p>
-                            <p className="text-sm text-[#888]">{student.email}</p>
+                            <p className="font-medium text-[#000000]">{student.name}</p>
+                            <p className="text-sm text-[#666666]">{student.email}</p>
                           </div>
                         </div>
                         <Button 
@@ -927,7 +927,7 @@ export default function CohortDetail() {
               data-testid="add-student-submit"
               onClick={handleAddStudent}
               disabled={addingStudent}
-              className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {addingStudent ? 'Sending invite...' : 'Add & Invite'}
             </Button>
@@ -1021,12 +1021,12 @@ export default function CohortDetail() {
                   {materialForm.file ? (
                     <div className="flex items-center justify-center gap-2">
                       <File className="w-5 h-5 text-[#065F46]" />
-                      <span className="text-sm text-[#1A1A1A]">{materialForm.file.name}</span>
+                      <span className="text-sm text-[#000000]">{materialForm.file.name}</span>
                     </div>
                   ) : (
                     <>
-                      <Upload className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                      <p className="text-sm text-[#888]">Click to upload PDF or DOCX</p>
+                      <Upload className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                      <p className="text-sm text-[#666666]">Click to upload PDF or DOCX</p>
                     </>
                   )}
                 </label>
@@ -1049,7 +1049,7 @@ export default function CohortDetail() {
               data-testid="upload-material-submit"
               onClick={handleUploadMaterial}
               disabled={uploadingMaterial}
-              className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {uploadingMaterial ? 'Uploading...' : 'Upload'}
             </Button>
@@ -1073,13 +1073,13 @@ export default function CohortDetail() {
                 {homeworkFile ? (
                   <div className="flex items-center justify-center gap-2">
                     <File className="w-5 h-5 text-[#065F46]" />
-                    <span className="text-sm text-[#1A1A1A]">{homeworkFile.name}</span>
+                    <span className="text-sm text-[#000000]">{homeworkFile.name}</span>
                   </div>
                 ) : (
                   <>
-                    <Upload className="w-10 h-10 text-[#C4C4C4] mx-auto mb-2" />
-                    <p className="text-sm text-[#888]">Click to upload your homework</p>
-                    <p className="text-xs text-[#C4C4C4] mt-1">PDF or DOCX only</p>
+                    <Upload className="w-10 h-10 text-[#94B8D9] mx-auto mb-2" />
+                    <p className="text-sm text-[#666666]">Click to upload your homework</p>
+                    <p className="text-xs text-[#94B8D9] mt-1">PDF or DOCX only</p>
                   </>
                 )}
               </label>
@@ -1126,16 +1126,16 @@ export default function CohortDetail() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Template Download */}
-            <div className="flex items-center justify-between p-4 bg-[#F2F0ED] rounded-lg">
+            <div className="flex items-center justify-between p-4 bg-[#D0E6F9] rounded-lg">
               <div>
-                <p className="text-sm font-medium text-[#1A1A1A]">Need a template?</p>
-                <p className="text-xs text-[#888]">Download our CSV template to get started</p>
+                <p className="text-sm font-medium text-[#000000]">Need a template?</p>
+                <p className="text-xs text-[#666666]">Download our CSV template to get started</p>
               </div>
               <Button 
                 variant="outline"
                 size="sm"
                 onClick={handleDownloadTemplate}
-                className="border-[#E5E5E5]"
+                className="border-[#B8D4E8]"
               >
                 <Download className="w-4 h-4 mr-2" />
                 Template
@@ -1150,13 +1150,13 @@ export default function CohortDetail() {
                   {bulkFile ? (
                     <div className="flex items-center justify-center gap-2">
                       <File className="w-5 h-5 text-[#065F46]" />
-                      <span className="text-sm text-[#1A1A1A]">{bulkFile.name}</span>
+                      <span className="text-sm text-[#000000]">{bulkFile.name}</span>
                     </div>
                   ) : (
                     <>
-                      <FileUp className="w-8 h-8 text-[#C4C4C4] mx-auto mb-2" />
-                      <p className="text-sm text-[#888]">Click to upload CSV file</p>
-                      <p className="text-xs text-[#C4C4C4] mt-1">Required column: email</p>
+                      <FileUp className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                      <p className="text-sm text-[#666666]">Click to upload CSV file</p>
+                      <p className="text-xs text-[#94B8D9] mt-1">Required column: email</p>
                     </>
                   )}
                 </label>
@@ -1189,12 +1189,12 @@ export default function CohortDetail() {
                 )}
                 {importResults.already_enrolled?.length > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-[#FEF9C3] rounded-lg">
-                    <AlertCircle className="w-4 h-4 text-[#854D0E] mt-0.5" />
+                    <AlertCircle className="w-4 h-4 text-[#1A75BA] mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-[#854D0E]">
+                      <p className="text-sm font-medium text-[#1A75BA]">
                         {importResults.already_enrolled.length} already enrolled
                       </p>
-                      <p className="text-xs text-[#854D0E]">
+                      <p className="text-xs text-[#1A75BA]">
                         {importResults.already_enrolled.join(', ')}
                       </p>
                     </div>
@@ -1229,7 +1229,7 @@ export default function CohortDetail() {
                 data-testid="bulk-import-submit"
                 onClick={handleBulkImport}
                 disabled={importingBulk || !bulkFile}
-                className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+                className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
               >
                 {importingBulk ? 'Importing...' : 'Import Students'}
               </Button>
@@ -1250,7 +1250,7 @@ export default function CohortDetail() {
           <div className="py-4 space-y-6">
             {/* QR Code */}
             <div className="flex justify-center">
-              <div className="bg-white p-4 rounded-xl border border-[#E5E5E5]">
+              <div className="bg-white p-4 rounded-xl border border-[#B8D4E8]">
                 <QRCodeSVG
                   value={`${window.location.origin}/invite/${cohort?.invite_code}`}
                   size={200}
@@ -1262,12 +1262,12 @@ export default function CohortDetail() {
 
             {/* Invite URL */}
             <div>
-              <Label className="text-xs text-[#888] uppercase tracking-wide">Invite Link</Label>
+              <Label className="text-xs text-[#666666] uppercase tracking-wide">Invite Link</Label>
               <div className="mt-1 flex items-center gap-2">
                 <input
                   readOnly
                   value={`${window.location.origin}/invite/${cohort?.invite_code}`}
-                  className="flex-1 px-3 py-2 bg-[#F2F0ED] rounded-lg text-sm text-[#1A1A1A] border-0 outline-none"
+                  className="flex-1 px-3 py-2 bg-[#D0E6F9] rounded-lg text-sm text-[#000000] border-0 outline-none"
                   data-testid="invite-url-input"
                 />
                 <Button
@@ -1306,7 +1306,7 @@ export default function CohortDetail() {
           </DialogHeader>
           <div className="space-y-2 py-4 max-h-[400px] overflow-y-auto">
             {instructorsList.length === 0 ? (
-              <p className="text-sm text-[#888] text-center py-4">No instructors found. Promote a user to instructor first.</p>
+              <p className="text-sm text-[#666666] text-center py-4">No instructors found. Promote a user to instructor first.</p>
             ) : (
               instructorsList.map((inst) => {
                 const isAssigned = cohort?.instructor_ids?.includes(inst.user_id);
@@ -1315,28 +1315,28 @@ export default function CohortDetail() {
                     key={inst.user_id}
                     className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                       isAssigned
-                        ? 'border-[#7C3AED] bg-[#F3E8FF]' 
-                        : 'border-[#E5E5E5] hover:bg-[#F9F8F6]'
+                        ? 'border-[#22438E] bg-[#E1F0FF]' 
+                        : 'border-[#B8D4E8] hover:bg-[#E1F0FF]'
                     }`}
                     onClick={() => handleAssignInstructor(inst.user_id)}
                     data-testid={`assign-instructor-${inst.user_id}`}
                   >
-                    <div className="w-10 h-10 bg-[#F2F0ED] rounded-full flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 bg-[#D0E6F9] rounded-full flex items-center justify-center flex-shrink-0">
                       {inst.picture ? (
                         <img src={inst.picture} alt={inst.name} className="w-10 h-10 rounded-full" />
                       ) : (
-                        <UserCog className="w-5 h-5 text-[#888]" />
+                        <UserCog className="w-5 h-5 text-[#666666]" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-[#1A1A1A] truncate">{inst.name}</p>
-                      <p className="text-xs text-[#888] truncate">{inst.email}</p>
+                      <p className="font-medium text-[#000000] truncate">{inst.name}</p>
+                      <p className="text-xs text-[#666666] truncate">{inst.email}</p>
                     </div>
                     {isAssigned && (
-                      <span className="text-xs bg-[#7C3AED] text-white px-2 py-0.5 rounded-full flex-shrink-0">Assigned</span>
+                      <span className="text-xs bg-[#22438E] text-white px-2 py-0.5 rounded-full flex-shrink-0">Assigned</span>
                     )}
                     {inst.role === 'super_admin' && (
-                      <span className="text-xs bg-[#1A1A1A] text-white px-2 py-0.5 rounded-full flex-shrink-0">Admin</span>
+                      <span className="text-xs bg-[#000000] text-white px-2 py-0.5 rounded-full flex-shrink-0">Admin</span>
                     )}
                   </div>
                 );

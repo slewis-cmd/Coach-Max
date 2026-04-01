@@ -140,22 +140,22 @@ export default function MaterialLibrary() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#1A1A1A] border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   const typeIcon = (type) => {
-    if (type === 'workbook') return <BookMarked className="w-5 h-5 text-[#075985]" />;
-    if (type === 'case_study') return <ClipboardList className="w-5 h-5 text-[#854D0E]" />;
-    return <File className="w-5 h-5 text-[#7C3AED]" />;
+    if (type === 'workbook') return <BookMarked className="w-5 h-5 text-[#22438E]" />;
+    if (type === 'case_study') return <ClipboardList className="w-5 h-5 text-[#1A75BA]" />;
+    return <File className="w-5 h-5 text-[#22438E]" />;
   };
 
   const typeBg = (type) => {
-    if (type === 'workbook') return 'bg-[#E0F2FE]';
-    if (type === 'case_study') return 'bg-[#FDE047]';
-    return 'bg-[#F3E8FF]';
+    if (type === 'workbook') return 'bg-[#E1F0FF]';
+    if (type === 'case_study') return 'bg-[#7CBAE6]';
+    return 'bg-[#E1F0FF]';
   };
 
   const typeLabel = (type) => {
@@ -165,21 +165,21 @@ export default function MaterialLibrary() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6]" data-testid="material-library">
-      <header className="bg-white border-b border-[#E5E5E5] sticky top-0 z-10">
+    <div className="min-h-screen bg-[#E1F0FF]" data-testid="material-library">
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="p-2 hover:bg-[#F2F0ED] rounded-lg transition-colors">
-              <ArrowLeft className="w-5 h-5 text-[#5A5A5A]" />
+            <Link to="/dashboard" className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors">
+              <ArrowLeft className="w-5 h-5 text-[#333333]" />
             </Link>
             <div>
-              <h1 className="text-lg font-medium text-[#1A1A1A]">Material Library</h1>
-              <p className="text-sm text-[#888]">Upload once, share across cohorts</p>
+              <h1 className="text-lg font-medium text-[#000000]">Material Library</h1>
+              <p className="text-sm text-[#666666]">Upload once, share across cohorts</p>
             </div>
           </div>
           <Button 
             onClick={() => setShowUpload(true)}
-            className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg"
+            className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
             data-testid="upload-library-btn"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -190,12 +190,12 @@ export default function MaterialLibrary() {
 
       <main className="max-w-6xl mx-auto px-6 md:px-12 py-8">
         {materials.length === 0 ? (
-          <Card className="bg-white border-[#E5E5E5] border-dashed">
+          <Card className="bg-white border-[#B8D4E8] border-dashed">
             <CardContent className="p-12 text-center">
-              <BookMarked className="w-12 h-12 text-[#C4C4C4] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[#1A1A1A] mb-2">Library is empty</h3>
-              <p className="text-[#5A5A5A] mb-4">Upload workbooks, case studies, and homework to share across cohorts</p>
-              <Button onClick={() => setShowUpload(true)} className="bg-[#1A1A1A] text-white hover:bg-[#333] rounded-lg">
+              <BookMarked className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-[#000000] mb-2">Library is empty</h3>
+              <p className="text-[#333333] mb-4">Upload workbooks, case studies, and homework to share across cohorts</p>
+              <Button onClick={() => setShowUpload(true)} className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
                 Add First Material
               </Button>
             </CardContent>
@@ -203,7 +203,7 @@ export default function MaterialLibrary() {
         ) : (
           <div className="space-y-4">
             {materials.map((mat) => (
-              <Card key={mat.material_id} className="bg-white border-[#E5E5E5]" data-testid={`library-material-${mat.material_id}`}>
+              <Card key={mat.material_id} className="bg-white border-[#B8D4E8]" data-testid={`library-material-${mat.material_id}`}>
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">
                     <div className={`w-12 h-12 ${typeBg(mat.material_type)} rounded-lg flex items-center justify-center flex-shrink-0`}>
@@ -212,8 +212,8 @@ export default function MaterialLibrary() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between mb-1">
                         <div>
-                          <h3 className="font-medium text-[#1A1A1A]">{mat.title}</h3>
-                          <p className="text-xs text-[#888]">
+                          <h3 className="font-medium text-[#000000]">{mat.title}</h3>
+                          <p className="text-xs text-[#666666]">
                             Week {mat.week_number} · {typeLabel(mat.material_type)} · {mat.file_name}
                           </p>
                         </div>
@@ -223,7 +223,7 @@ export default function MaterialLibrary() {
                             onClick={() => downloadFile(`${API_URL}/api/materials/${mat.material_id}/download`, mat.file_name)}
                             data-testid={`download-lib-${mat.material_id}`}
                           >
-                            <Download className="w-4 h-4 text-[#5A5A5A]" />
+                            <Download className="w-4 h-4 text-[#333333]" />
                           </Button>
                           <Button 
                             variant="ghost" size="icon"
@@ -235,12 +235,12 @@ export default function MaterialLibrary() {
                         </div>
                       </div>
                       {mat.description && (
-                        <p className="text-sm text-[#5A5A5A] mb-3">{mat.description}</p>
+                        <p className="text-sm text-[#333333] mb-3">{mat.description}</p>
                       )}
                       
                       {/* Assigned Cohorts */}
                       <div className="flex flex-wrap items-center gap-2 mt-3">
-                        <span className="text-xs text-[#888] mr-1">Assigned to:</span>
+                        <span className="text-xs text-[#666666] mr-1">Assigned to:</span>
                         {mat.assigned_cohorts?.length > 0 ? (
                           mat.assigned_cohorts.map((c) => (
                             <span key={c.cohort_id} className="inline-flex items-center gap-1 text-xs bg-[#D1FAE5] text-[#065F46] px-2 py-1 rounded-full">
@@ -257,11 +257,11 @@ export default function MaterialLibrary() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-[#C4C4C4]">None yet</span>
+                          <span className="text-xs text-[#94B8D9]">None yet</span>
                         )}
                         <button
                           onClick={() => setShowAssign(mat.material_id)}
-                          className="inline-flex items-center gap-1 text-xs text-[#7C3AED] hover:text-[#6D28D9] bg-[#F3E8FF] px-2 py-1 rounded-full"
+                          className="inline-flex items-center gap-1 text-xs text-[#22438E] hover:text-[#1A3A7A] bg-[#E1F0FF] px-2 py-1 rounded-full"
                           data-testid={`assign-btn-${mat.material_id}`}
                         >
                           <Link2 className="w-3 h-3" />
@@ -322,9 +322,9 @@ export default function MaterialLibrary() {
             <div>
               <Label>File (PDF or DOCX)</Label>
               <div className="mt-1">
-                <label htmlFor="lib-file-upload" className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#E5E5E5] rounded-lg cursor-pointer hover:border-[#1A1A1A] transition-colors">
-                  <Upload className="w-5 h-5 text-[#888]" />
-                  <span className="text-sm text-[#5A5A5A]">
+                <label htmlFor="lib-file-upload" className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#B8D4E8] rounded-lg cursor-pointer hover:border-[#000000] transition-colors">
+                  <Upload className="w-5 h-5 text-[#666666]" />
+                  <span className="text-sm text-[#333333]">
                     {form.file ? form.file.name : 'Click to select file'}
                   </span>
                 </label>
@@ -335,7 +335,7 @@ export default function MaterialLibrary() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
-            <Button onClick={handleUpload} disabled={uploading} className="bg-[#1A1A1A] text-white hover:bg-[#333]"
+            <Button onClick={handleUpload} disabled={uploading} className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
               data-testid="lib-upload-submit">
               {uploading ? 'Uploading...' : 'Add to Library'}
             </Button>
@@ -352,7 +352,7 @@ export default function MaterialLibrary() {
           </DialogHeader>
           <div className="space-y-2 py-4 max-h-[400px] overflow-y-auto">
             {cohorts.length === 0 ? (
-              <p className="text-sm text-[#888] text-center py-4">No cohorts found.</p>
+              <p className="text-sm text-[#666666] text-center py-4">No cohorts found.</p>
             ) : (
               cohorts.map((cohort) => {
                 const mat = materials.find(m => m.material_id === showAssign);
@@ -361,7 +361,7 @@ export default function MaterialLibrary() {
                   <div 
                     key={cohort.cohort_id}
                     className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isAssigned ? 'border-[#065F46] bg-[#D1FAE5]' : 'border-[#E5E5E5] hover:bg-[#F9F8F6]'
+                      isAssigned ? 'border-[#065F46] bg-[#D1FAE5]' : 'border-[#B8D4E8] hover:bg-[#E1F0FF]'
                     }`}
                     onClick={() => {
                       if (isAssigned) {
@@ -373,13 +373,13 @@ export default function MaterialLibrary() {
                     data-testid={`assign-cohort-${cohort.cohort_id}`}
                   >
                     <div>
-                      <p className="font-medium text-[#1A1A1A]">{cohort.name}</p>
-                      <p className="text-xs text-[#888]">{cohort.student_ids?.length || 0} students</p>
+                      <p className="font-medium text-[#000000]">{cohort.name}</p>
+                      <p className="text-xs text-[#666666]">{cohort.student_ids?.length || 0} students</p>
                     </div>
                     {isAssigned ? (
                       <span className="text-xs bg-[#065F46] text-white px-2 py-0.5 rounded-full">Assigned</span>
                     ) : (
-                      <span className="text-xs text-[#888]">Click to assign</span>
+                      <span className="text-xs text-[#666666]">Click to assign</span>
                     )}
                   </div>
                 );
