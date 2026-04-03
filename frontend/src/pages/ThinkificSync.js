@@ -45,7 +45,7 @@ export default function ThinkificSync() {
         try {
           const res = await axios.get(`${API_URL}/api/thinkific/progress/${c.cohort_id}`);
           progressMap[c.cohort_id] = res.data;
-        } catch { /* skip */ }
+        } catch (e) { console.error(`Failed to load progress for cohort ${c.cohort_id}:`, e); }
       }
       setProgress(progressMap);
     } catch (error) {

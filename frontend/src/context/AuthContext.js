@@ -73,6 +73,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await axios.post(`${API_URL}/api/auth/logout`, {});
     } catch (error) {
+      console.error('Logout API call failed:', error);
     }
     setUser(null);
     clearToken();

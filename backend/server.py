@@ -76,6 +76,113 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
         logger.error(f"Failed to send email to {recipient}: {e}")
         return None
 
+
+# ==================== TEXT EXTRACTION HELPERS ====================
+
+async def read_file_text(file_path: str, file_name: str) -> str:
+    """Read file from disk and extract text"""
+    try:
+        async with aiofiles.open(file_path, "rb") as f:
+            file_bytes = await f.read()
+        return extract_text_from_file(file_bytes, file_name)
+    except Exception as e:
+        logger.error(f"Failed to read file {file_path}: {e}")
+        return ""
+
+
+async def save_uploaded_file(file: UploadFile, prefix: str) -> tuple:
+    """Save an uploaded file and return (file_path, filename)"""
+    filename = file.filename or "unnamed"
+    ext = filename.lower().split(".")[-1]
+    if ext not in ["pdf", "docx"]:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
+    file_path = UPLOAD_DIR / f"{prefix}_{filename}"
+    async with aiofiles.open(file_path, "wb") as f:
+        content = await file.read()
+        await f.write(content)
+    return str(file_path), filename
+
+
+async def resolve_submission_cohort(material: dict, user: dict, cohort_id: str = None) -> str:
+    """Determine which cohort a submission belongs to. Returns cohort_id."""
+    if material.get("is_library"):
+        if cohort_id:
+            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+        else:
+            cohort = await db.cohorts.find_one({
+                "student_ids": user["user_id"],
+                "cohort_id": {"$in": material.get("cohort_ids", [])}
+            }, {"_id": 0})
+        if not cohort or user["user_id"] not in cohort.get("student_ids", []):
+            raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
+        return cohort["cohort_id"], cohort
+    else:
+        submission_cohort_id = material["cohort_id"]
+        cohort = await db.cohorts.find_one({"cohort_id": submission_cohort_id}, {"_id": 0})
+        if not cohort or user["user_id"] not in cohort.get("student_ids", []):
+            raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
+        return submission_cohort_id, cohort
+
+
+def build_submission_email_html(user_name: str, material: dict, cohort_name: str, is_resubmission: bool) -> str:
+    """Build HTML email for submission notification"""
+    subject_prefix = "Resubmission" if is_resubmission else "New Submission"
+    return f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: {'#E0F2FE' if is_resubmission else '#FDE047'}; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: #1A1A1A; margin: 0; font-size: 24px;">{subject_prefix}: Homework</h1>
+        </div>
+        <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+            <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
+                <strong>{user_name}</strong> has {'resubmitted' if is_resubmission else 'submitted'} homework for review.
+            </p>
+            <div style="background-color: white; border: 1px solid #E5E5E5; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <p style="margin: 0 0 8px 0; color: #5A5A5A; font-size: 14px;">Assignment</p>
+                <p style="margin: 0; color: #1A1A1A; font-weight: 500;">{material['title']}</p>
+                <p style="margin: 8px 0 0 0; color: #888; font-size: 14px;">Week {material['week_number']} &middot; {cohort_name}</p>
+            </div>
+            <p style="color: #5A5A5A; font-size: 14px;">
+                Log in to The Boost Pad to review this submission and provide AI-powered feedback.
+            </p>
+        </div>
+    </div>
+    """
+
+
+async def build_coach_max_context(submission: dict, material: dict) -> tuple:
+    """Build context strings for Coach Max AI tutor. Returns (submission_text, context_text)."""
+    submission_text = await read_file_text(submission["file_path"], submission["file_name"])
+    
+    context_text = ""
+    if material:
+        context_materials = await db.materials.find({
+            "cohort_id": submission["cohort_id"],
+            "week_number": material.get("week_number"),
+            "material_type": {"$in": ["workbook", "case_study"]}
+        }, {"_id": 0}).to_list(10)
+        
+        for mat in context_materials:
+            mat_text = await read_file_text(mat["file_path"], mat["file_name"])
+            if mat_text:
+                context_text += f"\n--- {mat['title']} ---\n{mat_text[:3000]}"
+    
+    return submission_text, context_text
+
+
+def parse_csv_students(content: bytes) -> list:
+    """Parse CSV content and return list of {email, name} dicts"""
+    try:
+        text = content.decode('utf-8')
+    except Exception:
+        text = content.decode('latin-1')
+    reader = csv.DictReader(io.StringIO(text))
+    rows = []
+    for row in reader:
+        email = row.get("email", "").strip().lower()
+        if email:
+            rows.append({"email": email, "name": row.get("name", "").strip()})
+    return rows
+
 # ==================== MODELS ====================
 
 class User(BaseModel):
@@ -1619,32 +1726,8 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
         {"_id": 0}
     )
     
-    # Get course materials for context
-    context_text = ""
-    if material:
-        context_materials = await db.materials.find({
-            "cohort_id": submission["cohort_id"],
-            "week_number": material.get("week_number"),
-            "material_type": {"$in": ["workbook", "case_study"]}
-        }, {"_id": 0}).to_list(10)
-        
-        for mat in context_materials:
-            try:
-                async with aiofiles.open(mat["file_path"], "rb") as f:
-                    mat_bytes = await f.read()
-                mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
-                context_text += f"\n--- {mat['title']} ---\n{mat_text[:3000]}"
-            except Exception:
-                pass
-    
-    # Get student's submission text
-    submission_text = ""
-    try:
-        async with aiofiles.open(submission["file_path"], "rb") as f:
-            file_bytes = await f.read()
-        submission_text = extract_text_from_file(file_bytes, submission["file_name"])
-    except Exception:
-        pass
+    # Build context using helper
+    submission_text, context_text = await build_coach_max_context(submission, material)
     
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -1730,27 +1813,8 @@ async def submit_homework(
     if not material or material.get("material_type") != "homework":
         raise HTTPException(status_code=404, detail="Homework assignment not found")
     
-    # Determine the cohort for this submission
-    if material.get("is_library"):
-        # Library material: use provided cohort_id or find student's cohort
-        if cohort_id:
-            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-        else:
-            # Find a cohort the student belongs to that has this library material assigned
-            cohort = await db.cohorts.find_one({
-                "student_ids": user["user_id"],
-                "cohort_id": {"$in": material.get("cohort_ids", [])}
-            }, {"_id": 0})
-        
-        if not cohort or user["user_id"] not in cohort.get("student_ids", []):
-            raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
-        submission_cohort_id = cohort["cohort_id"]
-    else:
-        # Regular cohort-specific material
-        submission_cohort_id = material["cohort_id"]
-        cohort = await db.cohorts.find_one({"cohort_id": submission_cohort_id}, {"_id": 0})
-        if not cohort or user["user_id"] not in cohort.get("student_ids", []):
-            raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
+    # Resolve cohort using extracted helper
+    submission_cohort_id, cohort = await resolve_submission_cohort(material, user, cohort_id)
     
     # Check for existing submission (scoped to this student + material + cohort)
     existing = await db.submissions.find_one({
@@ -1819,29 +1883,10 @@ async def submit_homework(
         is_resubmission = False
     
     # Send email notification to instructor
-    instructor = await db.users.find_one({"user_id": cohort["instructor_id"]}, {"_id": 0})
+    instructor = await db.users.find_one({"user_id": cohort.get("instructor_id")}, {"_id": 0})
     if instructor:
         subject_prefix = "Resubmission" if is_resubmission else "New Submission"
-        email_html = f"""
-        <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background-color: {'#E0F2FE' if is_resubmission else '#FDE047'}; padding: 20px; border-radius: 12px 12px 0 0;">
-                <h1 style="color: #1A1A1A; margin: 0; font-size: 24px;">{subject_prefix}: Homework</h1>
-            </div>
-            <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
-                <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
-                    <strong>{user['name']}</strong> has {'resubmitted' if is_resubmission else 'submitted'} homework for review.
-                </p>
-                <div style="background-color: white; border: 1px solid #E5E5E5; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                    <p style="margin: 0 0 8px 0; color: #5A5A5A; font-size: 14px;">Assignment</p>
-                    <p style="margin: 0; color: #1A1A1A; font-weight: 500;">{material['title']}</p>
-                    <p style="margin: 8px 0 0 0; color: #888; font-size: 14px;">Week {material['week_number']} • {cohort['name']}</p>
-                </div>
-                <p style="color: #5A5A5A; font-size: 14px;">
-                    Log in to The Boost Pad to review this submission and provide AI-powered feedback.
-                </p>
-            </div>
-        </div>
-        """
+        email_html = build_submission_email_html(user['name'], material, cohort['name'], is_resubmission)
         await send_email_notification(
             instructor["email"],
             f"{subject_prefix}: {material['title']} from {user['name']}",

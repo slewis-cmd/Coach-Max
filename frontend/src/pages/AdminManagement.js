@@ -4,30 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter
-} from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { 
-  ArrowLeft,
-  Users,
-  UserPlus,
-  Shield,
-  GraduationCap,
-  BookOpen,
-  User,
-  Mail,
-  UserMinus,
-  BarChart3,
-  Trash2
+  ArrowLeft, Users, UserPlus, Shield, GraduationCap, BookOpen,
+  User, UserMinus, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { ClearSubmissionsDialog, InviteInstructorDialog } from '../components/admin/AdminDialogs';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -430,67 +412,12 @@ export default function AdminManagement() {
         </Card>
       </main>
 
-      {/* Clear Submissions Confirm Dialog */}
-      <Dialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
-            <DialogTitle className="font-normal text-2xl text-red-700">Clear All Submissions?</DialogTitle>
-            <DialogDescription>
-              This will permanently delete all student homework submissions, uploaded files, and AI tutor chat history. Course materials and cohorts will not be affected. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowClearConfirm(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleClearSubmissions}
-              disabled={clearing}
-              className="bg-red-600 text-white hover:bg-red-700"
-              data-testid="confirm-clear-btn"
-            >
-              {clearing ? 'Clearing...' : 'Yes, Clear All Submissions'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ClearSubmissionsDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}
+        clearing={clearing} onConfirm={handleClearSubmissions} />
 
-      {/* Invite Instructor Dialog */}
-      <Dialog open={showInvite} onOpenChange={setShowInvite}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
-            <DialogTitle className="font-normal text-2xl">Invite Instructor</DialogTitle>
-            <DialogDescription>
-              Enter the email of a user to promote them to instructor. They must have already signed up.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="invite-email">User Email</Label>
-            <Input
-              id="invite-email"
-              data-testid="invite-email-input"
-              type="email"
-              placeholder="instructor@example.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInvite(false)}>
-              Cancel
-            </Button>
-            <Button 
-              data-testid="invite-submit-btn"
-              onClick={handleInviteInstructor}
-              disabled={inviting}
-              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
-            >
-              {inviting ? 'Promoting...' : 'Promote to Instructor'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <InviteInstructorDialog open={showInvite} onOpenChange={setShowInvite}
+        inviteEmail={inviteEmail} setInviteEmail={setInviteEmail}
+        inviting={inviting} onSubmit={handleInviteInstructor} />
     </div>
   );
 }

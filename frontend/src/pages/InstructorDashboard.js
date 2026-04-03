@@ -3,69 +3,17 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Progress } from '../components/ui/progress';
 import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter
-} from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
-import { 
-  BookOpen, 
-  Users, 
-  FileText, 
-  Plus, 
-  LogOut,
-  ChevronRight,
-  Upload,
-  ClipboardList,
-  AlertCircle,
-  FileEdit,
-  Mail,
-  TrendingUp,
-  BarChart3,
-  Shield,
-  Download,
-  Bell,
-  Library,
-  Link2
+  BookOpen, Users, Plus, LogOut, ChevronRight, Upload,
+  AlertCircle, FileEdit, Mail, TrendingUp, Download, Bell
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { downloadFile } from '../utils/download';
+import { InstructorSidebar } from '../components/instructor/Sidebar';
+import { CreateCohortDialog } from '../components/instructor/CreateCohortDialog';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-
-const downloadFile = async (url, filename) => {
-  const token = localStorage.getItem('thinkific_session_token');
-  if (!token) {
-    toast.error('Please log in to download files');
-    return;
-  }
-  const separator = url.includes('?') ? '&' : '?';
-  try {
-    const response = await fetch(`${url}${separator}token=${encodeURIComponent(token)}`);
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || 'Download failed');
-    }
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename || 'download';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(blobUrl);
-  } catch (err) {
-    toast.error('Failed to download file');
-  }
-};
 
 export default function InstructorDashboard() {
   const { user, logout, loading, isAuthenticated, isInstructor } = useAuth();
@@ -88,9 +36,7 @@ export default function InstructorDashboard() {
   }, [loading, isAuthenticated, isInstructor, navigate]);
 
   useEffect(() => {
-    if (isInstructor) {
-      fetchData();
-    }
+    if (isInstructor) fetchData();
   }, [isInstructor]);
 
   const fetchData = async () => {
@@ -104,6 +50,7 @@ export default function InstructorDashboard() {
       setSubmissions(submissionsRes.data);
       setAnalytics(analyticsRes.data);
     } catch (error) {
+      console.error('Failed to load dashboard data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoadingData(false);
@@ -111,11 +58,7 @@ export default function InstructorDashboard() {
   };
 
   const handleCreateCohort = async () => {
-    if (!newCohort.name.trim()) {
-      toast.error('Please enter a cohort name');
-      return;
-    }
-
+    if (!newCohort.name.trim()) { toast.error('Please enter a cohort name'); return; }
     setCreating(true);
     try {
       await axios.post(`${API_URL}/api/cohorts`, newCohort);
@@ -130,21 +73,16 @@ export default function InstructorDashboard() {
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/');
-  };
+  const handleLogout = async () => { await logout(); navigate('/'); };
 
   const pendingSubmissions = submissions.filter(s => s.status === 'pending');
   const draftSubmissions = submissions.filter(s => s.status === 'draft');
   const totalActionRequired = pendingSubmissions.length + draftSubmissions.length;
 
-  // Per-cohort pending counts
   const cohortPendingCounts = {};
   submissions.forEach(s => {
     if (s.status === 'pending' || s.status === 'draft') {
-      const cId = s.cohort_id;
-      cohortPendingCounts[cId] = (cohortPendingCounts[cId] || 0) + 1;
+      cohortPendingCounts[s.cohort_id] = (cohortPendingCounts[s.cohort_id] || 0) + 1;
     }
   });
 
@@ -158,93 +96,9 @@ export default function InstructorDashboard() {
 
   return (
     <div className="min-h-screen bg-[#E1F0FF]" data-testid="instructor-dashboard">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#D0E6F9] border-r border-[#B8D4E8] p-6 hidden md:block">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
-            <BookOpen className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-semibold text-[#000000]">The Boost Pad</span>
-        </div>
+      <InstructorSidebar user={user} isSuperAdmin={isSuperAdmin}
+        totalActionRequired={totalActionRequired} onLogout={handleLogout} />
 
-        <nav className="space-y-2">
-          <Link 
-            to="/dashboard"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-[#000000] font-medium"
-          >
-            <FileText className="w-5 h-5" />
-            Dashboard
-          </Link>
-          <Link 
-            to="/submissions"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
-          >
-            <ClipboardList className="w-5 h-5" />
-            Submissions
-            {totalActionRequired > 0 && (
-              <span className="ml-auto bg-[#22438E] text-white text-xs px-2 py-0.5 rounded-full">
-                {totalActionRequired}
-              </span>
-            )}
-          </Link>
-          <Link 
-            to="/progress"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
-          >
-            <BarChart3 className="w-5 h-5" />
-            Progress
-          </Link>
-          <Link 
-            to="/library"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
-            data-testid="library-link"
-          >
-            <Library className="w-5 h-5" />
-            Library
-          </Link>
-          <Link 
-            to="/thinkific"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
-            data-testid="thinkific-link"
-          >
-            <Link2 className="w-5 h-5" />
-            Thinkific
-          </Link>
-          {isSuperAdmin && (
-            <Link 
-              to="/admin"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
-              data-testid="admin-link"
-            >
-              <Shield className="w-5 h-5" />
-              Admin
-            </Link>
-          )}
-        </nav>
-
-        <div className="absolute bottom-6 left-6 right-6">
-          <div className="flex items-center gap-3 mb-4">
-            {user?.picture && (
-              <img src={user.picture} alt={user.name} className="w-10 h-10 rounded-full" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#000000] truncate">{user?.name}</p>
-              <p className="text-xs text-[#666666] truncate">{user?.email}</p>
-            </div>
-          </div>
-          <Button 
-            variant="ghost" 
-            className="w-full justify-start text-[#333333] hover:text-[#000000]"
-            onClick={handleLogout}
-            data-testid="logout-btn"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
       <main className="md:ml-64 p-6 md:p-8">
         {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between mb-6">
@@ -255,11 +109,9 @@ export default function InstructorDashboard() {
             <span className="font-semibold">The Boost Pad</span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/submissions')}
+            <button onClick={() => navigate('/submissions')}
               className="relative flex items-center justify-center w-9 h-9 rounded-full bg-white border border-[#B8D4E8]"
-              data-testid="notification-bell-mobile"
-            >
+              data-testid="notification-bell-mobile">
               <Bell className="w-4 h-4 text-[#333333]" />
               {totalActionRequired > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-[#DC2626] text-white text-[10px] font-semibold rounded-full px-0.5">
@@ -279,21 +131,15 @@ export default function InstructorDashboard() {
             <h1 className="text-3xl md:text-4xl font-light tracking-tight text-[#000000] mb-2">
               Welcome back, {user?.name?.split(' ')[0]}
             </h1>
-            <p className="text-[#333333]">
-              Manage your cohorts and review student submissions
-            </p>
+            <p className="text-[#333333]">Manage your cohorts and review student submissions</p>
           </div>
-          <button
-            onClick={() => navigate('/submissions')}
+          <button onClick={() => navigate('/submissions')}
             className="relative hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white border border-[#B8D4E8] hover:bg-[#D0E6F9] transition-colors"
-            data-testid="notification-bell"
-          >
+            data-testid="notification-bell">
             <Bell className="w-5 h-5 text-[#333333]" />
             {totalActionRequired > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center bg-[#DC2626] text-white text-[11px] font-semibold rounded-full px-1"
-                data-testid="notification-badge-count">
-                {totalActionRequired}
-              </span>
+                data-testid="notification-badge-count">{totalActionRequired}</span>
             )}
           </button>
         </div>
@@ -314,10 +160,7 @@ export default function InstructorDashboard() {
                     {draftSubmissions.length > 0 && `${draftSubmissions.length} draft${draftSubmissions.length > 1 ? 's' : ''} ready to send`}
                   </p>
                 </div>
-                <Button 
-                  onClick={() => navigate('/submissions')}
-                  className="bg-[#1A75BA] text-white hover:bg-[#713F12]"
-                >
+                <Button onClick={() => navigate('/submissions')} className="bg-[#1A75BA] text-white hover:bg-[#713F12]">
                   Review Now
                 </Button>
               </div>
@@ -377,8 +220,7 @@ export default function InstructorDashboard() {
           <Card className="bg-white border-[#B8D4E8] mb-8">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-normal flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#22438E]" />
-                This Week
+                <TrendingUp className="w-5 h-5 text-[#22438E]" />This Week
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -392,26 +234,18 @@ export default function InstructorDashboard() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-light text-[#000000]">Your Cohorts</h2>
-            <Button 
-              data-testid="create-cohort-btn"
-              onClick={() => setShowCreateCohort(true)}
-              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              New Cohort
+            <Button data-testid="create-cohort-btn" onClick={() => setShowCreateCohort(true)}
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
+              <Plus className="w-4 h-4 mr-2" />New Cohort
             </Button>
           </div>
-
           {cohorts.length === 0 ? (
             <Card className="bg-white border-[#B8D4E8] border-dashed">
               <CardContent className="p-12 text-center">
                 <Users className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-[#000000] mb-2">No cohorts yet</h3>
                 <p className="text-[#333333] mb-4">Create your first cohort to get started</p>
-                <Button 
-                  onClick={() => setShowCreateCohort(true)}
-                  className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
-                >
+                <Button onClick={() => setShowCreateCohort(true)} className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
                   Create Cohort
                 </Button>
               </CardContent>
@@ -419,13 +253,11 @@ export default function InstructorDashboard() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {cohorts.map((cohort, index) => (
-                <Card 
-                  key={cohort.cohort_id}
+                <Card key={cohort.cohort_id}
                   className="bg-white border-[#B8D4E8] hover:shadow-md transition-shadow cursor-pointer group"
                   onClick={() => navigate(`/cohort/${cohort.cohort_id}`)}
                   style={{ animationDelay: `${index * 0.1}s` }}
-                  data-testid={`cohort-card-${cohort.cohort_id}`}
-                >
+                  data-testid={`cohort-card-${cohort.cohort_id}`}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg font-normal flex items-center justify-between">
                       {cohort.name}
@@ -436,14 +268,12 @@ export default function InstructorDashboard() {
                   <CardContent>
                     <div className="flex items-center gap-4 text-sm text-[#333333]">
                       <span className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        {cohort.student_ids?.length || 0} students
+                        <Users className="w-4 h-4" />{cohort.student_ids?.length || 0} students
                       </span>
                       {cohortPendingCounts[cohort.cohort_id] > 0 && (
                         <span className="flex items-center gap-1 text-[#DC2626]"
                           data-testid={`cohort-pending-badge-${cohort.cohort_id}`}>
-                          <Bell className="w-3.5 h-3.5" />
-                          {cohortPendingCounts[cohort.cohort_id]} pending
+                          <Bell className="w-3.5 h-3.5" />{cohortPendingCounts[cohort.cohort_id]} pending
                         </span>
                       )}
                     </div>
@@ -459,22 +289,16 @@ export default function InstructorDashboard() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-light text-[#000000]">Action Required</h2>
-              <Link 
-                to="/submissions"
-                className="text-sm text-[#333333] hover:text-[#000000] flex items-center gap-1"
-              >
+              <Link to="/submissions" className="text-sm text-[#333333] hover:text-[#000000] flex items-center gap-1">
                 View all <ChevronRight className="w-4 h-4" />
               </Link>
             </div>
             <div className="space-y-3">
-              {/* Drafts first (ready to send) */}
               {draftSubmissions.slice(0, 3).map((sub) => (
-                <Card 
-                  key={sub.submission_id}
+                <Card key={sub.submission_id}
                   className="bg-[#F0F9FF] border-[#BAE6FD] hover:shadow-sm transition-shadow cursor-pointer"
                   onClick={() => navigate(`/submission/${sub.submission_id}`)}
-                  data-testid={`draft-${sub.submission_id}`}
-                >
+                  data-testid={`draft-${sub.submission_id}`}>
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-[#E1F0FF] rounded-lg flex items-center justify-center">
@@ -482,41 +306,27 @@ export default function InstructorDashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-[#000000]">{sub.student?.name || 'Unknown'}</p>
-                        <p className="text-sm text-[#666666]">
-                          {sub.material?.title || 'Homework'} • Ready to send
-                        </p>
+                        <p className="text-sm text-[#666666]">{sub.material?.title || 'Homework'} • Ready to send</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          downloadFile(
-                            `${API_URL}/api/submissions/${sub.submission_id}/download`,
-                            sub.file_name || 'homework'
-                          );
-                        }}
-                        className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
-                        data-testid={`download-draft-${sub.submission_id}`}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Homework
+                      <button onClick={(e) => {
+                        e.stopPropagation();
+                        downloadFile(`${API_URL}/api/submissions/${sub.submission_id}/download`, sub.file_name || 'homework');
+                      }} className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
+                        data-testid={`download-draft-${sub.submission_id}`}>
+                        <Download className="w-3.5 h-3.5" />Homework
                       </button>
-                      <Button size="sm" className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
-                        Review & Send
-                      </Button>
+                      <Button size="sm" className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">Review & Send</Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-              {/* Pending (needs AI review) */}
               {pendingSubmissions.slice(0, 3).map((sub) => (
-                <Card 
-                  key={sub.submission_id}
+                <Card key={sub.submission_id}
                   className="bg-white border-[#B8D4E8] hover:shadow-sm transition-shadow cursor-pointer"
                   onClick={() => navigate(`/submission/${sub.submission_id}`)}
-                  data-testid={`submission-${sub.submission_id}`}
-                >
+                  data-testid={`submission-${sub.submission_id}`}>
                   <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-[#7CBAE6] rounded-lg flex items-center justify-center">
@@ -524,29 +334,18 @@ export default function InstructorDashboard() {
                       </div>
                       <div>
                         <p className="font-medium text-[#000000]">{sub.student?.name || 'Unknown'}</p>
-                        <p className="text-sm text-[#666666]">
-                          {sub.material?.title || 'Homework'} • Week {sub.material?.week_number || '?'}
-                        </p>
+                        <p className="text-sm text-[#666666]">{sub.material?.title || 'Homework'} • Week {sub.material?.week_number || '?'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          downloadFile(
-                            `${API_URL}/api/submissions/${sub.submission_id}/download`,
-                            sub.file_name || 'homework'
-                          );
-                        }}
-                        className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
-                        data-testid={`download-pending-${sub.submission_id}`}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Homework
+                      <button onClick={(e) => {
+                        e.stopPropagation();
+                        downloadFile(`${API_URL}/api/submissions/${sub.submission_id}/download`, sub.file_name || 'homework');
+                      }} className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
+                        data-testid={`download-pending-${sub.submission_id}`}>
+                        <Download className="w-3.5 h-3.5" />Homework
                       </button>
-                      <Button size="sm" className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
-                        Generate Review
-                      </Button>
+                      <Button size="sm" className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">Generate Review</Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -556,55 +355,8 @@ export default function InstructorDashboard() {
         )}
       </main>
 
-      {/* Create Cohort Dialog */}
-      <Dialog open={showCreateCohort} onOpenChange={setShowCreateCohort}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
-            <DialogTitle className="font-normal text-2xl">Create New Cohort</DialogTitle>
-            <DialogDescription>
-              Create a cohort to organize your students and course materials.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="cohort-name">Cohort Name</Label>
-              <Input
-                id="cohort-name"
-                data-testid="cohort-name-input"
-                placeholder="e.g., Fall 2024 Leadership Course"
-                value={newCohort.name}
-                onChange={(e) => setNewCohort({ ...newCohort, name: e.target.value })}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cohort-desc">Description (optional)</Label>
-              <Textarea
-                id="cohort-desc"
-                data-testid="cohort-desc-input"
-                placeholder="Brief description of the cohort..."
-                value={newCohort.description}
-                onChange={(e) => setNewCohort({ ...newCohort, description: e.target.value })}
-                className="mt-1"
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateCohort(false)}>
-              Cancel
-            </Button>
-            <Button 
-              data-testid="create-cohort-submit"
-              onClick={handleCreateCohort}
-              disabled={creating}
-              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
-            >
-              {creating ? 'Creating...' : 'Create Cohort'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateCohortDialog open={showCreateCohort} onOpenChange={setShowCreateCohort}
+        newCohort={newCohort} setNewCohort={setNewCohort} creating={creating} onSubmit={handleCreateCohort} />
     </div>
   );
 }
