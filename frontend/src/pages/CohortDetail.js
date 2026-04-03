@@ -751,15 +751,34 @@ export default function CohortDetail() {
                                   <File className="w-3 h-3 inline mr-1" />
                                   {mat.file_name}
                                 </p>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm"
-                                  className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
-                                  onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
-                                >
-                                  <Download className="w-3 h-3 mr-1" />
-                                  Download
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
+                                    onClick={() => handleDownloadMaterial(mat.material_id, mat.file_name)}
+                                  >
+                                    <Download className="w-3 h-3 mr-1" />
+                                    Download
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
+                                    data-testid={`copy-submit-link-${mat.material_id}`}
+                                    onClick={() => {
+                                      const link = `${window.location.origin}/submit/${mat.material_id}?cohort=${cohort.cohort_id}`;
+                                      navigator.clipboard.writeText(link).then(() => {
+                                        toast.success('Submission link copied!');
+                                      }).catch(() => {
+                                        toast.error('Failed to copy link');
+                                      });
+                                    }}
+                                  >
+                                    <Copy className="w-3 h-3 mr-1" />
+                                    Copy Link
+                                  </Button>
+                                </div>
                               </div>
                               {/* Student Submissions */}
                               {(() => {

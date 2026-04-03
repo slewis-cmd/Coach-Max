@@ -17,6 +17,7 @@ import MaterialLibrary from "./pages/MaterialLibrary";
 import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
 import InvitePage from "./pages/InvitePage";
+import DirectSubmit from "./pages/DirectSubmit";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -138,6 +139,7 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       <Route path="/invite/:code" element={<InvitePage />} />
+      <Route path="/submit/:materialId" element={<DirectSubmit />} />
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
