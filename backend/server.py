@@ -1203,6 +1203,35 @@ async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(g
     
     return list(weeks.values())
 
+@api_router.get("/submit-link/{material_id}")
+async def get_submit_link_info(material_id: str):
+    """Public endpoint: Get material info for direct submission link"""
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material or material.get("material_type") != "homework":
+        raise HTTPException(status_code=404, detail="Homework assignment not found")
+    
+    # Get cohort info
+    cohort_ids = []
+    if material.get("is_library"):
+        cohort_ids = material.get("cohort_ids", [])
+    elif material.get("cohort_id"):
+        cohort_ids = [material["cohort_id"]]
+    
+    cohorts = await db.cohorts.find(
+        {"cohort_id": {"$in": cohort_ids}},
+        {"_id": 0, "cohort_id": 1, "name": 1}
+    ).to_list(20)
+    
+    return {
+        "material_id": material_id,
+        "title": material.get("title", ""),
+        "week_number": material.get("week_number"),
+        "file_name": material.get("file_name"),
+        "cohorts": cohorts
+    }
+
+
+
 @api_router.delete("/materials/{material_id}")
 async def delete_material(material_id: str, user: dict = Depends(require_instructor)):
     """Delete a material"""
