@@ -87,6 +87,7 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - **POST /api/cohorts/{id}/release-week, POST /api/cohorts/{id}/unrelease-week**
 - GET/POST /api/cohorts/{id}/materials, DELETE /api/materials/{id}, GET /api/materials/{id}/download
 - POST /api/materials/{id}/submit
+- **GET /api/submit-link/{material_id}** (public — returns material info for direct submit page)
 - **GET /api/student/dashboard** (weekly progress with released_weeks filter)
 - GET /api/submissions, GET /api/submissions/{id}
 - POST /api/submissions/{id}/review, PUT /api/submissions/{id}/feedback
@@ -158,7 +159,7 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 ### P2 (Future)
 - [ ] Export submissions and feedback as PDF
 
-### Completed (March 26 - April 1, 2026)
+### Completed (March 26 - April 3, 2026)
 - [x] Material Library — Central library for workbooks/case studies/homework, linked across cohorts
 - [x] Assign Instructor to Cohort — Super admin can reassign cohorts to different instructors
 - [x] Multiple Instructors per Cohort — instructor_ids array, multi-select in dialog
@@ -167,3 +168,4 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Library Homework — Students can submit homework against library materials
 - [x] Boost Pad Branding — Full rebrand with #22438E/#7CBAE6/#1A75BA/#E1F0FF palette, Montserrat/Lato fonts
 - [x] Thinkific Integration — API sync for courses, students, progress; webhook receiver for real-time updates
+- [x] Direct Submission Link — Instructors can copy a link per homework for students to submit via /submit/:materialId (April 3, 2026)
