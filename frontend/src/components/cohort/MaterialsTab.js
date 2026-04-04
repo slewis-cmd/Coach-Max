@@ -203,25 +203,25 @@ export function MaterialsTab({
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-[#666666]"><File className="w-3 h-3 inline mr-1" />{mat.file_name}</p>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
-                        onClick={() => onDownloadMaterial(mat.material_id, mat.file_name)}>
-                        <Download className="w-3 h-3 mr-1" />Download
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
-                        data-testid={`copy-submit-link-${mat.material_id}`}
-                        onClick={() => {
-                          const link = `${window.location.origin}/submit/${mat.material_id}?cohort=${cohort.cohort_id}`;
-                          navigator.clipboard.writeText(link).then(() => {
-                            toast.success('Submission link copied!');
-                          }).catch(() => {
-                            toast.error('Failed to copy link');
-                          });
-                        }}>
-                        <Copy className="w-3 h-3 mr-1" />Copy Link
-                      </Button>
-                    </div>
+                    <Button variant="ghost" size="sm" className="text-[#22438E] hover:text-[#1A3A7A] h-7 px-2"
+                      onClick={() => onDownloadMaterial(mat.material_id, mat.file_name)}>
+                      <Download className="w-3 h-3 mr-1" />Download
+                    </Button>
                   </div>
+                  <Button
+                    variant="outline" size="sm"
+                    className="w-full border-[#1A75BA] text-[#1A75BA] hover:bg-[#E1F0FF] rounded-lg mb-3"
+                    data-testid={`copy-submit-link-${mat.material_id}`}
+                    onClick={() => {
+                      const link = `${window.location.origin}/submit/${mat.material_id}?cohort=${cohort.cohort_id}`;
+                      navigator.clipboard.writeText(link).then(() => {
+                        toast.success('Submission link copied!');
+                      }).catch(() => {
+                        toast.error('Failed to copy link');
+                      });
+                    }}>
+                    <Copy className="w-3.5 h-3.5 mr-1.5" />Copy Submission Link for Thinkific
+                  </Button>
                   {/* Student Submissions */}
                   {(() => {
                     const subs = cohortSubmissions.filter(s => s.material_id === mat.material_id);
