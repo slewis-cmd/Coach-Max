@@ -13,7 +13,7 @@ import { MaterialsTab } from '../components/cohort/MaterialsTab';
 import { StudentsTab } from '../components/cohort/StudentsTab';
 import {
   AddStudentDialog, UploadMaterialDialog, SubmitHomeworkDialog,
-  BulkImportDialog, InviteLinkDialog, AssignInstructorDialog
+  BulkImportDialog, InviteLinkDialog, AssignInstructorDialog, SubmitOnBehalfDialog
 } from '../components/cohort/CohortDialogs';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -37,6 +37,8 @@ export default function CohortDetail() {
   const [showInviteLink, setShowInviteLink] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAssignInstructor, setShowAssignInstructor] = useState(false);
+  const [showSubmitOnBehalf, setShowSubmitOnBehalf] = useState(false);
+  const [submittingOnBehalf, setSubmittingOnBehalf] = useState(false);
   const [instructorsList, setInstructorsList] = useState([]);
   const [assigningInstructor, setAssigningInstructor] = useState(false);
   
@@ -216,6 +218,24 @@ export default function CohortDetail() {
     }
   };
 
+  const handleSubmitOnBehalf = async ({ studentId, materialId, file }) => {
+    setSubmittingOnBehalf(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('student_id', studentId);
+      formData.append('cohort_id', cohortId);
+      const res = await axios.post(`${API_URL}/api/materials/${materialId}/submit-on-behalf`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(res.data.message);
+      setShowSubmitOnBehalf(false);
+      fetchCohort();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to submit on behalf');
+    } finally {
+      setSubmittingOnBehalf(false);
+    }
+  };
+
   const handleDownloadMaterial = async (materialId, fileName) => {
     const token = localStorage.getItem('thinkific_session_token');
     if (!token) { toast.error('Please log in to download files'); return; }
@@ -325,6 +345,10 @@ export default function CohortDetail() {
                 className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg" data-testid="upload-material-btn">
                 <Upload className="w-4 h-4 mr-2" />Upload Material
               </Button>
+              <Button variant="outline" onClick={() => setShowSubmitOnBehalf(true)}
+                className="border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF] rounded-lg" data-testid="submit-on-behalf-trigger-btn">
+                <FileText className="w-4 h-4 mr-2" />Submit for Student
+              </Button>
             </div>
           )}
         </div>
@@ -394,6 +418,9 @@ export default function CohortDetail() {
 
       <AssignInstructorDialog open={showAssignInstructor} onOpenChange={setShowAssignInstructor}
         cohort={cohort} instructorsList={instructorsList} onAssign={handleAssignInstructor} />
+      <SubmitOnBehalfDialog open={showSubmitOnBehalf} onOpenChange={setShowSubmitOnBehalf}
+        cohort={cohort} submitting={submittingOnBehalf} onSubmit={handleSubmitOnBehalf}
+        homeworkList={materials.flatMap(week => week.homework || [])} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Depends, Response, Request
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Depends, Response, Request
 from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -1970,6 +1970,220 @@ async def submit_homework(
     )
     
     return {"submission_id": submission_id, "message": f"Homework {'resubmitted' if is_resubmission else 'submitted'}"}
+
+@api_router.post("/materials/{material_id}/submit-on-behalf")
+async def submit_on_behalf(
+    material_id: str,
+    file: UploadFile = File(...),
+    student_id: str = Form(...),
+    cohort_id: str = Form(None),
+    user: dict = Depends(require_instructor)
+):
+    """Instructor submits homework on behalf of a student, then auto-triggers AI review"""
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material or material.get("material_type") != "homework":
+        raise HTTPException(status_code=404, detail="Homework assignment not found")
+    
+    # Verify instructor manages this cohort
+    if cohort_id:
+        cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    else:
+        cohort_ids = material.get("cohort_ids") or ([material["cohort_id"]] if material.get("cohort_id") else [])
+        cohort = await db.cohorts.find_one({"cohort_id": {"$in": cohort_ids}}, {"_id": 0}) if cohort_ids else None
+    
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    submission_cohort_id = cohort["cohort_id"]
+    
+    # Verify student exists and is in the cohort
+    student = await db.users.find_one({"user_id": student_id}, {"_id": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if student_id not in (cohort.get("student_ids") or []):
+        raise HTTPException(status_code=400, detail="Student is not in this cohort")
+    
+    # Check for existing submission
+    existing = await db.submissions.find_one({
+        "material_id": material_id,
+        "student_id": student_id,
+        "cohort_id": submission_cohort_id
+    }, {"_id": 0})
+    
+    if existing:
+        try:
+            os.remove(existing["file_path"])
+        except Exception:
+            pass
+    
+    # Validate file
+    filename = file.filename or "unnamed"
+    ext = filename.lower().split(".")[-1]
+    if ext not in ["pdf", "docx"]:
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
+    
+    # Save file
+    submission_id = f"sub_{uuid.uuid4().hex[:12]}"
+    file_path = UPLOAD_DIR / f"{submission_id}_{filename}"
+    async with aiofiles.open(file_path, "wb") as f:
+        content = await file.read()
+        await f.write(content)
+    
+    if existing:
+        submission_id = existing["submission_id"]
+        await db.submissions.update_one(
+            {"submission_id": submission_id},
+            {"$set": {
+                "file_path": str(file_path),
+                "file_name": filename,
+                "status": "pending",
+                "ai_feedback": None,
+                "instructor_feedback": None,
+                "feedback_sent": False,
+                "resubmission_allowed": False,
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
+                "submitted_by": user["user_id"],
+                "resubmission_count": existing.get("resubmission_count", 0) + 1
+            }}
+        )
+    else:
+        submission = Submission(
+            submission_id=submission_id,
+            material_id=material_id,
+            cohort_id=submission_cohort_id,
+            student_id=student_id,
+            file_path=str(file_path),
+            file_name=filename
+        )
+        doc = submission.model_dump()
+        doc["submitted_at"] = doc["submitted_at"].isoformat()
+        doc["resubmission_count"] = 0
+        doc["submitted_by"] = user["user_id"]
+        await db.submissions.insert_one(doc)
+    
+    # Auto-trigger AI review in the background
+    async def auto_review():
+        try:
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            
+            # Get context materials for this week
+            context_materials = await db.materials.find({
+                "week_number": material.get("week_number"),
+                "material_type": {"$in": ["workbook", "case_study"]},
+                "$or": [
+                    {"cohort_ids": submission_cohort_id},
+                    {"cohort_id": submission_cohort_id}
+                ]
+            }, {"_id": 0}).to_list(10)
+            
+            # Extract text from submission
+            async with aiofiles.open(str(file_path), "rb") as f:
+                file_bytes = await f.read()
+            submission_text = extract_text_from_file(file_bytes, filename)
+            
+            if not submission_text.strip():
+                logger.error(f"Auto review: empty submission text for {submission_id}")
+                return
+            
+            # Build context from course materials
+            context_text = ""
+            for mat in context_materials:
+                try:
+                    async with aiofiles.open(mat["file_path"], "rb") as f:
+                        mat_bytes = await f.read()
+                    mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
+                    context_text += f"\n\n--- {mat['material_type'].upper()}: {mat['title']} ---\n{mat_text[:5000]}"
+                except Exception:
+                    pass
+            
+            api_key = os.environ.get("EMERGENT_LLM_KEY")
+            if not api_key:
+                logger.error(f"Auto review: EMERGENT_LLM_KEY not set")
+                return
+            
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"review_{submission_id}",
+                system_message="""You are a supportive and encouraging AI tutor helping students learn.
+Your role is to provide qualitative, structured feedback on homework submissions.
+
+Guidelines:
+- Be warm, supportive, and encouraging
+- Use specific examples from their work to support each point
+- Do NOT give grades or scores
+- Write in a mentoring, supportive tone
+- Keep each bullet point concise (1-2 sentences)
+
+You MUST structure your feedback EXACTLY as follows:
+
+A brief encouraging opening sentence acknowledging their effort.
+
+What You Did Well:
+- [specific strength with example from their work]
+- [specific strength with example from their work]
+- [specific strength with example from their work]
+
+Areas for Growth:
+- [constructive suggestion framed positively with guidance]
+- [constructive suggestion framed positively with guidance]
+- [constructive suggestion framed positively with guidance]
+
+A brief closing sentence with encouragement and motivation to keep going."""
+            ).with_model("openai", "gpt-5.2")
+            
+            prompt = f"""Please review this student's homework submission and provide structured feedback.
+
+ASSIGNMENT: {material['title']}
+{f"DESCRIPTION: {material['description']}" if material.get('description') else ""}
+
+COURSE CONTEXT (Week {material.get('week_number', '?')} materials):
+{context_text[:8000] if context_text else "No additional context available."}
+
+STUDENT SUBMISSION:
+{submission_text[:10000]}
+
+Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission."""
+
+            feedback = await chat.send_message(UserMessage(text=prompt))
+            
+            await db.submissions.update_one(
+                {"submission_id": submission_id},
+                {"$set": {
+                    "ai_feedback": feedback,
+                    "status": "draft",
+                    "reviewed_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            logger.info(f"Auto AI review completed for {submission_id}")
+        except Exception as e:
+            logger.error(f"Auto AI review failed for {submission_id}: {e}")
+    
+    asyncio.create_task(auto_review())
+    
+    # Send confirmation email to student
+    student_confirm_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Submission Received!</h1>
+        </div>
+        <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+            <p style="color: #1A1A1A; font-size: 16px;">Hi <strong>{student['name'].split()[0]}</strong>,</p>
+            <p style="color: #5A5A5A; font-size: 14px;">
+                Your instructor has submitted <strong>{material['title']}</strong> (Week {material.get('week_number', '?')}) on your behalf.
+                Coach Max will review your work and your instructor will send you personalized feedback.
+            </p>
+            <p style="color: #888; font-size: 13px;">{cohort['name']} &middot; The Boost Pad</p>
+        </div>
+    </div>
+    """
+    await send_email_notification(
+        student["email"],
+        f"Submission Received: {material['title']}",
+        student_confirm_html
+    )
+    
+    return {"submission_id": submission_id, "message": f"Homework submitted on behalf of {student['name']}. AI review in progress."}
+
 
 @api_router.get("/submissions")
 async def get_submissions(user: dict = Depends(get_current_user)):

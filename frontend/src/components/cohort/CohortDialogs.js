@@ -349,3 +349,94 @@ export function AssignInstructorDialog({ open, onOpenChange, cohort, instructors
     </Dialog>
   );
 }
+
+export function SubmitOnBehalfDialog({ open, onOpenChange, cohort, homeworkList, onSubmit, submitting }) {
+  const [selectedStudent, setSelectedStudent] = React.useState('');
+  const [selectedHomework, setSelectedHomework] = React.useState('');
+  const [file, setFile] = React.useState(null);
+
+  const students = (cohort?.students || []).filter(s => s.user_id);
+
+  const handleSubmit = () => {
+    if (!selectedStudent || !selectedHomework || !file) {
+      toast.error('Please select a student, homework, and file');
+      return;
+    }
+    onSubmit({ studentId: selectedStudent, materialId: selectedHomework, file });
+  };
+
+  const handleClose = (v) => {
+    if (!v) { setSelectedStudent(''); setSelectedHomework(''); setFile(null); }
+    onOpenChange(v);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="bg-white">
+        <DialogHeader>
+          <DialogTitle className="font-normal text-2xl">Submit on Behalf of Student</DialogTitle>
+          <DialogDescription>Upload a homework file for a student in this cohort. AI feedback will be generated automatically.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label>Student *</Label>
+            <Select value={selectedStudent} onValueChange={setSelectedStudent}>
+              <SelectTrigger className="mt-1" data-testid="behalf-student-select">
+                <SelectValue placeholder="Select a student" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map(s => (
+                  <SelectItem key={s.user_id} value={s.user_id}>{s.name || s.email}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Homework Assignment *</Label>
+            <Select value={selectedHomework} onValueChange={setSelectedHomework}>
+              <SelectTrigger className="mt-1" data-testid="behalf-homework-select">
+                <SelectValue placeholder="Select homework" />
+              </SelectTrigger>
+              <SelectContent>
+                {homeworkList.map(hw => (
+                  <SelectItem key={hw.material_id} value={hw.material_id}>
+                    Week {hw.week_number} — {hw.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>File (PDF or DOCX) *</Label>
+            <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer">
+              <label htmlFor="behalf-file" className="cursor-pointer block">
+                {file ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <File className="w-5 h-5 text-[#22438E]" />
+                    <span className="text-sm text-[#000000]">{file.name}</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 text-[#94B8D9] mx-auto mb-2" />
+                    <p className="text-sm text-[#666666]">Click to upload</p>
+                    <p className="text-xs text-[#94B8D9] mt-1">PDF or DOCX</p>
+                  </>
+                )}
+              </label>
+            </div>
+            <input id="behalf-file" data-testid="behalf-file-input" type="file" accept=".pdf,.docx"
+              className="hidden" onChange={(e) => setFile(e.target.files[0])} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleClose(false)}>Cancel</Button>
+          <Button data-testid="submit-on-behalf-btn" onClick={handleSubmit} disabled={submitting}
+            className="bg-[#22438E] text-white hover:bg-[#1A3A7A]">
+            {submitting ? 'Submitting...' : 'Submit on Behalf'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
