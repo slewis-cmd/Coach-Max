@@ -2722,7 +2722,13 @@ async def root():
 
 @api_router.get("/health")
 async def health():
-    return {"status": "healthy"}
+    has_key = bool(resend.api_key)
+    return {
+        "status": "healthy",
+        "email_sender": SENDER_EMAIL,
+        "resend_key_prefix": (resend.api_key[:8] + "...") if resend.api_key else "NOT SET",
+        "email_ready": has_key and bool(SENDER_EMAIL)
+    }
 
 @api_router.get("/email-diagnostic")
 async def email_diagnostic(user: dict = Depends(require_instructor)):
