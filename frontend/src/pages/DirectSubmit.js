@@ -127,14 +127,10 @@ export default function DirectSubmit() {
               <p className="text-sm text-[#666] mb-4">
                 Your homework has been submitted for review. Coach Max will provide AI feedback shortly.
               </p>
-              <div className="flex gap-3 justify-center">
+              <div className="flex justify-center">
                 <Link to="/dashboard">
                   <Button className="bg-[#22438E] text-white hover:bg-[#1A3A7A]">Go to Dashboard</Button>
                 </Link>
-                <Button variant="outline" className="border-[#22438E] text-[#22438E]"
-                  onClick={() => { setSubmitted(false); setFile(null); }}>
-                  Submit Another
-                </Button>
               </div>
             </div>
           )}
