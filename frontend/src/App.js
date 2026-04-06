@@ -34,6 +34,11 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!isAuthenticated) {
+    // Save intended destination so AuthCallback can redirect back after login
+    const intended = location.pathname + location.search;
+    if (intended !== '/' && intended !== '/dashboard') {
+      localStorage.setItem('redirect_after_login', intended);
+    }
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 

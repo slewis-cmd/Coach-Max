@@ -45,8 +45,14 @@ export default function AuthCallback() {
 
           setUser(response.data.user);
           
+          // Check for a saved redirect (e.g. Coach Max link from email)
+          const savedRedirect = localStorage.getItem('redirect_after_login');
+          localStorage.removeItem('redirect_after_login');
+
           if (!response.data.user?.role) {
             navigate('/role-selection', { replace: true });
+          } else if (savedRedirect) {
+            navigate(savedRedirect, { replace: true });
           } else {
             navigate('/dashboard', { replace: true });
           }
