@@ -2531,94 +2531,101 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
     coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/submit/{submission.get('material_id', '')}?cohort={submission.get('cohort_id', '')}"
     
+    # Sanitize text for PDF - replace unicode chars then encode to latin-1
+    def safe_text(text):
+        text = text.replace("\u2022", "-")   # bullet
+        text = text.replace("\u2013", "-")   # en-dash
+        text = text.replace("\u2014", "-")   # em-dash
+        text = text.replace("\u2018", "'")   # left single quote
+        text = text.replace("\u2019", "'")   # right single quote
+        text = text.replace("\u201c", '"')   # left double quote
+        text = text.replace("\u201d", '"')   # right double quote
+        text = text.replace("\u2026", "...")  # ellipsis
+        return text.encode("latin-1", "replace").decode("latin-1")
+    
+    # fpdf2 v2.8.7: multi_cell(w=0) doesn't reset x to left margin, causing
+    # "Not enough horizontal space" on subsequent calls.  Use explicit width.
+    CW = 190  # content width = 210mm page - 10mm left - 10mm right margin
+    
     # Build PDF
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=25)
     
     # Header bar
-    pdf.set_fill_color(34, 67, 142)  # #22438E
-    pdf.rect(0, 0, 210, 35, 'F')
+    pdf.set_fill_color(34, 67, 142)
+    pdf.rect(0, 0, 210, 35, "F")
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_y(10)
-    pdf.cell(0, 10, "The Boost Pad", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 10, "The Boost Pad", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, "Feedback Report", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 6, "Feedback Report", align="C", new_x="LMARGIN", new_y="NEXT")
     
     pdf.ln(15)
     
     # Student info section
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 8, f"Student: {student_name}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 8, safe_text(f"Student: {student_name}"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 6, f"Assignment: {material_title}  |  Week {week_num}  |  {cohort_name}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 6, safe_text(f"Assignment: {material_title}  |  Week {week_num}  |  {cohort_name}"), new_x="LMARGIN", new_y="NEXT")
     if submission.get("submitted_at"):
-        pdf.cell(0, 6, f"Submitted: {submission['submitted_at'][:10]}", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(CW, 6, f"Submitted: {submission['submitted_at'][:10]}", new_x="LMARGIN", new_y="NEXT")
     
     pdf.ln(5)
     
     # Divider
-    pdf.set_draw_color(184, 212, 232)  # #B8D4E8
+    pdf.set_draw_color(184, 212, 232)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(8)
     
     # Feedback section
-    pdf.set_text_color(34, 67, 142)  # #22438E
+    pdf.set_text_color(34, 67, 142)
     pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 8, "Coach Max Feedback", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 8, "Coach Max Feedback", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
     
     # Feedback body
     pdf.set_text_color(30, 30, 30)
     pdf.set_font("Helvetica", "", 11)
     
-    # Sanitize feedback for PDF - replace all non-latin1 characters
-    def safe_text(text):
-        return text.encode('latin-1', 'replace').decode('latin-1')
-    
     for line in feedback.split("\n"):
         line = line.strip()
         if not line:
             pdf.ln(4)
             continue
-        line_safe = safe_text(line)
-        # Bold section headers
+        line_safe = safe_text(line).replace("**", "")
         if line_safe.endswith(":") and len(line_safe) < 40:
             pdf.set_font("Helvetica", "B", 11)
-            pdf.multi_cell(0, 6, line_safe)
-            pdf.set_font("Helvetica", "", 11)
-        elif line_safe.startswith("**") and line_safe.endswith("**"):
-            pdf.set_font("Helvetica", "B", 11)
-            pdf.multi_cell(0, 6, line_safe.replace("**", ""))
+            pdf.multi_cell(w=CW, h=6, text=line_safe, new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 11)
         else:
-            pdf.multi_cell(0, 6, line_safe.replace("**", ""))
+            pdf.multi_cell(w=CW, h=6, text=line_safe, new_x="LMARGIN", new_y="NEXT")
     
     pdf.ln(10)
     
     # Coach Max CTA
-    pdf.set_fill_color(225, 240, 255)  # #E1F0FF
+    pdf.set_fill_color(225, 240, 255)
     pdf.set_draw_color(184, 212, 232)
     y_before = pdf.get_y()
-    pdf.rect(10, y_before, 190, 28, 'DF')
+    pdf.rect(10, y_before, 190, 28, "DF")
     pdf.set_y(y_before + 4)
     pdf.set_text_color(34, 67, 142)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 7, safe_text("Have questions about this feedback?"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 7, "Have questions about this feedback?", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(26, 117, 186)  # #1A75BA
+    pdf.set_text_color(26, 117, 186)
     url_display = coach_max_url if len(coach_max_url) < 80 else coach_max_url[:77] + "..."
-    pdf.cell(0, 7, safe_text("Chat with Coach Max: " + url_display), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 7, safe_text("Chat with Coach Max: " + url_display), align="C", new_x="LMARGIN", new_y="NEXT")
     
     pdf.ln(10)
     
     # Footer
     pdf.set_text_color(150, 150, 150)
     pdf.set_font("Helvetica", "I", 9)
-    pdf.cell(0, 6, safe_text(f"Reviewed by {instructor_name}  |  The Boost Pad  |  {cohort_name}"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(CW, 6, safe_text(f"Reviewed by {instructor_name}  |  The Boost Pad  |  {cohort_name}"), align="C", new_x="LMARGIN", new_y="NEXT")
     
     # Save PDF to temp file
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
