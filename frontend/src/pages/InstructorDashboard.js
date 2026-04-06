@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { downloadFile } from '../utils/download';
+import { handleDownloadSubmission } from '../utils/download';
 import { InstructorSidebar } from '../components/instructor/Sidebar';
 import { CreateCohortDialog } from '../components/instructor/CreateCohortDialog';
 
@@ -311,7 +311,7 @@ export default function InstructorDashboard() {
                     <div className="flex items-center gap-2">
                       <button onClick={(e) => {
                         e.stopPropagation();
-                        downloadFile(`${API_URL}/api/submissions/${sub.submission_id}/download`, sub.file_name || 'homework');
+                        handleDownloadSubmission(sub.submission_id, sub.file_name || 'homework');
                       }} className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
                         data-testid={`download-draft-${sub.submission_id}`}>
                         <Download className="w-3.5 h-3.5" />Homework
@@ -339,7 +339,7 @@ export default function InstructorDashboard() {
                     <div className="flex items-center gap-2">
                       <button onClick={(e) => {
                         e.stopPropagation();
-                        downloadFile(`${API_URL}/api/submissions/${sub.submission_id}/download`, sub.file_name || 'homework');
+                        handleDownloadSubmission(sub.submission_id, sub.file_name || 'homework');
                       }} className="inline-flex items-center gap-1 text-xs text-[#333333] hover:text-[#000000] border border-[#B8D4E8] rounded-lg px-2.5 py-1.5"
                         data-testid={`download-pending-${sub.submission_id}`}>
                         <Download className="w-3.5 h-3.5" />Homework

@@ -12,8 +12,15 @@ export const downloadFile = async (url, filename) => {
   try {
     const response = await fetch(`${url}${separator}token=${encodeURIComponent(token)}`);
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || 'Download failed');
+      let errorMsg = 'Download failed';
+      try {
+        const data = await response.json();
+        errorMsg = data.detail || errorMsg;
+      } catch (_) {
+        errorMsg = response.status === 404 ? 'File not found on server' : `Download failed (${response.status})`;
+      }
+      toast.error(errorMsg);
+      return;
     }
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
@@ -24,33 +31,15 @@ export const downloadFile = async (url, filename) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
-  } catch (err) {
-    toast.error('Failed to download file');
+  } catch (_err) {
+    toast.error('Network error — unable to download file');
   }
 };
 
 export const handleDownloadMaterial = async (materialId, fileName) => {
-  const token = localStorage.getItem('thinkific_session_token');
-  if (!token) {
-    toast.error('Please log in to download files');
-    return;
-  }
-  try {
-    const response = await fetch(`${API_URL}/api/materials/${materialId}/download?token=${encodeURIComponent(token)}`);
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || 'Download failed');
-    }
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName || 'material';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(blobUrl);
-  } catch (err) {
-    toast.error('Failed to download file');
-  }
+  await downloadFile(`${API_URL}/api/materials/${materialId}/download`, fileName || 'material');
+};
+
+export const handleDownloadSubmission = async (submissionId, fileName) => {
+  await downloadFile(`${API_URL}/api/submissions/${submissionId}/download`, fileName || 'submission');
 };

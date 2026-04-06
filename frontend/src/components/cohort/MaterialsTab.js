@@ -5,6 +5,7 @@ import {
   BookMarked, ClipboardList, Upload, Trash2, File, Download, Calendar, Eye, EyeOff, Copy 
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { handleDownloadSubmission } from '../../utils/download';
 
 const STATUS_STYLES = {
   sent: { className: 'bg-[#E1F0FF] text-[#22438E]', label: 'Reviewed' },
@@ -25,28 +26,6 @@ export function MaterialsTab({
   materials, cohort, isInstructor, cohortSubmissions,
   onDownloadMaterial, onDeleteMaterial, onSelectHomework, onToggleWeek, onUploadMaterial
 }) {
-  const downloadFile = async (url, filename) => {
-    const token = localStorage.getItem('thinkific_session_token');
-    if (!token) { toast.error('Please log in to download files'); return; }
-    const sep = url.includes('?') ? '&' : '?';
-    try {
-      const res = await fetch(`${url}${sep}token=${encodeURIComponent(token)}`);
-      if (!res.ok) throw new Error(await res.text() || 'Download failed');
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename || 'download';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      toast.error('Failed to download file');
-    }
-  };
-
-  const API_URL = process.env.REACT_APP_BACKEND_URL;
 
   if (materials.length === 0) {
     return (
@@ -255,10 +234,7 @@ export function MaterialsTab({
                               </div>
                               <SubmissionStatusBadge status={sub.status} />
                               <button
-                                onClick={() => downloadFile(
-                                  `${API_URL}/api/submissions/${sub.submission_id}/download`,
-                                  sub.file_name
-                                )}
+                                onClick={() => handleDownloadSubmission(sub.submission_id, sub.file_name)}
                                 className="text-[#22438E] hover:text-[#1A3A7A] p-1 flex-shrink-0"
                                 title="Download submission"
                                 data-testid={`download-sub-${sub.submission_id}`}>
