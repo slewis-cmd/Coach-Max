@@ -158,6 +158,7 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 
 ### P2 (Future)
 - [x] Export submissions and feedback as PDF (Completed - April 6, 2026)
+- [x] Coach Max standalone page + email CTA fix (Completed - April 6, 2026)
 
 ### Completed (March 26 - April 3, 2026)
 - [x] Material Library — Central library for workbooks/case studies/homework, linked across cohorts
