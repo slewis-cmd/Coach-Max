@@ -1345,6 +1345,24 @@ async def get_submit_link_info(material_id: str):
 
 
 
+@api_router.put("/materials/{material_id}/week")
+async def update_material_week(material_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Update a material's week number"""
+    data = await request.json()
+    week_number = data.get("week_number")
+    if not week_number or not isinstance(week_number, int) or week_number < 1 or week_number > 12:
+        raise HTTPException(status_code=400, detail="week_number must be 1-12")
+    
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    
+    await db.materials.update_one(
+        {"material_id": material_id},
+        {"$set": {"week_number": week_number}}
+    )
+    return {"message": f"Material week updated to {week_number}", "material_id": material_id}
+
 @api_router.delete("/materials/{material_id}")
 async def delete_material(material_id: str, user: dict = Depends(require_instructor)):
     """Delete a material"""
@@ -2729,6 +2747,22 @@ async def health():
         "email_sender": SENDER_EMAIL,
         "resend_key_prefix": (resend.api_key[:8] + "...") if resend.api_key else "NOT SET",
         "email_ready": has_key and bool(SENDER_EMAIL)
+    }
+
+@api_router.get("/debug/submission/{submission_id}")
+async def debug_submission(submission_id: str):
+    """Public diagnostic: shows submission -> material -> week chain"""
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        return {"error": "Submission not found"}
+    material = await db.materials.find_one({"material_id": submission.get("material_id")}, {"_id": 0})
+    return {
+        "submission_id": submission_id,
+        "material_id": submission.get("material_id"),
+        "material_title": material.get("title") if material else None,
+        "material_week_number": material.get("week_number") if material else None,
+        "cohort_id": submission.get("cohort_id"),
+        "status": submission.get("status")
     }
 
 @api_router.get("/email-diagnostic")
