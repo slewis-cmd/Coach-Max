@@ -2450,10 +2450,11 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     
     # Send email to student
     feedback_html = feedback.replace("\n", "<br>")
+    coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/coach-max/{submission_id}"
     email_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: #D1FAE5; padding: 20px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: #065F46; margin: 0; font-size: 24px;">Your Feedback is Ready!</h1>
+        <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Your Feedback is Ready!</h1>
         </div>
         <div style="background-color: #F9F8F6; padding: 24px;">
             <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
@@ -2468,6 +2469,12 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
                     {feedback_html}
                 </p>
             </div>
+            <div style="text-align: center; margin: 24px 0;">
+                <a href="{coach_max_url}" style="display: inline-block; background-color: #22438E; color: #FFFFFF; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
+                    Ask Coach Max a Question
+                </a>
+                <p style="color: #888; font-size: 12px; margin-top: 8px;">Have questions about your feedback? Chat with Coach Max for personalized guidance.</p>
+            </div>
             <p style="color: #5A5A5A; font-size: 14px; margin-top: 20px;">
                 Keep up the great work!<br>
                 — {instructor['name'] if instructor else 'Your Instructor'}
@@ -2475,7 +2482,7 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
         </div>
         <div style="background-color: #E5E5E5; padding: 16px; border-radius: 0 0 12px 12px; text-align: center;">
             <p style="color: #888; font-size: 12px; margin: 0;">
-                The Boost Pad • {cohort['name']}
+                The Boost Pad &middot; {cohort['name']}
             </p>
         </div>
     </div>
@@ -2532,7 +2539,7 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     week_num = material.get("week_number", "?") if material else "?"
     cohort_name = cohort.get("name", "")
     instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
-    coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/submit/{submission.get('material_id', '')}?cohort={submission.get('cohort_id', '')}"
+    coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/coach-max/{submission_id}"
     
     # Sanitize text for PDF - replace unicode chars then encode to latin-1
     def safe_text(text):
@@ -2661,11 +2668,11 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
                         <p style="color: #5A5A5A; font-size: 14px;">
                             Your feedback for <strong>{material_title}</strong> (Week {week_num}) is attached as a PDF.
                         </p>
-                        <div style="background-color: #E1F0FF; border: 1px solid #B8D4E8; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                            <p style="margin: 0 0 4px 0; color: #22438E; font-weight: 600;">Have questions?</p>
-                            <p style="margin: 0; color: #333333; font-size: 14px;">
-                                Chat with Coach Max to discuss your feedback and get personalized guidance.
-                            </p>
+                        <div style="text-align: center; margin: 24px 0;">
+                            <a href="{coach_max_url}" style="display: inline-block; background-color: #22438E; color: #FFFFFF; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
+                                Ask Coach Max a Question
+                            </a>
+                            <p style="color: #888; font-size: 12px; margin-top: 8px;">Have questions about your feedback? Chat with Coach Max for guidance.</p>
                         </div>
                         <p style="color: #888; font-size: 13px;">{cohort_name} &middot; The Boost Pad</p>
                     </div>

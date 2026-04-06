@@ -1,0 +1,210 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { Card, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { MessageCircle, ArrowLeft, FileText, Send } from 'lucide-react';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+export default function CoachMaxPage() {
+  const { submissionId } = useParams();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const [submission, setSubmission] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Chat state
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const messagesEndRef = React.useRef(null);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      fetchSubmission();
+      loadChatHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, submissionId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const fetchSubmission = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/submissions/${submissionId}`);
+      setSubmission(res.data);
+    } catch (err) {
+      toast.error('Could not load submission');
+      navigate('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadChatHistory = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/chat/history/${submissionId}`);
+      const history = res.data.flatMap(c => [
+        { role: 'student', text: c.message },
+        { role: 'coach', text: c.response }
+      ]);
+      setMessages(history);
+    } catch (_e) {
+      // no history yet — that's fine
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || sending) return;
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'student', text: userMsg }]);
+    setSending(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/chat/ask-tutor`, {
+        message: userMsg,
+        submission_id: submissionId
+      });
+      setMessages(prev => [...prev, { role: 'coach', text: res.data.response }]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Coach Max is unavailable right now');
+      setMessages(prev => [...prev, { role: 'coach', text: "Sorry, I'm having trouble right now. Please try again." }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading || authLoading) {
+    return (
+      <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!submission) return null;
+
+  const feedback = submission.instructor_feedback || submission.ai_feedback || '';
+  const weekNum = submission.material?.week_number || '?';
+  const materialTitle = submission.material?.title || 'Homework';
+
+  return (
+    <div className="min-h-screen bg-[#E1F0FF] flex flex-col" data-testid="coach-max-page">
+      {/* Header */}
+      <header className="bg-white border-b border-[#B8D4E8] sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-4 md:px-8 h-14 flex items-center gap-3">
+          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-[#D0E6F9] rounded-lg transition-colors">
+            <ArrowLeft className="w-5 h-5 text-[#333333]" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-[#22438E] rounded-full flex items-center justify-center">
+              <MessageCircle className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base font-medium text-[#000000] leading-tight">Coach Max</h1>
+              <p className="text-xs text-[#666666]">Week {weekNum} — {materialTitle}</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full">
+        {/* Feedback summary (collapsible) */}
+        {feedback && (
+          <details className="mx-4 md:mx-8 mt-4" data-testid="feedback-summary">
+            <summary className="cursor-pointer flex items-center gap-2 text-sm font-medium text-[#22438E] hover:underline">
+              <FileText className="w-4 h-4" />
+              View your feedback
+            </summary>
+            <Card className="mt-2 bg-[#F0FDF4] border-[#BBF7D0]">
+              <CardContent className="p-4">
+                <p className="text-sm text-[#166534] whitespace-pre-wrap leading-relaxed">{feedback}</p>
+              </CardContent>
+            </Card>
+          </details>
+        )}
+
+        {/* Chat area */}
+        <div className="flex-1 flex flex-col mx-4 md:mx-8 mt-4 mb-4 bg-white rounded-xl border border-[#B8D4E8] shadow-sm overflow-hidden" style={{ minHeight: '400px' }}>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#FAFAF8]">
+            {messages.length === 0 && !loadingHistory && (
+              <div className="text-center py-10">
+                <div className="w-14 h-14 bg-[#E1F0FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                  <MessageCircle className="w-7 h-7 text-[#22438E]" />
+                </div>
+                <h4 className="font-medium text-[#000000] mb-1">Hi! I'm Coach Max</h4>
+                <p className="text-sm text-[#333333] max-w-xs mx-auto">
+                  Ask me anything about your Week {weekNum} feedback. I'm here to help you grow!
+                </p>
+              </div>
+            )}
+            {loadingHistory && (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            {messages.map((msg, i) => (
+              <div key={`${msg.role}-${i}`} className={`flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  msg.role === 'student'
+                    ? 'bg-[#000000] text-white rounded-br-md'
+                    : 'bg-white border border-[#B8D4E8] text-[#000000] rounded-bl-md shadow-sm'
+                }`}>
+                  {msg.role === 'coach' && (
+                    <p className="text-xs font-medium text-[#22438E] mb-1">Coach Max</p>
+                  )}
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                </div>
+              </div>
+            ))}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-[#B8D4E8] rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                  <p className="text-xs font-medium text-[#22438E] mb-1">Coach Max</p>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-[#22438E] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-[#22438E] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-[#22438E] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-[#B8D4E8] p-3 flex items-center gap-2 bg-white">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder="Ask Coach Max a question..."
+              className="flex-1 px-4 py-2.5 bg-[#D0E6F9] rounded-full text-sm outline-none focus:ring-2 focus:ring-[#22438E]/20"
+              disabled={sending}
+              data-testid="coach-max-input"
+            />
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={sending || !input.trim()}
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-full w-10 h-10 flex-shrink-0"
+              data-testid="coach-max-send"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

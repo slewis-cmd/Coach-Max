@@ -18,6 +18,7 @@ import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
 import InvitePage from "./pages/InvitePage";
 import DirectSubmit from "./pages/DirectSubmit";
+import CoachMaxPage from "./pages/CoachMaxPage";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -140,6 +141,11 @@ const AppRouter = () => {
       } />
       <Route path="/invite/:code" element={<InvitePage />} />
       <Route path="/submit/:materialId" element={<DirectSubmit />} />
+      <Route path="/coach-max/:submissionId" element={
+        <ProtectedRoute>
+          <CoachMaxPage />
+        </ProtectedRoute>
+      } />
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
