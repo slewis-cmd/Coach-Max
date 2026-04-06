@@ -60,20 +60,22 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
         logger.warning("Resend API key not configured, skipping email")
         return None
     
-    recipient = NOTIFICATION_EMAIL or to_email
-    
     try:
         params = {
             "from": f"The Boost Pad <{SENDER_EMAIL}>",
-            "to": [recipient],
+            "to": [to_email],
             "subject": subject,
             "html": html_content
         }
+        # CC admin on all emails for visibility
+        if NOTIFICATION_EMAIL and NOTIFICATION_EMAIL.lower() != to_email.lower():
+            params["cc"] = [NOTIFICATION_EMAIL]
+        
         result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info(f"Email sent to {recipient}: {result.get('id')}")
+        logger.info(f"Email sent to {to_email}: {result.get('id')}")
         return result
     except Exception as e:
-        logger.error(f"Failed to send email to {recipient}: {e}")
+        logger.error(f"Failed to send email to {to_email}: {e}")
         return None
 
 
@@ -1882,16 +1884,54 @@ async def submit_homework(
         await db.submissions.insert_one(doc)
         is_resubmission = False
     
-    # Send email notification to instructor
-    instructor = await db.users.find_one({"user_id": cohort.get("instructor_id")}, {"_id": 0})
-    if instructor:
-        subject_prefix = "Resubmission" if is_resubmission else "New Submission"
-        email_html = build_submission_email_html(user['name'], material, cohort['name'], is_resubmission)
-        await send_email_notification(
-            instructor["email"],
-            f"{subject_prefix}: {material['title']} from {user['name']}",
-            email_html
-        )
+    # Send email notification to instructors
+    instructor_ids = cohort.get("instructor_ids", [])
+    if not instructor_ids and cohort.get("instructor_id"):
+        instructor_ids = [cohort["instructor_id"]]
+    for inst_id in instructor_ids:
+        instructor = await db.users.find_one({"user_id": inst_id}, {"_id": 0})
+        if instructor:
+            subject_prefix = "Resubmission" if is_resubmission else "New Submission"
+            email_html = build_submission_email_html(user['name'], material, cohort['name'], is_resubmission)
+            await send_email_notification(
+                instructor["email"],
+                f"{subject_prefix}: {material['title']} from {user['name']}",
+                email_html
+            )
+    
+    # Send confirmation email to student
+    action_word = "Resubmission" if is_resubmission else "Submission"
+    action_lower = "resubmission" if is_resubmission else "submission"
+    student_confirm_html = f"""
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">{action_word} Received!</h1>
+        </div>
+        <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+            <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
+                Hi <strong>{user['name'].split()[0]}</strong>,
+            </p>
+            <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
+                We've received your {action_lower} for <strong>{material['title']}</strong> (Week {material['week_number']}).
+            </p>
+            <div style="background-color: #E1F0FF; border: 1px solid #B8D4E8; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <p style="margin: 0 0 4px 0; color: #22438E; font-weight: 600; font-size: 14px;">What happens next?</p>
+                <p style="margin: 0; color: #333333; font-size: 14px;">
+                    Coach Max will review your work and your instructor will send you personalized feedback. You'll receive an email when it's ready.
+                </p>
+            </div>
+            <p style="color: #888; font-size: 13px;">
+                {cohort['name']} &middot; The Boost Pad
+            </p>
+        </div>
+    </div>
+    """
+    subject_word = "Resubmission" if is_resubmission else "Submission"
+    await send_email_notification(
+        user["email"],
+        f"{subject_word} Received: {material['title']}",
+        student_confirm_html
+    )
     
     return {"submission_id": submission_id, "message": f"Homework {'resubmitted' if is_resubmission else 'submitted'}"}
 
