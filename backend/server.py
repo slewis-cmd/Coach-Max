@@ -2686,7 +2686,13 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
             await asyncio.to_thread(resend.Emails.send, email_params)
             logger.info(f"Feedback PDF emailed to {student['email']}")
         except Exception as e:
-            logger.error(f"Failed to email PDF to {student['email']}: {e}")
+            error_msg = str(e)
+            if hasattr(e, 'status_code'):
+                error_msg = f"Status {e.status_code}: {error_msg}"
+            if hasattr(e, 'message'):
+                error_msg = f"{error_msg} | {e.message}"
+            logger.error(f"Failed to email PDF to {student['email']}: {error_msg}")
+            logger.error(f"Email params - from: {email_params.get('from')}, to: {email_params.get('to')}, cc: {email_params.get('cc')}")
     
     # Clean up temp file
     os.unlink(tmp_path)
@@ -2717,6 +2723,19 @@ async def root():
 @api_router.get("/health")
 async def health():
     return {"status": "healthy"}
+
+@api_router.get("/email-diagnostic")
+async def email_diagnostic(user: dict = Depends(require_instructor)):
+    """Check email configuration — instructor/admin only"""
+    has_key = bool(resend.api_key)
+    key_prefix = resend.api_key[:8] + "..." if resend.api_key else "NOT SET"
+    return {
+        "sender_email": SENDER_EMAIL,
+        "notification_email": NOTIFICATION_EMAIL,
+        "resend_api_key_set": has_key,
+        "resend_api_key_prefix": key_prefix,
+        "status": "ok" if has_key and SENDER_EMAIL else "misconfigured"
+    }
 
 # Include the router (AFTER all route definitions)
 # app.include_router moved to end of file
