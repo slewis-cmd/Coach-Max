@@ -82,8 +82,8 @@ export default function StudentDashboard() {
     try {
       const res = await axios.get(`${API_URL}/api/student/dashboard`);
       setDashboardData(res.data);
-    } catch (error) {
-      console.error('Failed to fetch dashboard:', error);
+    } catch (_err) {
+      // Silent - dashboard will show empty state
     } finally {
       setLoadingData(false);
     }
@@ -256,8 +256,8 @@ export default function StudentDashboard() {
                         week.status === 'feedback_provided'
                           ? 'bg-[#22438E] text-white'
                           : week.status === 'no_homework'
-                            ? 'bg-[#B8D4E8] text-[#666666]'
-                            : 'bg-[#000000] text-white'
+                          ? 'bg-[#B8D4E8] text-[#666666]'
+                          : 'bg-[#000000] text-white'
                       }`}>
                         {week.week_number}
                       </div>

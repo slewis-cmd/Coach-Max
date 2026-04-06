@@ -228,11 +228,9 @@ export default function SubmissionDetail() {
                 )}
               </div>
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-                isSent 
+                isSent || isDraft
                   ? 'bg-[#E1F0FF] text-[#22438E]' 
-                  : isDraft
-                    ? 'bg-[#E1F0FF] text-[#22438E]'
-                    : 'bg-[#FEF9C3] text-[#1A75BA]'
+                  : 'bg-[#FEF9C3] text-[#1A75BA]'
               }`}>
                 {isSent ? (
                   <>

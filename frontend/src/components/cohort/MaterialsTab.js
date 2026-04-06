@@ -6,6 +6,21 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const STATUS_STYLES = {
+  sent: { className: 'bg-[#E1F0FF] text-[#22438E]', label: 'Reviewed' },
+  draft: { className: 'bg-[#E1F0FF] text-[#6B21A8]', label: 'Draft' },
+  pending: { className: 'bg-[#DBEAFE] text-[#1E40AF]', label: 'Pending' },
+};
+
+function SubmissionStatusBadge({ status }) {
+  const style = STATUS_STYLES[status] || STATUS_STYLES.pending;
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${style.className}`}>
+      {style.label}
+    </span>
+  );
+}
+
 export function MaterialsTab({
   materials, cohort, isInstructor, cohortSubmissions,
   onDownloadMaterial, onDeleteMaterial, onSelectHomework, onToggleWeek, onUploadMaterial
@@ -238,13 +253,7 @@ export function MaterialsTab({
                                 <p className="text-sm font-medium text-[#000000] truncate">{sub.student?.name || 'Unknown'}</p>
                                 <p className="text-xs text-[#666666] truncate">{sub.file_name}</p>
                               </div>
-                              <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                sub.status === 'sent' ? 'bg-[#E1F0FF] text-[#22438E]' :
-                                sub.status === 'draft' ? 'bg-[#E1F0FF] text-[#6B21A8]' :
-                                'bg-[#DBEAFE] text-[#1E40AF]'
-                              }`}>
-                                {sub.status === 'sent' ? 'Reviewed' : sub.status === 'draft' ? 'Draft' : 'Pending'}
-                              </span>
+                              <SubmissionStatusBadge status={sub.status} />
                               <button
                                 onClick={() => downloadFile(
                                   `${API_URL}/api/submissions/${sub.submission_id}/download`,

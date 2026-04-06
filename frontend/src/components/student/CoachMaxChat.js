@@ -22,8 +22,8 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
           { role: 'coach', text: c.response }
         ])).flat();
         setMessages(history);
-      } catch (e) {
-        console.error('Failed to load chat history:', e);
+      } catch (_e) {
+        // Chat history load failure is non-critical, starts fresh
       } finally {
         setLoadingHistory(false);
       }

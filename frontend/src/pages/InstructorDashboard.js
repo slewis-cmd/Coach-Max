@@ -49,8 +49,7 @@ export default function InstructorDashboard() {
       setCohorts(cohortsRes.data);
       setSubmissions(submissionsRes.data);
       setAnalytics(analyticsRes.data);
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+    } catch (_err) {
       toast.error('Failed to load data');
     } finally {
       setLoadingData(false);
