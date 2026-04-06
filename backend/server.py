@@ -46,10 +46,11 @@ logger = logging.getLogger(__name__)
 
 # Configure Resend
 resend.api_key = os.environ.get("RESEND_API_KEY")
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
-if not SENDER_EMAIL:
-    logger.error("SENDER_EMAIL not set in .env — emails will fail")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL") or "info@theboostpad.org"
+# Force override if stale resend.dev value is still in env
+if "resend.dev" in SENDER_EMAIL:
     SENDER_EMAIL = "info@theboostpad.org"
+    logger.warning("Overrode stale resend.dev SENDER_EMAIL with info@theboostpad.org")
 SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").lower().strip()
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL", "").lower().strip()
 THINKIFIC_API_KEY = os.environ.get("THINKIFIC_API_KEY", "")
