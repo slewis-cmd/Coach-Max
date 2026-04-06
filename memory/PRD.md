@@ -170,6 +170,7 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Thinkific Integration — API sync for courses, students, progress; webhook receiver for real-time updates
 - [x] Direct Submission Link — Instructors can copy a link per homework for students to submit via /submit/:materialId (April 3, 2026)
 - [x] Code Quality Refactor — Component splitting, backend helper extraction, hardcoded secret removal, empty catch fix (April 3, 2026)
+- [x] Email Delivery Fix — Emails now sent to actual recipients (not just admin), added student submission confirmation email, fixed instructor_ids lookup (April 4, 2026)
 
 ### Code Architecture After Refactoring
 ```
