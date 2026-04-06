@@ -2496,6 +2496,191 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     
     return {"message": "Feedback sent to student"}
 
+# ==================== PDF EXPORT ====================
+
+@api_router.post("/submissions/{submission_id}/export-pdf")
+async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_instructor)):
+    """Generate a branded PDF with AI feedback and email it to the student. Returns the PDF for instructor download."""
+    from fpdf import FPDF
+    import base64
+    import tempfile
+    
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    feedback = submission.get("instructor_feedback") or submission.get("ai_feedback")
+    if not feedback:
+        raise HTTPException(status_code=400, detail="No feedback available. Generate AI feedback first.")
+    
+    student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
+    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    instructor = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    student_name = student.get("name", "Student")
+    material_title = material.get("title", "Homework") if material else "Homework"
+    week_num = material.get("week_number", "?") if material else "?"
+    cohort_name = cohort.get("name", "")
+    instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
+    coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/submit/{submission.get('material_id', '')}?cohort={submission.get('cohort_id', '')}"
+    
+    # Build PDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=25)
+    
+    # Header bar
+    pdf.set_fill_color(34, 67, 142)  # #22438E
+    pdf.rect(0, 0, 210, 35, 'F')
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_y(10)
+    pdf.cell(0, 10, "The Boost Pad", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, "Feedback Report", align="C", new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.ln(15)
+    
+    # Student info section
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, f"Student: {student_name}", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, f"Assignment: {material_title}  |  Week {week_num}  |  {cohort_name}", new_x="LMARGIN", new_y="NEXT")
+    if submission.get("submitted_at"):
+        pdf.cell(0, 6, f"Submitted: {submission['submitted_at'][:10]}", new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.ln(5)
+    
+    # Divider
+    pdf.set_draw_color(184, 212, 232)  # #B8D4E8
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(8)
+    
+    # Feedback section
+    pdf.set_text_color(34, 67, 142)  # #22438E
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Coach Max Feedback", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    
+    # Feedback body
+    pdf.set_text_color(30, 30, 30)
+    pdf.set_font("Helvetica", "", 11)
+    
+    # Sanitize feedback for PDF - replace all non-latin1 characters
+    def safe_text(text):
+        return text.encode('latin-1', 'replace').decode('latin-1')
+    
+    for line in feedback.split("\n"):
+        line = line.strip()
+        if not line:
+            pdf.ln(4)
+            continue
+        line_safe = safe_text(line)
+        # Bold section headers
+        if line_safe.endswith(":") and len(line_safe) < 40:
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.multi_cell(0, 6, line_safe)
+            pdf.set_font("Helvetica", "", 11)
+        elif line_safe.startswith("**") and line_safe.endswith("**"):
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.multi_cell(0, 6, line_safe.replace("**", ""))
+            pdf.set_font("Helvetica", "", 11)
+        else:
+            pdf.multi_cell(0, 6, line_safe.replace("**", ""))
+    
+    pdf.ln(10)
+    
+    # Coach Max CTA
+    pdf.set_fill_color(225, 240, 255)  # #E1F0FF
+    pdf.set_draw_color(184, 212, 232)
+    y_before = pdf.get_y()
+    pdf.rect(10, y_before, 190, 28, 'DF')
+    pdf.set_y(y_before + 4)
+    pdf.set_text_color(34, 67, 142)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 7, safe_text("Have questions about this feedback?"), align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(26, 117, 186)  # #1A75BA
+    url_display = coach_max_url if len(coach_max_url) < 80 else coach_max_url[:77] + "..."
+    pdf.cell(0, 7, safe_text("Chat with Coach Max: " + url_display), align="C", new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.ln(10)
+    
+    # Footer
+    pdf.set_text_color(150, 150, 150)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, safe_text(f"Reviewed by {instructor_name}  |  The Boost Pad  |  {cohort_name}"), align="C", new_x="LMARGIN", new_y="NEXT")
+    
+    # Save PDF to temp file
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        pdf.output(tmp.name)
+        tmp_path = tmp.name
+    
+    # Read PDF bytes for email attachment
+    with open(tmp_path, "rb") as f:
+        pdf_bytes = f.read()
+    
+    pdf_filename = f"Feedback_{student_name.replace(' ', '_')}_Week{week_num}.pdf"
+    
+    # Send email with PDF attachment to student
+    if resend.api_key:
+        try:
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+            email_params = {
+                "from": f"The Boost Pad <{SENDER_EMAIL}>",
+                "to": [student["email"]],
+                "subject": f"Your Feedback Report: {material_title} - Week {week_num}",
+                "html": f"""
+                <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
+                        <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Your Feedback Report</h1>
+                    </div>
+                    <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+                        <p style="color: #1A1A1A; font-size: 16px;">
+                            Hi <strong>{student_name.split()[0]}</strong>,
+                        </p>
+                        <p style="color: #5A5A5A; font-size: 14px;">
+                            Your feedback for <strong>{material_title}</strong> (Week {week_num}) is attached as a PDF.
+                        </p>
+                        <div style="background-color: #E1F0FF; border: 1px solid #B8D4E8; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                            <p style="margin: 0 0 4px 0; color: #22438E; font-weight: 600;">Have questions?</p>
+                            <p style="margin: 0; color: #333333; font-size: 14px;">
+                                Chat with Coach Max to discuss your feedback and get personalized guidance.
+                            </p>
+                        </div>
+                        <p style="color: #888; font-size: 13px;">{cohort_name} &middot; The Boost Pad</p>
+                    </div>
+                </div>
+                """,
+                "attachments": [{"filename": pdf_filename, "content": pdf_b64}]
+            }
+            if NOTIFICATION_EMAIL and NOTIFICATION_EMAIL.lower() != student["email"].lower():
+                email_params["cc"] = [NOTIFICATION_EMAIL]
+            
+            await asyncio.to_thread(resend.Emails.send, email_params)
+            logger.info(f"Feedback PDF emailed to {student['email']}")
+        except Exception as e:
+            logger.error(f"Failed to email PDF to {student['email']}: {e}")
+    
+    # Clean up temp file
+    os.unlink(tmp_path)
+    
+    # Return PDF as download for instructor
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{pdf_filename}"'}
+    )
+
 # ==================== UTILITY ENDPOINTS ====================
 
 @api_router.get("/")

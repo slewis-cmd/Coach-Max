@@ -17,7 +17,8 @@ import {
   Mail,
   FileEdit,
   RotateCcw,
-  RefreshCw
+  RefreshCw,
+  FileDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -36,6 +37,7 @@ export default function SubmissionDetail() {
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [allowingResubmission, setAllowingResubmission] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -135,6 +137,36 @@ export default function SubmissionDetail() {
       toast.error(error.response?.data?.detail || 'Failed to allow resubmission');
     } finally {
       setAllowingResubmission(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    setExporting(true);
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/submissions/${submissionId}/export-pdf`,
+        {},
+        { responseType: 'blob' }
+      );
+      // Download the PDF for instructor
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const disposition = response.headers['content-disposition'];
+      const filename = disposition
+        ? disposition.split('filename=')[1]?.replace(/"/g, '')
+        : `Feedback_${submissionId}.pdf`;
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('PDF exported and emailed to student!');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to export PDF');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -326,6 +358,25 @@ export default function SubmissionDetail() {
                     Edit
                   </Button>
                   <Button 
+                    variant="outline"
+                    onClick={handleExportPDF}
+                    disabled={exporting}
+                    className="border-[#1A75BA] text-[#1A75BA] hover:bg-[#E1F0FF]"
+                    data-testid="export-pdf-btn"
+                  >
+                    {exporting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-[#1A75BA] border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-4 h-4 mr-2" />
+                        Export & Email PDF
+                      </>
+                    )}
+                  </Button>
+                  <Button 
                     onClick={handleSendFeedback}
                     disabled={sending}
                     className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
@@ -344,6 +395,28 @@ export default function SubmissionDetail() {
                     )}
                   </Button>
                 </div>
+              )}
+              
+              {isInstructor && isSent && currentFeedback && (
+                <Button 
+                  variant="outline"
+                  onClick={handleExportPDF}
+                  disabled={exporting}
+                  className="border-[#1A75BA] text-[#1A75BA] hover:bg-[#E1F0FF]"
+                  data-testid="export-pdf-btn"
+                >
+                  {exporting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-[#1A75BA] border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Export & Email PDF
+                    </>
+                  )}
+                </Button>
               )}
             </div>
 
