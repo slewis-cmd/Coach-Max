@@ -56,6 +56,20 @@ NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL", "").lower().strip()
 THINKIFIC_API_KEY = os.environ.get("THINKIFIC_API_KEY", "")
 THINKIFIC_SUBDOMAIN = os.environ.get("THINKIFIC_SUBDOMAIN", "")
 
+# Read the external app URL from the frontend .env (Emergent configures this correctly for both preview and production)
+APP_BASE_URL = ""
+try:
+    with open("/app/frontend/.env") as _f:
+        for _line in _f:
+            if _line.startswith("REACT_APP_BACKEND_URL="):
+                APP_BASE_URL = _line.strip().split("=", 1)[1].strip('"').rstrip("/")
+                break
+except Exception:
+    pass
+if not APP_BASE_URL:
+    APP_BASE_URL = "https://cohort-feedback-hub.preview.emergentagent.com"
+logger.info(f"App base URL: {APP_BASE_URL}")
+
 # ==================== EMAIL HELPER ====================
 
 async def send_email_notification(to_email: str, subject: str, html_content: str):
@@ -2469,7 +2483,7 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     
     # Send email to student
     feedback_html = feedback.replace("\n", "<br>")
-    coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/coach-max/{submission_id}"
+    coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}"
     email_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
@@ -2558,7 +2572,8 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     week_num = material.get("week_number", "?") if material else "?"
     cohort_name = cohort.get("name", "")
     instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
-    coach_max_url = f"{os.environ.get('FRONTEND_URL', 'https://cohort-feedback-hub.preview.emergentagent.com')}/coach-max/{submission_id}"
+    coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}"
+    logger.info(f"Coach Max URL generated: {coach_max_url}")
     
     # Sanitize text for PDF - replace unicode chars then encode to latin-1
     def safe_text(text):
