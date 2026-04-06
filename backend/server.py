@@ -2691,6 +2691,16 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     # Clean up temp file
     os.unlink(tmp_path)
     
+    # Mark submission as sent (consolidates the old send-feedback flow)
+    await db.submissions.update_one(
+        {"submission_id": submission_id},
+        {"$set": {
+            "status": "sent",
+            "feedback_sent": True,
+            "sent_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
     # Return PDF as download for instructor
     return Response(
         content=pdf_bytes,

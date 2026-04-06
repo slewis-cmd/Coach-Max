@@ -13,7 +13,6 @@ import {
   Sparkles,
   User,
   Edit3,
-  Send,
   Mail,
   FileEdit,
   RotateCcw,
@@ -35,7 +34,6 @@ export default function SubmissionDetail() {
   const [editedFeedback, setEditedFeedback] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
   const [allowingResubmission, setAllowingResubmission] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -97,26 +95,6 @@ export default function SubmissionDetail() {
       toast.error('Failed to save feedback');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleSendFeedback = async () => {
-    if (!window.confirm('Send this feedback to the student via email? This action cannot be undone.')) {
-      return;
-    }
-    
-    setSending(true);
-    try {
-      await axios.post(
-        `${API_URL}/api/submissions/${submissionId}/send-feedback`,
-        {},
-      );
-      toast.success('Feedback sent to student!');
-      fetchSubmission();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to send feedback');
-    } finally {
-      setSending(false);
     }
   };
 
@@ -358,39 +336,20 @@ export default function SubmissionDetail() {
                     Edit
                   </Button>
                   <Button 
-                    variant="outline"
                     onClick={handleExportPDF}
                     disabled={exporting}
-                    className="border-[#1A75BA] text-[#1A75BA] hover:bg-[#E1F0FF]"
+                    className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
                     data-testid="export-pdf-btn"
                   >
                     {exporting ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-[#1A75BA] border-t-transparent rounded-full animate-spin mr-2"></div>
-                        Exporting...
-                      </>
-                    ) : (
-                      <>
-                        <FileDown className="w-4 h-4 mr-2" />
-                        Export & Email PDF
-                      </>
-                    )}
-                  </Button>
-                  <Button 
-                    onClick={handleSendFeedback}
-                    disabled={sending}
-                    className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
-                    data-testid="send-feedback-btn"
-                  >
-                    {sending ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
                         Sending...
                       </>
                     ) : (
                       <>
-                        <Send className="w-4 h-4 mr-2" />
-                        Send to Student
+                        <FileDown className="w-4 h-4 mr-2" />
+                        Send Feedback to Student
                       </>
                     )}
                   </Button>
@@ -413,7 +372,7 @@ export default function SubmissionDetail() {
                   ) : (
                     <>
                       <FileDown className="w-4 h-4 mr-2" />
-                      Export & Email PDF
+                      Re-export PDF
                     </>
                   )}
                 </Button>
@@ -455,13 +414,13 @@ export default function SubmissionDetail() {
                       onClick={async () => {
                         await handleSaveFeedback();
                         if (editedFeedback.trim()) {
-                          handleSendFeedback();
+                          handleExportPDF();
                         }
                       }}
-                      disabled={saving || sending}
+                      disabled={saving || exporting}
                       className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
                     >
-                      <Send className="w-4 h-4 mr-2" />
+                      <FileDown className="w-4 h-4 mr-2" />
                       Save & Send
                     </Button>
                   </div>
