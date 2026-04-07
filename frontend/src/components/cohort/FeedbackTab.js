@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { useNavigate } from 'react-router-dom';
-import { FileDown, MessageCircle, Eye } from 'lucide-react';
+import { MessageCircle, Eye, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { Button } from '../ui/button';
 
 const statusColors = {
@@ -10,9 +10,80 @@ const statusColors = {
   sent: { bg: 'bg-green-100', text: 'text-green-800', label: 'Sent' },
 };
 
-export default function FeedbackTab({ cohortSubmissions, materials }) {
+function FeedbackRow({ sub, mat }) {
+  const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
+  const status = statusColors[sub.status] || statusColors.pending;
+  const feedback = sub.instructor_feedback || sub.ai_feedback;
 
+  return (
+    <div data-testid={`feedback-row-${sub.submission_id}`}>
+      {/* Row header — always visible */}
+      <div
+        className={`px-5 py-3 flex items-center gap-3 cursor-pointer transition-colors ${expanded ? 'bg-[#FAFAF8]' : 'hover:bg-[#FAFAF8]'}`}
+        onClick={() => feedback && setExpanded(!expanded)}
+      >
+        {/* Week badge */}
+        <div className="w-10 h-10 rounded-lg bg-[#22438E] text-white flex flex-col items-center justify-center flex-shrink-0">
+          <span className="text-[10px] leading-none uppercase">Wk</span>
+          <span className="text-sm font-semibold leading-none">{mat.week_number || '?'}</span>
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-[#000000] truncate">{mat.title || sub.file_name}</p>
+          <p className="text-xs text-[#666666]">
+            {sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : 'No date'}
+            {sub.submitted_by && sub.submitted_by !== sub.student_id && ' · Submitted by instructor'}
+          </p>
+        </div>
+
+        {/* Status */}
+        <span className={`text-xs px-2 py-1 rounded-full ${status.bg} ${status.text} flex-shrink-0`}>
+          {status.label}
+        </span>
+
+        {/* Expand/collapse */}
+        {feedback ? (
+          <button className="text-[#22438E] p-1" data-testid={`toggle-feedback-${sub.submission_id}`}>
+            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </button>
+        ) : (
+          <span className="text-xs text-[#94B8D9] italic px-2">No feedback yet</span>
+        )}
+      </div>
+
+      {/* Expanded feedback content */}
+      {expanded && feedback && (
+        <div className="px-5 pb-4 pt-1 bg-[#FAFAF8]">
+          <div className="ml-[52px] rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] p-4">
+            <p className="text-xs font-medium text-[#22438E] mb-2 uppercase tracking-wide">
+              {sub.instructor_feedback ? 'Instructor Feedback' : 'AI Feedback (Coach Max)'}
+            </p>
+            <div className="text-sm text-[#166534] whitespace-pre-wrap leading-relaxed">
+              {feedback}
+            </div>
+            {sub.sent_at && (
+              <p className="text-xs text-[#666666] mt-3">
+                Sent on {new Date(sub.sent_at).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          <div className="ml-[52px] mt-2">
+            <Button variant="ghost" size="sm"
+              onClick={() => navigate(`/submissions/${sub.submission_id}`)}
+              className="text-[#22438E] hover:bg-[#E1F0FF] text-xs"
+              data-testid={`open-detail-${sub.submission_id}`}>
+              <ExternalLink className="w-3 h-3 mr-1" />Open full detail
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function FeedbackTab({ cohortSubmissions, materials }) {
   // Build a lookup: material_id → { title, week_number }
   const materialMap = {};
   (materials || []).forEach(week => {
@@ -79,44 +150,13 @@ export default function FeedbackTab({ cohortSubmissions, materials }) {
 
             {/* Submissions sorted by week */}
             <div className="divide-y divide-[#E1F0FF]">
-              {student.submissions.map(sub => {
-                const mat = materialMap[sub.material_id] || {};
-                const status = statusColors[sub.status] || statusColors.pending;
-                const hasFeedback = sub.ai_feedback || sub.instructor_feedback;
-
-                return (
-                  <div key={sub.submission_id} className="px-5 py-3 flex items-center gap-3 hover:bg-[#FAFAF8] transition-colors"
-                    data-testid={`feedback-row-${sub.submission_id}`}>
-                    {/* Week badge */}
-                    <div className="w-10 h-10 rounded-lg bg-[#22438E] text-white flex flex-col items-center justify-center flex-shrink-0">
-                      <span className="text-[10px] leading-none uppercase">Wk</span>
-                      <span className="text-sm font-semibold leading-none">{mat.week_number || '?'}</span>
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#000000] truncate">{mat.title || sub.file_name}</p>
-                      <p className="text-xs text-[#666666]">
-                        {sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : 'No date'}
-                        {sub.submitted_by && sub.submitted_by !== sub.student_id && ' · Submitted by instructor'}
-                      </p>
-                    </div>
-
-                    {/* Status */}
-                    <span className={`text-xs px-2 py-1 rounded-full ${status.bg} ${status.text} flex-shrink-0`}>
-                      {status.label}
-                    </span>
-
-                    {/* Actions */}
-                    <Button variant="ghost" size="sm"
-                      onClick={() => navigate(`/submissions/${sub.submission_id}`)}
-                      className="text-[#22438E] hover:bg-[#E1F0FF] flex-shrink-0"
-                      data-testid={`view-feedback-${sub.submission_id}`}>
-                      {hasFeedback ? <><Eye className="w-4 h-4 mr-1" />View</> : <><FileDown className="w-4 h-4 mr-1" />Review</>}
-                    </Button>
-                  </div>
-                );
-              })}
+              {student.submissions.map(sub => (
+                <FeedbackRow
+                  key={sub.submission_id}
+                  sub={sub}
+                  mat={materialMap[sub.material_id] || {}}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
