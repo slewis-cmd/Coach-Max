@@ -4,13 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { 
-  BookOpen, Users, FileText, ArrowLeft, Upload, UserPlus, FileUp, QrCode, UserCog 
+  BookOpen, Users, FileText, ArrowLeft, Upload, UserPlus, FileUp, QrCode, UserCog, MessageCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
 import { MaterialsTab } from '../components/cohort/MaterialsTab';
 import { StudentsTab } from '../components/cohort/StudentsTab';
+import FeedbackTab from '../components/cohort/FeedbackTab';
 import {
   AddStudentDialog, UploadMaterialDialog, SubmitHomeworkDialog,
   BulkImportDialog, InviteLinkDialog, AssignInstructorDialog, SubmitOnBehalfDialog
@@ -366,6 +367,11 @@ export default function CohortDetail() {
                 <Users className="w-4 h-4 mr-2" />Students ({cohort?.student_ids?.length || 0})
               </TabsTrigger>
             )}
+            {isInstructor && (
+              <TabsTrigger value="feedback" className="data-[state=active]:bg-white" data-testid="feedback-tab-trigger">
+                <MessageCircle className="w-4 h-4 mr-2" />Feedback ({cohortSubmissions.length})
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="materials" className="space-y-8">
@@ -387,6 +393,15 @@ export default function CohortDetail() {
                 onInviteAll={handleInviteAll}
                 onAddStudent={() => setShowAddStudent(true)}
                 onRemoveStudent={handleRemoveStudent}
+              />
+            </TabsContent>
+          )}
+
+          {isInstructor && (
+            <TabsContent value="feedback">
+              <FeedbackTab
+                cohortSubmissions={cohortSubmissions}
+                materials={materials}
               />
             </TabsContent>
           )}
