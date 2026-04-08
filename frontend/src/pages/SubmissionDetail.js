@@ -37,6 +37,7 @@ export default function SubmissionDetail() {
   const [saving, setSaving] = useState(false);
   const [allowingResubmission, setAllowingResubmission] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -149,6 +150,20 @@ export default function SubmissionDetail() {
     }
   };
 
+  const handleDeleteSubmission = async () => {
+    if (!window.confirm('Delete this submission? This action cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`${API_URL}/api/submissions/${submissionId}`);
+      toast.success('Submission deleted');
+      navigate(-1);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete submission');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
@@ -183,26 +198,41 @@ export default function SubmissionDetail() {
             </div>
           </div>
           
-          {isInstructor && submission.status === 'pending' && (
-            <Button 
-              onClick={handleReview}
-              disabled={reviewing}
-              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
-              data-testid="generate-review-btn"
-            >
-              {reviewing ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate AI Feedback
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {isInstructor && submission.status === 'pending' && (
+              <Button 
+                onClick={handleReview}
+                disabled={reviewing}
+                className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
+                data-testid="generate-review-btn"
+              >
+                {reviewing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Generate AI Feedback
+                  </>
+                )}
+              </Button>
+            )}
+            {isInstructor && (
+              <Button 
+                variant="ghost"
+                size="icon"
+                onClick={handleDeleteSubmission}
+                disabled={deleting}
+                className="text-[#94B8D9] hover:text-red-500 hover:bg-red-50"
+                title="Delete submission"
+                data-testid="delete-submission-btn"
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
