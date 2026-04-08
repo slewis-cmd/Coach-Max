@@ -19,7 +19,7 @@ import io
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials from review_request
-SUPER_ADMIN_TOKEN = "Z9PmSmNTtZR-47ZLDikqfpLNa9zW__G0wydvt_g5h_4"
+SUPER_ADMIN_TOKEN = os.getenv("TEST_ADMIN_TOKEN", "")
 TEST_COHORT_ID = "cohort_3a1999cb7d72"
 TEST_STUDENT_ID = "test-student-1773829886122"
 TEST_HOMEWORK_MATERIAL_ID = "mat_6afbac5f4fe1"

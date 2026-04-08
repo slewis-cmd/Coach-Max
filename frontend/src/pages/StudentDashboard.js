@@ -83,10 +83,11 @@ export default function StudentDashboard() {
       const res = await axios.get(`${API_URL}/api/student/dashboard`);
       setDashboardData(res.data);
     } catch (_err) {
-      // Silent - dashboard will show empty state
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoadingData(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

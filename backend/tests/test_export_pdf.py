@@ -7,7 +7,7 @@ import requests
 import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-SUPER_ADMIN_TOKEN = "Z9PmSmNTtZR-47ZLDikqfpLNa9zW__G0wydvt_g5h_4"
+SUPER_ADMIN_TOKEN = os.getenv("TEST_ADMIN_TOKEN", "")
 TEST_SUBMISSION_ID = "sub_demo_test"
 
 

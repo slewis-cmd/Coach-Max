@@ -56,7 +56,7 @@ export default function CoachMaxPage() {
       ]);
       setMessages(history);
     } catch (_e) {
-      // no history yet — that's fine
+      // First load — no history yet, start fresh
     } finally {
       setLoadingHistory(false);
     }

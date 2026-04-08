@@ -73,7 +73,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await axios.post(`${API_URL}/api/auth/logout`, {});
     } catch (_err) {
-      // Logout API failure is non-critical, user state already cleared
+      console.error('Logout API call failed:', _err);
     }
     setUser(null);
     clearToken();

@@ -23,7 +23,7 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
         ])).flat();
         setMessages(history);
       } catch (_e) {
-        // Chat history load failure is non-critical, starts fresh
+        // First load — no chat history yet, start fresh
       } finally {
         setLoadingHistory(false);
       }
