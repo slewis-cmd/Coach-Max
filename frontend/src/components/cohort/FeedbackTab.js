@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { useNavigate } from 'react-router-dom';
-import { MessageCircle, Eye, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { MessageCircle, Eye, ChevronDown, ChevronUp, ExternalLink, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const statusColors = {
   pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending Review' },
@@ -10,11 +14,27 @@ const statusColors = {
   sent: { bg: 'bg-green-100', text: 'text-green-800', label: 'Sent' },
 };
 
-function FeedbackRow({ sub, mat }) {
+function FeedbackRow({ sub, mat, onDelete }) {
   const [expanded, setExpanded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
   const status = statusColors[sub.status] || statusColors.pending;
   const feedback = sub.instructor_feedback || sub.ai_feedback;
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete this submission from ${sub.student?.name || 'student'}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await axios.delete(`${API_URL}/api/submissions/${sub.submission_id}`);
+      toast.success('Submission deleted');
+      onDelete(sub.submission_id);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div data-testid={`feedback-row-${sub.submission_id}`}>
@@ -51,6 +71,13 @@ function FeedbackRow({ sub, mat }) {
         ) : (
           <span className="text-xs text-[#94B8D9] italic px-2">No feedback yet</span>
         )}
+
+        {/* Delete */}
+        <button onClick={handleDelete} disabled={deleting}
+          className="text-[#94B8D9] hover:text-red-500 p-1 transition-colors" title="Delete submission"
+          data-testid={`delete-submission-${sub.submission_id}`}>
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Expanded feedback content */}
@@ -83,7 +110,15 @@ function FeedbackRow({ sub, mat }) {
   );
 }
 
-export default function FeedbackTab({ cohortSubmissions, materials }) {
+export default function FeedbackTab({ cohortSubmissions, materials, onRefresh }) {
+  const [deletedIds, setDeletedIds] = useState(new Set());
+
+  const handleDelete = (submissionId) => {
+    setDeletedIds(prev => new Set(prev).add(submissionId));
+    if (onRefresh) onRefresh();
+  };
+
+  const activeSubmissions = (cohortSubmissions || []).filter(s => !deletedIds.has(s.submission_id));
   // Build a lookup: material_id → { title, week_number }
   const materialMap = {};
   (materials || []).forEach(week => {
@@ -94,7 +129,7 @@ export default function FeedbackTab({ cohortSubmissions, materials }) {
 
   // Group submissions by student
   const byStudent = {};
-  (cohortSubmissions || []).forEach(sub => {
+  activeSubmissions.forEach(sub => {
     const key = sub.student_id || 'unknown';
     if (!byStudent[key]) {
       byStudent[key] = {
@@ -132,7 +167,7 @@ export default function FeedbackTab({ cohortSubmissions, materials }) {
   return (
     <div className="space-y-6" data-testid="feedback-tab">
       <p className="text-sm text-[#666666]">
-        {sortedStudents.length} student{sortedStudents.length !== 1 ? 's' : ''} · {cohortSubmissions.length} submission{cohortSubmissions.length !== 1 ? 's' : ''}
+        {sortedStudents.length} student{sortedStudents.length !== 1 ? 's' : ''} · {activeSubmissions.length} submission{activeSubmissions.length !== 1 ? 's' : ''}
       </p>
       {sortedStudents.map(student => (
         <Card key={student.studentId} className="bg-white border-[#B8D4E8]" data-testid={`feedback-student-${student.studentId}`}>
@@ -155,6 +190,7 @@ export default function FeedbackTab({ cohortSubmissions, materials }) {
                   key={sub.submission_id}
                   sub={sub}
                   mat={materialMap[sub.material_id] || {}}
+                  onDelete={handleDelete}
                 />
               ))}
             </div>

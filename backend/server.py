@@ -2492,6 +2492,35 @@ async def download_submission(submission_id: str, user: dict = Depends(get_curre
         media_type="application/octet-stream"
     )
 
+
+@api_router.delete("/submissions/{submission_id}")
+async def delete_submission(submission_id: str, user: dict = Depends(require_instructor)):
+    """Delete a single submission — instructor/admin only"""
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    # Verify access
+    if submission.get("cohort_id"):
+        cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+        if cohort and not is_cohort_manager(user, cohort):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Delete the file
+    try:
+        if submission.get("file_path"):
+            os.remove(submission["file_path"])
+    except Exception:
+        pass
+    
+    # Delete related chat history
+    await db.tutor_chats.delete_many({"submission_id": submission_id})
+    
+    # Delete the submission
+    await db.submissions.delete_one({"submission_id": submission_id})
+    
+    return {"message": "Submission deleted"}
+
 @api_router.get("/cohorts/{cohort_id}/submissions")
 async def get_cohort_submissions(cohort_id: str, user: dict = Depends(require_instructor)):
     """Get all submissions for a cohort, grouped by week, with student info"""

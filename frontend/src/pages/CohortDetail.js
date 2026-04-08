@@ -402,6 +402,7 @@ export default function CohortDetail() {
               <FeedbackTab
                 cohortSubmissions={cohortSubmissions}
                 materials={materials}
+                onRefresh={fetchCohort}
               />
             </TabsContent>
           )}
