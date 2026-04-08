@@ -151,6 +151,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Per-cohort pending submission count on cohort cards
 - [x] Clicking bell navigates to submissions page
 
+### Delete Submission (Completed - April 8, 2026)
+- [x] DELETE /api/submissions/{submission_id} — instructor/admin only
+- [x] Deletes file from disk, tutor_chats, and submission record
+- [x] Trash icon button in FeedbackTab.js rows with confirmation dialog
+- [x] Trash icon button in SubmissionDetail.js header for instructors
+- [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
+- [x] Tested: 6/6 backend tests passed, frontend code + UI verified
+
 ## Prioritized Backlog
 ### P1 (Next Up)
 - [ ] Discussion/comments on submissions

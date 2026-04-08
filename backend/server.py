@@ -2322,8 +2322,20 @@ async def get_dashboard_analytics(user: dict = Depends(require_instructor)):
     
     # Get recent submissions (last 7 days)
     week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    recent_submissions = [s for s in submissions if s.get("submitted_at") and 
-                         datetime.fromisoformat(s["submitted_at"].replace("Z", "+00:00")) > week_ago]
+    recent_submissions = []
+    for s in submissions:
+        sa = s.get("submitted_at")
+        if not sa:
+            continue
+        try:
+            if isinstance(sa, str):
+                sa = datetime.fromisoformat(sa.replace("Z", "+00:00"))
+            if sa.tzinfo is None:
+                sa = sa.replace(tzinfo=timezone.utc)
+            if sa > week_ago:
+                recent_submissions.append(s)
+        except (ValueError, AttributeError):
+            pass
     
     return {
         "cohorts": len(cohorts),
