@@ -159,6 +159,11 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
+### Test Data Added (April 9, 2026)
+- [x] Added 2 test weeks to Material Library: "Test 1" (Week 4) and "Test 2" (Week 5)
+- [x] Each week has: Workbook, Case Study, Homework Assignment (6 materials total)
+- [x] All materials downloadable and ready to assign to cohorts
+
 ## Prioritized Backlog
 ### P1 (Next Up)
 - [ ] Discussion/comments on submissions
