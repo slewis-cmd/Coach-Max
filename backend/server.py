@@ -1134,8 +1134,8 @@ async def release_week(cohort_id: str, request: Request, user: dict = Depends(re
     """Release a week to make it visible to students"""
     data = await request.json()
     week_number = data.get("week_number")
-    if not week_number or not isinstance(week_number, int) or week_number < 1 or week_number > 12:
-        raise HTTPException(status_code=400, detail="Invalid week number (1-12)")
+    if not week_number or not isinstance(week_number, int) or week_number < 1 or week_number > 14:
+        raise HTTPException(status_code=400, detail="Invalid week number (1-14)")
     
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
     if not cohort or not is_cohort_manager(user, cohort):
@@ -1364,8 +1364,8 @@ async def update_material_week(material_id: str, request: Request, user: dict = 
     """Update a material's week number"""
     data = await request.json()
     week_number = data.get("week_number")
-    if not week_number or not isinstance(week_number, int) or week_number < 1 or week_number > 12:
-        raise HTTPException(status_code=400, detail="week_number must be 1-12")
+    if not week_number or not isinstance(week_number, int) or week_number < 1 or week_number > 14:
+        raise HTTPException(status_code=400, detail="week_number must be 1-14")
     
     material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
     if not material:
@@ -1660,7 +1660,7 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
         ).to_list(100)
         
         weeks = []
-        for week_num in range(1, 13):
+        for week_num in range(1, 15):
             # Only include released weeks
             if week_num not in released_weeks:
                 continue

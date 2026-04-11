@@ -160,9 +160,11 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
 ### Test Data Added (April 9, 2026)
-- [x] Added 2 test weeks to Material Library: "Test 1" (Week 4) and "Test 2" (Week 5)
+- [x] Expanded system from 12 weeks to 14 weeks (backend validation + student dashboard loop)
+- [x] Added "Test 1" (Week 13) and "Test 2" (Week 14) to Material Library
 - [x] Each week has: Workbook, Case Study, Homework Assignment (6 materials total)
-- [x] All materials downloadable and ready to assign to cohorts
+- [x] All materials downloadable and ready to assign to any cohort
+- [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
 ## Prioritized Backlog
 ### P1 (Next Up)
