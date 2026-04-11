@@ -301,7 +301,7 @@ export default function MaterialLibrary() {
                 <Select value={String(form.week_number)} onValueChange={(v) => setForm({...form, week_number: parseInt(v)})}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Array.from({length: 12}, (_, i) => (
+                    {Array.from({length: 14}, (_, i) => (
                       <SelectItem key={i+1} value={String(i+1)}>Week {i+1}</SelectItem>
                     ))}
                   </SelectContent>
