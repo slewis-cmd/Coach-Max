@@ -61,7 +61,7 @@ export function UploadMaterialDialog({ open, onOpenChange, materialForm, setMate
                 onValueChange={(v) => setMaterialForm({ ...materialForm, week_number: parseInt(v) })}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                  {[1,2,3,4,5,6,7,8,9,10,11,12,13,14].map(n => (
                     <SelectItem key={n} value={String(n)}>Week {n}</SelectItem>
                   ))}
                 </SelectContent>
