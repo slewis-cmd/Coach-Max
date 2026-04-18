@@ -3066,6 +3066,112 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
         headers={"Content-Disposition": f'attachment; filename="{pdf_filename}"'}
     )
 
+# ==================== AUDIO TTS ENDPOINTS ====================
+
+AUDIO_DIR = ROOT_DIR / "uploads" / "audio"
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
+@api_router.post("/submissions/{submission_id}/audio")
+async def generate_feedback_audio(submission_id: str, user: dict = Depends(get_current_user)):
+    """Generate audio of feedback using OpenAI TTS. Caches the result."""
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
+
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    feedback = submission.get("instructor_feedback") or submission.get("ai_feedback")
+    if not feedback:
+        raise HTTPException(status_code=400, detail="No feedback available")
+
+    # Check cache
+    audio_key = f"feedback_{submission_id}"
+    existing = await db.audio_cache.find_one({"audio_key": audio_key}, {"_id": 0})
+    if existing:
+        return {"audio_url": f"/api/audio/{existing['filename']}", "cached": True}
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+
+    # Trim to 4096 char limit
+    text = feedback[:4096]
+
+    try:
+        tts = OpenAITextToSpeech(api_key=api_key)
+        audio_bytes = await tts.generate_speech(
+            text=text,
+            model="tts-1",
+            voice="nova",
+            response_format="mp3"
+        )
+    except Exception as e:
+        logger.error(f"TTS error: {e}")
+        raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
+
+    filename = f"{audio_key}_{uuid.uuid4().hex[:8]}.mp3"
+    filepath = AUDIO_DIR / filename
+    async with aiofiles.open(str(filepath), "wb") as f:
+        await f.write(audio_bytes)
+
+    await db.audio_cache.insert_one({
+        "audio_key": audio_key,
+        "filename": filename,
+        "submission_id": submission_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"audio_url": f"/api/audio/{filename}", "cached": False}
+
+
+@api_router.post("/chat/audio")
+async def generate_chat_audio(request: Request, user: dict = Depends(get_current_user)):
+    """Generate audio for a Coach Max chat response."""
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
+
+    data = await request.json()
+    text = data.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+
+    text = text[:4096]
+
+    try:
+        tts = OpenAITextToSpeech(api_key=api_key)
+        audio_bytes = await tts.generate_speech(
+            text=text,
+            model="tts-1",
+            voice="nova",
+            response_format="mp3"
+        )
+    except Exception as e:
+        logger.error(f"Chat TTS error: {e}")
+        raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
+
+    filename = f"chat_{uuid.uuid4().hex[:12]}.mp3"
+    filepath = AUDIO_DIR / filename
+    async with aiofiles.open(str(filepath), "wb") as f:
+        await f.write(audio_bytes)
+
+    return {"audio_url": f"/api/audio/{filename}"}
+
+
+@api_router.get("/audio/{filename}")
+async def serve_audio(filename: str):
+    """Serve a generated audio file."""
+    filepath = AUDIO_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return FileResponse(
+        str(filepath),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 # ==================== UTILITY ENDPOINTS ====================
 
 @api_router.get("/")

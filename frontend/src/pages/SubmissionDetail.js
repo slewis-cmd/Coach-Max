@@ -18,7 +18,9 @@ import {
   RotateCcw,
   RefreshCw,
   FileDown,
-  Trash2
+  Trash2,
+  Volume2,
+  Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -38,6 +40,9 @@ export default function SubmissionDetail() {
   const [allowingResubmission, setAllowingResubmission] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const audioRef = React.useRef(null);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -161,6 +166,20 @@ export default function SubmissionDetail() {
       toast.error(error.response?.data?.detail || 'Failed to delete submission');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+    setGeneratingAudio(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/submissions/${submissionId}/audio`);
+      const url = `${API_URL}${res.data.audio_url}`;
+      setAudioUrl(url);
+      toast.success(res.data.cached ? 'Audio ready' : 'Audio generated');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to generate audio');
+    } finally {
+      setGeneratingAudio(false);
     }
   };
 
@@ -463,7 +482,46 @@ export default function SubmissionDetail() {
                   <div className="feedback-letter text-[#166534] whitespace-pre-wrap leading-relaxed">
                     {currentFeedback}
                   </div>
-                  <div className="mt-6 pt-6 border-t border-[#B8D4E8] text-right">
+                  
+                  {/* Audio Player */}
+                  <div className="mt-6 pt-4 border-t border-[#B8D4E8]">
+                    {audioUrl ? (
+                      <div className="flex items-center gap-3" data-testid="audio-player">
+                        <audio ref={audioRef} src={audioUrl} controls className="flex-1 h-10" />
+                        <a
+                          href={audioUrl}
+                          download
+                          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#22438E] text-white rounded-lg hover:bg-[#1A3A7A] transition-colors"
+                          data-testid="download-audio-btn"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          MP3
+                        </a>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={handleGenerateAudio}
+                        disabled={generatingAudio}
+                        variant="outline"
+                        className="border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]"
+                        data-testid="generate-audio-btn"
+                      >
+                        {generatingAudio ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin mr-2"></div>
+                            Generating Audio...
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 className="w-4 h-4 mr-2" />
+                            Listen to Feedback
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4 text-right">
                     <p className="text-sm text-[#22438E] italic">
                       {isSent ? '— Feedback sent to student' : '— Draft (Not yet sent to student)'}
                     </p>

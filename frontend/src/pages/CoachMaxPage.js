@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { MessageCircle, ArrowLeft, FileText, Send, Globe } from 'lucide-react';
+import { MessageCircle, ArrowLeft, FileText, Send, Globe, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -22,7 +22,30 @@ export default function CoachMaxPage() {
   const [sending, setSending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [chatLang, setChatLang] = useState(user?.language_preference || 'en');
+  const [playingAudio, setPlayingAudio] = useState(null); // index of message currently playing
   const messagesEndRef = React.useRef(null);
+  const audioPlayerRef = React.useRef(null);
+
+  const handlePlayAudio = async (text, index) => {
+    if (playingAudio === index) {
+      if (audioPlayerRef.current) audioPlayerRef.current.pause();
+      setPlayingAudio(null);
+      return;
+    }
+    setPlayingAudio(index);
+    try {
+      const res = await axios.post(`${API_URL}/api/chat/audio`, { text });
+      const url = `${API_URL}${res.data.audio_url}`;
+      if (audioPlayerRef.current) audioPlayerRef.current.pause();
+      const audio = new Audio(url);
+      audioPlayerRef.current = audio;
+      audio.onended = () => setPlayingAudio(null);
+      audio.play();
+    } catch (_e) {
+      toast.error('Could not generate audio');
+      setPlayingAudio(null);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -180,6 +203,16 @@ export default function CoachMaxPage() {
                     <p className="text-xs font-medium text-[#22438E] mb-1">Coach Max</p>
                   )}
                   <div className="whitespace-pre-wrap">{msg.text}</div>
+                  {msg.role === 'coach' && (
+                    <button
+                      onClick={() => handlePlayAudio(msg.text, i)}
+                      className="mt-2 inline-flex items-center gap-1 text-xs text-[#22438E] hover:text-[#1A3A7A] transition-colors"
+                      data-testid={`play-audio-${i}`}
+                    >
+                      <Volume2 className={`w-3.5 h-3.5 ${playingAudio === i ? 'animate-pulse' : ''}`} />
+                      {playingAudio === i ? (chatLang === 'es' ? 'Reproduciendo...' : 'Playing...') : (chatLang === 'es' ? 'Escuchar' : 'Listen')}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
