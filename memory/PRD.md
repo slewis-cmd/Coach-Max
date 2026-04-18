@@ -159,6 +159,16 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
+### Audio TTS Feedback (April 9, 2026)
+- [x] POST /api/submissions/{id}/audio — generates MP3 from feedback, caches result
+- [x] POST /api/chat/audio — generates MP3 from Coach Max chat response
+- [x] GET /api/audio/{filename} — serves audio files
+- [x] "Listen to Feedback" button on SubmissionDetail with inline player + MP3 download
+- [x] "Listen" button on each Coach Max chat response (plays via browser Audio API)
+- [x] Uses OpenAI TTS (tts-1, voice: nova) via Emergent integrations
+- [x] Audio caching to avoid regeneration for same feedback
+- [x] Tested: 12/12 backend, 100% frontend (iteration_19)
+
 ### Spanish Language Support (April 9, 2026)
 - [x] Students can set language preference (EN/ES) in sidebar of Student Dashboard
 - [x] Coach Max chat page has per-chat language toggle in header
