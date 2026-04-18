@@ -159,6 +159,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
+### Spanish Language Support (April 9, 2026)
+- [x] Students can set language preference (EN/ES) in sidebar of Student Dashboard
+- [x] Coach Max chat page has per-chat language toggle in header
+- [x] AI feedback generation uses student's language preference
+- [x] Auto-review on submission uses student's language preference
+- [x] Feedback emails and PDF export emails are localized for Spanish
+- [x] Welcome messages, placeholders, and UI text switch dynamically
+- [x] Tested: 7/7 backend, 100% frontend via Playwright (iteration_18)
+
 ### Test Data Added (April 9, 2026)
 - [x] Expanded system from 12 weeks to 14 weeks (backend validation + student dashboard loop)
 - [x] Added "Test 1" (Week 13) and "Test 2" (Week 14) to Material Library
