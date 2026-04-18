@@ -3102,7 +3102,7 @@ async def generate_feedback_audio(submission_id: str, user: dict = Depends(get_c
         audio_bytes = await tts.generate_speech(
             text=text,
             model="tts-1",
-            voice="nova",
+            voice="echo",
             response_format="mp3"
         )
     except Exception as e:
@@ -3145,7 +3145,7 @@ async def generate_chat_audio(request: Request, user: dict = Depends(get_current
         audio_bytes = await tts.generate_speech(
             text=text,
             model="tts-1",
-            voice="nova",
+            voice="echo",
             response_format="mp3"
         )
     except Exception as e:
