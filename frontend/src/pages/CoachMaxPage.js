@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { MessageCircle, ArrowLeft, FileText, Send } from 'lucide-react';
+import { MessageCircle, ArrowLeft, FileText, Send, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -21,6 +21,7 @@ export default function CoachMaxPage() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [chatLang, setChatLang] = useState(user?.language_preference || 'en');
   const messagesEndRef = React.useRef(null);
 
   useEffect(() => {
@@ -71,7 +72,8 @@ export default function CoachMaxPage() {
     try {
       const res = await axios.post(`${API_URL}/api/chat/ask-tutor`, {
         message: userMsg,
-        submission_id: submissionId
+        submission_id: submissionId,
+        language: chatLang
       });
       setMessages(prev => [...prev, { role: 'coach', text: res.data.response }]);
     } catch (error) {
@@ -113,6 +115,19 @@ export default function CoachMaxPage() {
               <p className="text-xs text-[#666666]">Week {weekNum} — {materialTitle}</p>
             </div>
           </div>
+          <div className="ml-auto flex items-center gap-1.5" data-testid="chat-language-toggle">
+            <Globe className="w-3.5 h-3.5 text-[#666666]" />
+            <button
+              onClick={() => setChatLang('en')}
+              className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${chatLang === 'en' ? 'bg-[#22438E] text-white' : 'text-[#333] hover:bg-[#D0E6F9]'}`}
+              data-testid="chat-lang-en"
+            >EN</button>
+            <button
+              onClick={() => setChatLang('es')}
+              className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${chatLang === 'es' ? 'bg-[#22438E] text-white' : 'text-[#333] hover:bg-[#D0E6F9]'}`}
+              data-testid="chat-lang-es"
+            >ES</button>
+          </div>
         </div>
       </header>
 
@@ -122,7 +137,7 @@ export default function CoachMaxPage() {
           <details className="mx-4 md:mx-8 mt-4" data-testid="feedback-summary">
             <summary className="cursor-pointer flex items-center gap-2 text-sm font-medium text-[#22438E] hover:underline">
               <FileText className="w-4 h-4" />
-              View your feedback
+              {chatLang === 'es' ? 'Ver tu retroalimentacion' : 'View your feedback'}
             </summary>
             <Card className="mt-2 bg-[#F0FDF4] border-[#BBF7D0]">
               <CardContent className="p-4">
@@ -141,9 +156,11 @@ export default function CoachMaxPage() {
                 <div className="w-14 h-14 bg-[#E1F0FF] rounded-full flex items-center justify-center mx-auto mb-3">
                   <MessageCircle className="w-7 h-7 text-[#22438E]" />
                 </div>
-                <h4 className="font-medium text-[#000000] mb-1">Hi! I'm Coach Max</h4>
+                <h4 className="font-medium text-[#000000] mb-1">{chatLang === 'es' ? 'Hola! Soy Coach Max' : "Hi! I'm Coach Max"}</h4>
                 <p className="text-sm text-[#333333] max-w-xs mx-auto">
-                  Ask me anything about your Week {weekNum} feedback. I'm here to help you grow!
+                  {chatLang === 'es' 
+                    ? `Preguntame lo que quieras sobre tu retroalimentacion de la Semana ${weekNum}. Estoy aqui para ayudarte!`
+                    : `Ask me anything about your Week ${weekNum} feedback. I'm here to help you grow!`}
                 </p>
               </div>
             )}
@@ -188,7 +205,7 @@ export default function CoachMaxPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              placeholder="Ask Coach Max a question..."
+              placeholder={chatLang === 'es' ? "Hazle una pregunta al Coach Max..." : "Ask Coach Max a question..."}
               className="flex-1 px-4 py-2.5 bg-[#D0E6F9] rounded-full text-sm outline-none focus:ring-2 focus:ring-[#22438E]/20"
               disabled={sending}
               data-testid="coach-max-input"

@@ -9,7 +9,8 @@ import {
 import { Label } from '../components/ui/label';
 import { 
   BookOpen, LogOut, Upload, CheckCircle, Clock, MessageSquare, FileText,
-  ChevronDown, ChevronUp, File, Calendar, Hourglass, Send, X, MessageCircle, Download
+  ChevronDown, ChevronUp, File, Calendar, Hourglass, Send, X, MessageCircle, Download,
+  Globe
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -69,6 +70,19 @@ export default function StudentDashboard() {
 
   // Coach Max chat
   const [chatOpen, setChatOpen] = useState(null); // { submissionId, weekNumber }
+
+  // Language preference
+  const [language, setLanguage] = useState(user?.language_preference || 'en');
+
+  const handleLanguageChange = async (lang) => {
+    setLanguage(lang);
+    try {
+      await axios.put(`${API_URL}/api/user/language`, { language: lang });
+      toast.success(lang === 'es' ? 'Idioma actualizado a Espanol' : 'Language updated to English');
+    } catch (_e) {
+      toast.error('Failed to update language preference');
+    }
+  };
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -174,6 +188,19 @@ export default function StudentDashboard() {
               <p className="text-sm font-medium text-[#000000] truncate">{user?.name}</p>
               <p className="text-xs text-[#666666] truncate">{user?.email}</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2 mb-3 px-2" data-testid="language-selector">
+            <Globe className="w-4 h-4 text-[#666666]" />
+            <button
+              onClick={() => handleLanguageChange('en')}
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${language === 'en' ? 'bg-[#22438E] text-white' : 'bg-white text-[#333333] hover:bg-[#E1F0FF]'}`}
+              data-testid="lang-en-btn"
+            >EN</button>
+            <button
+              onClick={() => handleLanguageChange('es')}
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${language === 'es' ? 'bg-[#22438E] text-white' : 'bg-white text-[#333333] hover:bg-[#E1F0FF]'}`}
+              data-testid="lang-es-btn"
+            >ES</button>
           </div>
           <Button
             variant="ghost"

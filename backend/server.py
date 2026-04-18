@@ -189,6 +189,36 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
     return submission_text, context_text
 
 
+def get_language_instruction(lang: str) -> str:
+    """Return AI prompt instruction for the given language code."""
+    if lang == "es":
+        return "\n\nIMPORTANT: You MUST respond entirely in Spanish. All feedback, headings, bullet points, and closing remarks must be written in Spanish."
+    return ""
+
+
+def get_feedback_email_strings(lang: str) -> dict:
+    """Return localised UI strings for the feedback email."""
+    if lang == "es":
+        return {
+            "heading": "Tu retroalimentacion esta lista!",
+            "greeting": "Hola",
+            "body": "Tu instructor ha revisado tu envio de",
+            "week": "Semana",
+            "cta": "Preguntale al Coach Max",
+            "cta_sub": "Tienes preguntas sobre tu retroalimentacion? Chatea con Coach Max para orientacion personalizada.",
+            "closing": "Sigue con el excelente trabajo!",
+        }
+    return {
+        "heading": "Your Feedback is Ready!",
+        "greeting": "Hi",
+        "body": "Your instructor has reviewed your submission for",
+        "week": "Week",
+        "cta": "Ask Coach Max a Question",
+        "cta_sub": "Have questions about your feedback? Chat with Coach Max for personalized guidance.",
+        "closing": "Keep up the great work!",
+    }
+
+
 def parse_csv_students(content: bytes) -> list:
     """Parse CSV content and return list of {email, name} dicts"""
     try:
@@ -437,6 +467,19 @@ async def create_session(request: Request, response: Response):
 async def get_me(user: dict = Depends(get_current_user)):
     """Get current user info"""
     return user
+
+@api_router.put("/user/language")
+async def set_language_preference(request: Request, user: dict = Depends(get_current_user)):
+    """Set user's language preference (en or es)"""
+    data = await request.json()
+    lang = data.get("language", "en")
+    if lang not in ("en", "es"):
+        raise HTTPException(status_code=400, detail="Supported languages: en, es")
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"language_preference": lang}}
+    )
+    return {"message": "Language preference updated", "language": lang}
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
@@ -1739,11 +1782,15 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
     data = await request.json()
     message = data.get("message", "").strip()
     submission_id = data.get("submission_id")
+    lang_override = data.get("language")  # per-chat override
     
     if not message:
         raise HTTPException(status_code=400, detail="Message is required")
     if not submission_id:
         raise HTTPException(status_code=400, detail="Submission ID is required")
+    
+    # Determine language: per-chat override > profile default > en
+    lang = lang_override or user.get("language_preference", "en")
     
     # Get submission
     submission = await db.submissions.find_one(
@@ -1798,7 +1845,7 @@ FEEDBACK THE STUDENT RECEIVED:
 {feedback}
 
 COURSE MATERIALS:
-{context_text[:5000] if context_text else 'Not available'}"""
+{context_text[:5000] if context_text else 'Not available'}{get_language_instruction(lang)}"""
         ).with_model("openai", "gpt-5.2")
         
         response = await chat.send_message(UserMessage(text=message))
@@ -2101,10 +2148,15 @@ async def submit_on_behalf(
                 logger.error(f"Auto review: EMERGENT_LLM_KEY not set")
                 return
             
+            # Look up student's language preference
+            stu = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+            auto_lang = stu.get("language_preference", "en") if stu else "en"
+            auto_lang_instr = get_language_instruction(auto_lang)
+            
             chat = LlmChat(
                 api_key=api_key,
                 session_id=f"review_{submission_id}",
-                system_message="""You are a supportive and encouraging AI tutor helping students learn.
+                system_message=f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
 
 Guidelines:
@@ -2118,17 +2170,17 @@ You MUST structure your feedback EXACTLY as follows:
 
 A brief encouraging opening sentence acknowledging their effort.
 
-What You Did Well:
+{"Lo que hiciste bien:" if auto_lang == "es" else "What You Did Well:"}
 - [specific strength with example from their work]
 - [specific strength with example from their work]
 - [specific strength with example from their work]
 
-Areas for Growth:
+{"Areas de crecimiento:" if auto_lang == "es" else "Areas for Growth:"}
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 
-A brief closing sentence with encouragement and motivation to keep going."""
+A brief closing sentence with encouragement and motivation to keep going.{auto_lang_instr}"""
             ).with_model("openai", "gpt-5.2")
             
             prompt = f"""Please review this student's homework submission and provide structured feedback.
@@ -2620,12 +2672,17 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
     
+    # Look up student's language preference
+    student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
+    lang = student.get("language_preference", "en") if student else "en"
+    lang_instr = get_language_instruction(lang)
+    
     feedback = ""
     try:
         chat = LlmChat(
             api_key=api_key,
             session_id=f"review_{submission_id}",
-            system_message="""You are a supportive and encouraging AI tutor helping students learn.
+            system_message=f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
 
 Guidelines:
@@ -2639,17 +2696,17 @@ You MUST structure your feedback EXACTLY as follows:
 
 A brief encouraging opening sentence acknowledging their effort.
 
-What You Did Well:
+{"Lo que hiciste bien:" if lang == "es" else "What You Did Well:"}
 - [specific strength with example from their work]
 - [specific strength with example from their work]
 - [specific strength with example from their work]
 
-Areas for Growth:
+{"Areas de crecimiento:" if lang == "es" else "Areas for Growth:"}
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 
-A brief closing sentence with encouragement and motivation to keep going."""
+A brief closing sentence with encouragement and motivation to keep going.{lang_instr}"""
         ).with_model("openai", "gpt-5.2")
         
         prompt = f"""Please review this student's homework submission and provide structured feedback.
@@ -2736,21 +2793,25 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     
+    # Get student's language preference for email
+    lang = student.get("language_preference", "en")
+    t = get_feedback_email_strings(lang)
+    
     # Send email to student
     feedback_html = feedback.replace("\n", "<br>")
     coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}"
     email_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Your Feedback is Ready!</h1>
+            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">{t['heading']}</h1>
         </div>
         <div style="background-color: #F9F8F6; padding: 24px;">
             <p style="color: #1A1A1A; font-size: 16px; margin-bottom: 16px;">
-                Hi <strong>{student['name'].split()[0]}</strong>,
+                {t['greeting']} <strong>{student['name'].split()[0]}</strong>,
             </p>
             <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
-                Your instructor has reviewed your submission for <strong>{material['title'] if material else 'Homework'}</strong> 
-                (Week {material['week_number'] if material else '?'}).
+                {t['body']} <strong>{material['title'] if material else 'Homework'}</strong> 
+                ({t['week']} {material['week_number'] if material else '?'}).
             </p>
             <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 20px; margin: 20px 0;">
                 <p style="color: #166534; font-size: 15px; line-height: 1.7; margin: 0;">
@@ -2759,12 +2820,12 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
             </div>
             <div style="text-align: center; margin: 24px 0;">
                 <a href="{coach_max_url}" style="display: inline-block; background-color: #22438E; color: #FFFFFF; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
-                    Ask Coach Max a Question
+                    {t['cta']}
                 </a>
-                <p style="color: #888; font-size: 12px; margin-top: 8px;">Have questions about your feedback? Chat with Coach Max for personalized guidance.</p>
+                <p style="color: #888; font-size: 12px; margin-top: 8px;">{t['cta_sub']}</p>
             </div>
             <p style="color: #5A5A5A; font-size: 14px; margin-top: 20px;">
-                Keep up the great work!<br>
+                {t['closing']}<br>
                 — {instructor['name'] if instructor else 'Your Instructor'}
             </p>
         </div>
@@ -2829,6 +2890,8 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
     coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}"
     logger.info(f"Coach Max URL generated: {coach_max_url}")
+    pdf_lang = student.get("language_preference", "en")
+    pdf_t = get_feedback_email_strings(pdf_lang)
     
     # Sanitize text for PDF - replace unicode chars then encode to latin-1
     def safe_text(text):
@@ -2944,24 +3007,24 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
             email_params = {
                 "from": f"The Boost Pad <{SENDER_EMAIL}>",
                 "to": [student["email"]],
-                "subject": f"Your Feedback Report: {material_title} - Week {week_num}",
+                "subject": f"{'Tu Reporte de Retroalimentacion' if pdf_lang == 'es' else 'Your Feedback Report'}: {material_title} - {pdf_t['week']} {week_num}",
                 "html": f"""
                 <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                     <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
-                        <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Your Feedback Report</h1>
+                        <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">{"Tu Reporte de Retroalimentacion" if pdf_lang == "es" else "Your Feedback Report"}</h1>
                     </div>
                     <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
                         <p style="color: #1A1A1A; font-size: 16px;">
-                            Hi <strong>{student_name.split()[0]}</strong>,
+                            {pdf_t['greeting']} <strong>{student_name.split()[0]}</strong>,
                         </p>
                         <p style="color: #5A5A5A; font-size: 14px;">
-                            Your feedback for <strong>{material_title}</strong> (Week {week_num}) is attached as a PDF.
+                            {"Tu retroalimentacion para" if pdf_lang == "es" else "Your feedback for"} <strong>{material_title}</strong> ({pdf_t['week']} {week_num}) {"esta adjunta como PDF." if pdf_lang == "es" else "is attached as a PDF."}
                         </p>
                         <div style="text-align: center; margin: 24px 0;">
                             <a href="{coach_max_url}" style="display: inline-block; background-color: #22438E; color: #FFFFFF; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
-                                Ask Coach Max a Question
+                                {pdf_t['cta']}
                             </a>
-                            <p style="color: #888; font-size: 12px; margin-top: 8px;">Have questions about your feedback? Chat with Coach Max for guidance.</p>
+                            <p style="color: #888; font-size: 12px; margin-top: 8px;">{pdf_t['cta_sub']}</p>
                         </div>
                         <p style="color: #888; font-size: 13px;">{cohort_name} &middot; The Boost Pad</p>
                     </div>
