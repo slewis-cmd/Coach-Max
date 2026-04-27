@@ -159,6 +159,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
+### Coach Max Insights Report (April 9, 2026)
+- [x] GET /api/cohorts/{id}/coach-max-report — raw questions grouped by week with counts
+- [x] POST /api/cohorts/{id}/coach-max-report/generate — AI-generated themes, counts, examples, recommendations
+- [x] New "Coach Max Insights" tab in CohortDetail (alongside Materials, Students, Feedback)
+- [x] Standalone /coach-max-insights/:cohortId page accessible from Instructor Dashboard
+- [x] Per-week breakdown with "Generate Insights" button and expandable raw questions
+- [x] Tested: 11/11 backend, 100% frontend (iteration_20)
+
 ### Audio TTS Feedback (April 9, 2026)
 - [x] POST /api/submissions/{id}/audio — generates MP3 from feedback, caches result
 - [x] POST /api/chat/audio — generates MP3 from Coach Max chat response
