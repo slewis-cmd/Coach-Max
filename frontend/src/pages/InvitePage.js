@@ -24,7 +24,7 @@ export default function InvitePage() {
       try {
         const res = await axios.get(`${API_URL}/api/invite/${code}`);
         setCohortInfo(res.data);
-      } catch (err) {
+      } catch (_err) {
         setError('This invite link is invalid or has expired.');
       } finally {
         setLoading(false);
@@ -38,8 +38,8 @@ export default function InvitePage() {
     if (!authLoading && isAuthenticated && cohortInfo && !joined && !joining) {
       handleJoin();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, isAuthenticated, cohortInfo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAuthenticated, cohortInfo, joined, joining]);
 
   const handleJoin = async () => {
     setJoining(true);

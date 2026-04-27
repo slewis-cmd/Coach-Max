@@ -80,7 +80,7 @@ export default function CoachMaxPage() {
       ]);
       setMessages(history);
     } catch (_e) {
-      // First load — no history yet, start fresh
+      console.log('No chat history found, starting fresh');
     } finally {
       setLoadingHistory(false);
     }

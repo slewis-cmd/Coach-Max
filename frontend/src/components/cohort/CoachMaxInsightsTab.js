@@ -162,7 +162,7 @@ export function CoachMaxInsightsTab({ cohortId }) {
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-[#666666] uppercase tracking-wide">Themes</p>
                     {insights[week.week_number].themes.map((theme, i) => (
-                      <div key={i} className="bg-white border border-[#E5E5E5] rounded-lg p-3">
+                      <div key={`theme-${week.week_number}-${theme.theme}`} className="bg-white border border-[#E5E5E5] rounded-lg p-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium text-[#000000]">{theme.theme}</span>
                           <span className="text-xs bg-[#E1F0FF] text-[#22438E] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
@@ -172,7 +172,7 @@ export function CoachMaxInsightsTab({ cohortId }) {
                         {theme.examples?.length > 0 && (
                           <ul className="text-xs text-[#666666] mt-1.5 space-y-0.5">
                             {theme.examples.map((ex, j) => (
-                              <li key={j} className="pl-3 border-l-2 border-[#D0E6F9]">"{ex}"</li>
+                              <li key={`ex-${theme.theme}-${j}`} className="pl-3 border-l-2 border-[#D0E6F9]">"{ex}"</li>
                             ))}
                           </ul>
                         )}
@@ -189,7 +189,7 @@ export function CoachMaxInsightsTab({ cohortId }) {
                     </p>
                     <ul className="space-y-1.5">
                       {insights[week.week_number].recommendations.map((rec, i) => (
-                        <li key={i} className="text-sm text-[#166534] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#22C55E] before:rounded-full">
+                        <li key={`rec-${week.week_number}-${i}`} className="text-sm text-[#166534] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:bg-[#22C55E] before:rounded-full">
                           {rec}
                         </li>
                       ))}
@@ -205,7 +205,7 @@ export function CoachMaxInsightsTab({ cohortId }) {
                 <p className="text-xs font-semibold text-[#666666] uppercase tracking-wide mb-3">All Questions</p>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {week.questions.map((q, i) => (
-                    <div key={i} className="bg-[#F9F8F6] rounded-lg p-3">
+                    <div key={`q-${q.student_name}-${q.created_at}-${i}`} className="bg-[#F9F8F6] rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-1.5">
                         <div className="w-5 h-5 bg-[#22438E] rounded-full flex items-center justify-center">
                           <Users className="w-2.5 h-2.5 text-white" />

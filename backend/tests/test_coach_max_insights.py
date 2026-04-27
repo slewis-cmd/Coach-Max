@@ -10,7 +10,7 @@ import os
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test session token for instructor access
-TEST_TOKEN = "test-insights"
+TEST_TOKEN = os.getenv("TEST_TOKEN", "test-insights-not-real")
 TEST_COHORT_ID = "cohort_3a1999cb7d72"
 EMPTY_COHORT_ID = "cohort_nonexistent_12345"
 

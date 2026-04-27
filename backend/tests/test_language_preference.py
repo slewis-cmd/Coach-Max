@@ -3,13 +3,13 @@ Test suite for Spanish language support feature.
 Tests: PUT /api/user/language, GET /api/auth/me (language_preference), POST /api/chat/ask-tutor (language field)
 """
 import pytest
-import requests
 import os
+import requests
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test session token created in MongoDB for user_d198275ccff4 (super_admin)
-TEST_TOKEN = "test-lang"
+TEST_TOKEN = os.getenv("TEST_TOKEN", "test-lang-not-real")
 
 
 class TestLanguagePreferenceEndpoint:

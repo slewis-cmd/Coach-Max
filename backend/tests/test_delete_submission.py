@@ -13,8 +13,8 @@ import os
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test tokens - created in MongoDB
-INSTRUCTOR_TOKEN = "test-token-delete"
-STUDENT_TOKEN = "test-student-token-delete"
+INSTRUCTOR_TOKEN = os.getenv("TEST_INSTRUCTOR_TOKEN", "test-token-delete-not-real")
+STUDENT_TOKEN = os.getenv("TEST_STUDENT_TOKEN", "test-student-token-delete-not-real")
 
 
 class TestDeleteSubmission:

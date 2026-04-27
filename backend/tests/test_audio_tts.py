@@ -15,7 +15,7 @@ import time
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test session token (created in MongoDB)
-TEST_TOKEN = "test-audio"
+TEST_TOKEN = os.getenv("TEST_TOKEN", "test-audio-not-real")
 TEST_SUBMISSION_ID = "sub_7bf4870c7bd8"
 
 
@@ -103,7 +103,7 @@ class TestSubmissionAudioEndpoint:
         data2 = response2.json()
         
         # Second call should return cached:true
-        assert data2.get("cached") == True
+        assert data2.get("cached") is True
         # URLs should be the same
         assert data1["audio_url"] == data2["audio_url"]
         
