@@ -159,6 +159,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
+### Weekly Coach Max Digest Email (April 9, 2026)
+- [x] Automated weekly email to info@theboostpad.org every Monday 9 AM UTC
+- [x] Includes AI-generated summary of student questions per cohort
+- [x] Grouped by week with example questions and question counts
+- [x] "Send Weekly Digest" manual trigger button on Instructor Dashboard
+- [x] POST /api/admin/send-weekly-digest endpoint for manual trigger
+- [x] Background scheduler starts on app startup
+- [x] Tested: Email delivered successfully (Resend ID verified)
+
 ### Coach Max Insights Report (April 9, 2026)
 - [x] GET /api/cohorts/{id}/coach-max-report — raw questions grouped by week with counts
 - [x] POST /api/cohorts/{id}/coach-max-report/generate — AI-generated themes, counts, examples, recommendations

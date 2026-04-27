@@ -26,6 +26,19 @@ export default function InstructorDashboard() {
   const [showCreateCohort, setShowCreateCohort] = useState(false);
   const [newCohort, setNewCohort] = useState({ name: '', description: '' });
   const [creating, setCreating] = useState(false);
+  const [sendingDigest, setSendingDigest] = useState(false);
+
+  const handleSendDigest = async () => {
+    setSendingDigest(true);
+    try {
+      await axios.post(`${API_URL}/api/admin/send-weekly-digest`);
+      toast.success('Weekly digest is being generated and sent to info@theboostpad.org');
+    } catch (_e) {
+      toast.error('Failed to send digest');
+    } finally {
+      setSendingDigest(false);
+    }
+  };
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -233,10 +246,32 @@ export default function InstructorDashboard() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-light text-[#000000]">Your Cohorts</h2>
-            <Button data-testid="create-cohort-btn" onClick={() => setShowCreateCohort(true)}
-              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
-              <Plus className="w-4 h-4 mr-2" />New Cohort
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendDigest}
+                disabled={sendingDigest}
+                className="border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]"
+                data-testid="send-digest-btn"
+              >
+                {sendingDigest ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin mr-1.5" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-3.5 h-3.5 mr-1.5" />
+                    Send Weekly Digest
+                  </>
+                )}
+              </Button>
+              <Button data-testid="create-cohort-btn" onClick={() => setShowCreateCohort(true)}
+                className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg">
+                <Plus className="w-4 h-4 mr-2" />New Cohort
+              </Button>
+            </div>
           </div>
           {cohorts.length === 0 ? (
             <Card className="bg-white border-[#B8D4E8] border-dashed">

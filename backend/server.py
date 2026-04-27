@@ -3349,6 +3349,171 @@ Identify the main themes, count how many questions relate to each theme, provide
         raise HTTPException(status_code=500, detail=f"Failed to generate insights: {str(e)}")
 
 
+# ==================== WEEKLY DIGEST ====================
+
+DIGEST_RECIPIENT = "info@theboostpad.org"
+
+async def generate_weekly_digest():
+    """Generate and email a weekly Coach Max insights digest for all active cohorts."""
+    logger.info("Starting weekly Coach Max digest generation...")
+    
+    cohorts = await db.cohorts.find({}, {"_id": 0}).to_list(100)
+    if not cohorts:
+        logger.info("No cohorts found, skipping digest.")
+        return
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    
+    cohort_sections = []
+    total_questions_all = 0
+
+    for cohort in cohorts:
+        cid = cohort["cohort_id"]
+        
+        # Get submissions for this cohort
+        submissions = await db.submissions.find(
+            {"cohort_id": cid}, {"_id": 0, "submission_id": 1, "material_id": 1}
+        ).to_list(1000)
+        if not submissions:
+            continue
+        
+        sub_ids = [s["submission_id"] for s in submissions]
+        
+        # Get chats from the last 7 days
+        recent_chats = await db.tutor_chats.find(
+            {"submission_id": {"$in": sub_ids}, "created_at": {"$gte": week_ago.isoformat()}},
+            {"_id": 0, "message": 1, "submission_id": 1}
+        ).to_list(5000)
+        
+        if not recent_chats:
+            continue
+        
+        total_questions_all += len(recent_chats)
+        
+        # Get material info for week numbers
+        sub_map = {s["submission_id"]: s for s in submissions}
+        mat_ids = list(set(s.get("material_id") for s in submissions if s.get("material_id")))
+        materials = await db.materials.find(
+            {"material_id": {"$in": mat_ids}}, {"_id": 0, "material_id": 1, "week_number": 1, "title": 1}
+        ).to_list(100)
+        mat_map = {m["material_id"]: m for m in materials}
+
+        # Group by week
+        week_questions = {}
+        for chat in recent_chats:
+            sub = sub_map.get(chat.get("submission_id"), {})
+            mat = mat_map.get(sub.get("material_id"), {})
+            wk = mat.get("week_number", 0)
+            title = mat.get("title", "Unknown")
+            if wk not in week_questions:
+                week_questions[wk] = {"title": title, "questions": []}
+            week_questions[wk]["questions"].append(chat["message"])
+
+        # Generate AI summary if we have an API key
+        ai_summary = ""
+        if api_key and len(recent_chats) > 0:
+            try:
+                from emergentintegrations.llm.chat import LlmChat, UserMessage
+                questions_text = "\n".join([f"- {c['message']}" for c in recent_chats])
+                chat_ai = LlmChat(
+                    api_key=api_key,
+                    session_id=f"digest_{cid}_{uuid.uuid4().hex[:6]}",
+                    system_message="""You are an analytics assistant. Summarize student questions to their AI tutor in 2-3 concise sentences. Highlight the main themes and any areas where students seem confused. Keep it brief and actionable for instructors."""
+                ).with_model("openai", "gpt-5.2")
+                ai_summary = await chat_ai.send_message(
+                    UserMessage(text=f"Summarize these {len(recent_chats)} student questions:\n{questions_text[:6000]}")
+                )
+            except Exception as e:
+                logger.error(f"Digest AI summary failed for {cid}: {e}")
+                ai_summary = f"{len(recent_chats)} questions received this week."
+
+        # Build HTML section for this cohort
+        weeks_html = ""
+        for wk in sorted(week_questions.keys()):
+            wd = week_questions[wk]
+            q_list = "".join([f"<li style='color:#333;font-size:13px;margin-bottom:4px;'>\"{q}\"</li>" for q in wd["questions"][:5]])
+            extra = f"<li style='color:#999;font-size:12px;'>...and {len(wd['questions'])-5} more</li>" if len(wd["questions"]) > 5 else ""
+            weeks_html += f"""
+            <div style="margin-bottom:16px;">
+                <p style="font-weight:600;color:#22438E;font-size:14px;margin:0 0 6px 0;">Week {wk}: {wd['title']} ({len(wd['questions'])} questions)</p>
+                <ul style="margin:0;padding-left:20px;">{q_list}{extra}</ul>
+            </div>"""
+
+        section = f"""
+        <div style="background:#fff;border:1px solid #D0E6F9;border-radius:12px;padding:20px;margin-bottom:20px;">
+            <h2 style="color:#000;font-size:18px;margin:0 0 4px 0;">{cohort['name']}</h2>
+            <p style="color:#666;font-size:13px;margin:0 0 16px 0;">{len(recent_chats)} questions this week</p>
+            {f'<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:14px;margin-bottom:16px;"><p style="color:#22438E;font-weight:600;font-size:12px;margin:0 0 6px 0;">AI SUMMARY</p><p style="color:#333;font-size:14px;line-height:1.6;margin:0;">{ai_summary}</p></div>' if ai_summary else ''}
+            {weeks_html}
+        </div>"""
+        cohort_sections.append(section)
+
+    if not cohort_sections:
+        logger.info("No Coach Max activity this week, skipping digest email.")
+        return
+
+    # Build full email
+    today = datetime.now(timezone.utc)
+    week_start = (today - timedelta(days=7)).strftime("%b %d")
+    week_end = today.strftime("%b %d, %Y")
+    
+    email_html = f"""
+    <div style="font-family:'Inter',Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px;">
+        <div style="background:#22438E;padding:24px;border-radius:12px 12px 0 0;">
+            <h1 style="color:#fff;margin:0;font-size:22px;">Coach Max Weekly Digest</h1>
+            <p style="color:#94B8D9;font-size:13px;margin:6px 0 0 0;">{week_start} — {week_end}</p>
+        </div>
+        <div style="background:#EDF5FA;padding:24px;border-radius:0 0 12px 12px;">
+            <p style="color:#333;font-size:15px;margin:0 0 20px 0;">
+                Here's what your students asked Coach Max this week across all cohorts.
+                <strong>{total_questions_all} total questions</strong> were asked.
+            </p>
+            {''.join(cohort_sections)}
+            <div style="text-align:center;margin-top:24px;">
+                <a href="{APP_BASE_URL}/dashboard" style="display:inline-block;background:#22438E;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">
+                    View Full Insights
+                </a>
+            </div>
+            <p style="color:#999;font-size:12px;text-align:center;margin-top:20px;">
+                The Boost Pad &middot; Weekly Coach Max Digest
+            </p>
+        </div>
+    </div>"""
+
+    await send_email_notification(
+        DIGEST_RECIPIENT,
+        f"Coach Max Weekly Digest — {week_start} to {week_end}",
+        email_html
+    )
+    logger.info(f"Weekly digest sent to {DIGEST_RECIPIENT} with {total_questions_all} questions across {len(cohort_sections)} cohorts")
+
+
+async def weekly_digest_scheduler():
+    """Background task that sends weekly digest every Monday at 9 AM UTC."""
+    while True:
+        now = datetime.now(timezone.utc)
+        # Calculate next Monday 9 AM UTC
+        days_until_monday = (7 - now.weekday()) % 7
+        if days_until_monday == 0 and now.hour >= 9:
+            days_until_monday = 7
+        next_monday = now.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=days_until_monday)
+        wait_seconds = (next_monday - now).total_seconds()
+        logger.info(f"Next weekly digest scheduled for {next_monday.isoformat()} ({wait_seconds/3600:.1f}h from now)")
+        await asyncio.sleep(wait_seconds)
+        try:
+            await generate_weekly_digest()
+        except Exception as e:
+            logger.error(f"Weekly digest failed: {e}")
+
+
+@api_router.post("/admin/send-weekly-digest")
+async def trigger_weekly_digest(user: dict = Depends(require_instructor)):
+    """Manually trigger the weekly Coach Max digest email."""
+    asyncio.create_task(generate_weekly_digest())
+    return {"message": f"Weekly digest is being generated and will be sent to {DIGEST_RECIPIENT}"}
+
+
 # ==================== UTILITY ENDPOINTS ====================
 
 @api_router.get("/")
@@ -3733,6 +3898,8 @@ async def migrate_instructor_ids():
         )
     if cohorts_to_migrate:
         logger.info(f"Migrated {len(cohorts_to_migrate)} cohorts to instructor_ids")
+    # Start weekly digest scheduler
+    asyncio.create_task(weekly_digest_scheduler())
 
 
 @app.on_event("shutdown")
