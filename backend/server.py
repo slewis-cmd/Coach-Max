@@ -3172,6 +3172,183 @@ async def serve_audio(filename: str):
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+# ==================== COACH MAX INSIGHTS ENDPOINTS ====================
+
+@api_router.get("/cohorts/{cohort_id}/coach-max-report")
+async def get_coach_max_report(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Get raw Coach Max chat data grouped by week for a cohort."""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+
+    # Get all submissions for this cohort
+    submissions = await db.submissions.find(
+        {"cohort_id": cohort_id},
+        {"_id": 0, "submission_id": 1, "material_id": 1, "student_id": 1}
+    ).to_list(1000)
+
+    if not submissions:
+        return {"weeks": [], "total_questions": 0}
+
+    sub_map = {s["submission_id"]: s for s in submissions}
+    sub_ids = list(sub_map.keys())
+
+    # Get all chats for these submissions
+    chats = await db.tutor_chats.find(
+        {"submission_id": {"$in": sub_ids}},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(5000)
+
+    if not chats:
+        return {"weeks": [], "total_questions": 0}
+
+    # Get material info for week numbers
+    material_ids = list(set(s.get("material_id") for s in submissions if s.get("material_id")))
+    materials = await db.materials.find(
+        {"material_id": {"$in": material_ids}},
+        {"_id": 0, "material_id": 1, "week_number": 1, "title": 1}
+    ).to_list(100)
+    mat_map = {m["material_id"]: m for m in materials}
+
+    # Get student names
+    student_ids = list(set(s.get("student_id") for s in submissions if s.get("student_id")))
+    students = await db.users.find(
+        {"user_id": {"$in": student_ids}},
+        {"_id": 0, "user_id": 1, "name": 1}
+    ).to_list(500)
+    stu_map = {s["user_id"]: s.get("name", "Unknown") for s in students}
+
+    # Group chats by week
+    weeks_data = {}
+    for chat in chats:
+        sub = sub_map.get(chat.get("submission_id"), {})
+        mat = mat_map.get(sub.get("material_id"), {})
+        week_num = mat.get("week_number", 0)
+        if week_num not in weeks_data:
+            weeks_data[week_num] = {
+                "week_number": week_num,
+                "material_title": mat.get("title", "Unknown"),
+                "questions": [],
+                "student_count": set()
+            }
+        weeks_data[week_num]["questions"].append({
+            "student_name": stu_map.get(chat.get("student_id"), "Unknown"),
+            "question": chat.get("message", ""),
+            "response": chat.get("response", ""),
+            "created_at": chat.get("created_at", "")
+        })
+        weeks_data[week_num]["student_count"].add(chat.get("student_id"))
+
+    # Convert sets to counts and sort
+    weeks = []
+    total_q = 0
+    for wk in sorted(weeks_data.keys()):
+        d = weeks_data[wk]
+        total_q += len(d["questions"])
+        weeks.append({
+            "week_number": d["week_number"],
+            "material_title": d["material_title"],
+            "question_count": len(d["questions"]),
+            "unique_students": len(d["student_count"]),
+            "questions": d["questions"]
+        })
+
+    return {"weeks": weeks, "total_questions": total_q}
+
+
+@api_router.post("/cohorts/{cohort_id}/coach-max-report/generate")
+async def generate_coach_max_insights(cohort_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Use AI to analyze Coach Max questions and generate insights per week."""
+    data = await request.json()
+    week_number = data.get("week_number")
+
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+
+    # Get submissions for this cohort (optionally filtered by week)
+    sub_query = {"cohort_id": cohort_id}
+    submissions = await db.submissions.find(sub_query, {"_id": 0, "submission_id": 1, "material_id": 1}).to_list(1000)
+    sub_map = {s["submission_id"]: s for s in submissions}
+
+    if week_number:
+        # Filter to specific week
+        material_ids = list(set(s.get("material_id") for s in submissions))
+        materials = await db.materials.find(
+            {"material_id": {"$in": material_ids}, "week_number": week_number},
+            {"_id": 0, "material_id": 1}
+        ).to_list(100)
+        valid_mat_ids = set(m["material_id"] for m in materials)
+        valid_sub_ids = [sid for sid, s in sub_map.items() if s.get("material_id") in valid_mat_ids]
+    else:
+        valid_sub_ids = list(sub_map.keys())
+
+    chats = await db.tutor_chats.find(
+        {"submission_id": {"$in": valid_sub_ids}},
+        {"_id": 0, "message": 1}
+    ).to_list(5000)
+
+    if not chats:
+        return {"summary": "No Coach Max conversations found for this period.", "themes": [], "recommendations": []}
+
+    questions_text = "\n".join([f"- {c['message']}" for c in chats])
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+
+    try:
+        import json as json_mod
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat_ai = LlmChat(
+            api_key=api_key,
+            session_id=f"insights_{cohort_id}_{week_number or 'all'}_{uuid.uuid4().hex[:6]}",
+            system_message="""You are an analytics assistant for an educational platform. 
+Analyze student questions asked to an AI tutor after receiving homework feedback.
+Your goal is to help instructors understand what students are struggling with and what they're curious about.
+
+You MUST respond in valid JSON with this exact structure:
+{
+  "summary": "A 2-3 sentence overview of what students are asking about",
+  "themes": [
+    {"theme": "Theme name", "count": <number of questions about this>, "examples": ["example question 1", "example question 2"]},
+  ],
+  "recommendations": ["Actionable recommendation 1 for the instructor", "Recommendation 2"]
+}
+
+Keep themes to 3-5 max. Be specific and actionable in recommendations."""
+        ).with_model("openai", "gpt-5.2")
+
+        week_label = f"Week {week_number}" if week_number else "all weeks"
+        prompt = f"""Analyze these {len(chats)} student questions from {week_label} in the "{cohort['name']}" cohort:
+
+{questions_text[:8000]}
+
+Identify the main themes, count how many questions relate to each theme, provide example questions, and give actionable recommendations for the instructor."""
+
+        result = await chat_ai.send_message(UserMessage(text=prompt))
+
+        # Parse JSON from response
+        # Strip markdown code fences if present
+        cleaned = result.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:].strip()
+
+        parsed = json_mod.loads(cleaned)
+        return parsed
+
+    except json_mod.JSONDecodeError:
+        return {"summary": result, "themes": [], "recommendations": []}
+    except Exception as e:
+        logger.error(f"Insights generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate insights: {str(e)}")
+
+
 # ==================== UTILITY ENDPOINTS ====================
 
 @api_router.get("/")

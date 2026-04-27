@@ -12,6 +12,7 @@ import axios from 'axios';
 import { MaterialsTab } from '../components/cohort/MaterialsTab';
 import { StudentsTab } from '../components/cohort/StudentsTab';
 import FeedbackTab from '../components/cohort/FeedbackTab';
+import { CoachMaxInsightsTab } from '../components/cohort/CoachMaxInsightsTab';
 import {
   AddStudentDialog, UploadMaterialDialog, SubmitHomeworkDialog,
   BulkImportDialog, InviteLinkDialog, AssignInstructorDialog, SubmitOnBehalfDialog
@@ -372,6 +373,11 @@ export default function CohortDetail() {
                 <MessageCircle className="w-4 h-4 mr-2" />Feedback ({cohortSubmissions.length})
               </TabsTrigger>
             )}
+            {isInstructor && (
+              <TabsTrigger value="insights" className="data-[state=active]:bg-white" data-testid="insights-tab-trigger">
+                <BookOpen className="w-4 h-4 mr-2" />Coach Max Insights
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="materials" className="space-y-8">
@@ -404,6 +410,12 @@ export default function CohortDetail() {
                 materials={materials}
                 onRefresh={fetchCohort}
               />
+            </TabsContent>
+          )}
+
+          {isInstructor && (
+            <TabsContent value="insights">
+              <CoachMaxInsightsTab cohortId={cohortId} />
             </TabsContent>
           )}
         </Tabs>

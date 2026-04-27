@@ -19,6 +19,7 @@ import AdminManagement from "./pages/AdminManagement";
 import InvitePage from "./pages/InvitePage";
 import DirectSubmit from "./pages/DirectSubmit";
 import CoachMaxPage from "./pages/CoachMaxPage";
+import CoachMaxInsightsPage from "./pages/CoachMaxInsightsPage";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -149,6 +150,11 @@ const AppRouter = () => {
       <Route path="/coach-max/:submissionId" element={
         <ProtectedRoute>
           <CoachMaxPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/coach-max-insights/:cohortId" element={
+        <ProtectedRoute>
+          <CoachMaxInsightsPage />
         </ProtectedRoute>
       } />
       {/* Catch-all redirect */}

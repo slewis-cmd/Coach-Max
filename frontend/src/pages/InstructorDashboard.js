@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { 
   BookOpen, Users, Plus, LogOut, ChevronRight, Upload,
-  AlertCircle, FileEdit, Mail, TrendingUp, Download, Bell
+  AlertCircle, FileEdit, Mail, TrendingUp, Download, Bell, MessageCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -276,6 +276,13 @@ export default function InstructorDashboard() {
                         </span>
                       )}
                     </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/coach-max-insights/${cohort.cohort_id}`); }}
+                      className="mt-3 text-xs text-[#22438E] hover:underline flex items-center gap-1"
+                      data-testid={`insights-link-${cohort.cohort_id}`}
+                    >
+                      <MessageCircle className="w-3 h-3" /> Coach Max Insights
+                    </button>
                   </CardContent>
                 </Card>
               ))}
