@@ -189,6 +189,78 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
     return submission_text, context_text
 
 
+async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000) -> str:
+    """Build cumulative context from all prior weeks: materials + student submissions + feedback."""
+    if not current_week or current_week <= 1:
+        return ""
+
+    parts = []
+    total_chars = 0
+
+    # Get all prior materials (weeks 1 to current_week-1)
+    prior_materials = await db.materials.find({
+        "cohort_ids": cohort_id,
+        "week_number": {"$lt": current_week},
+        "material_type": {"$in": ["workbook", "case_study"]}
+    }, {"_id": 0}).sort("week_number", 1).to_list(100)
+
+    # Also check single cohort_id field for backwards compat
+    if not prior_materials:
+        prior_materials = await db.materials.find({
+            "cohort_id": cohort_id,
+            "week_number": {"$lt": current_week},
+            "material_type": {"$in": ["workbook", "case_study"]}
+        }, {"_id": 0}).sort("week_number", 1).to_list(100)
+
+    # Get all prior homework materials to find submissions
+    prior_hw = await db.materials.find({
+        "$or": [{"cohort_ids": cohort_id}, {"cohort_id": cohort_id}],
+        "week_number": {"$lt": current_week},
+        "material_type": "homework"
+    }, {"_id": 0, "material_id": 1, "title": 1, "week_number": 1}).sort("week_number", 1).to_list(50)
+
+    hw_ids = [m["material_id"] for m in prior_hw]
+    hw_map = {m["material_id"]: m for m in prior_hw}
+
+    # Get student's prior submissions + feedback
+    prior_submissions = await db.submissions.find({
+        "student_id": student_id,
+        "material_id": {"$in": hw_ids}
+    }, {"_id": 0, "material_id": 1, "ai_feedback": 1, "instructor_feedback": 1}).to_list(50)
+
+    sub_by_mat = {s["material_id"]: s for s in prior_submissions}
+
+    # Build summary per prior week (most recent weeks get more detail)
+    weeks_seen = set()
+    for mat in prior_materials:
+        wk = mat.get("week_number")
+        if wk in weeks_seen:
+            continue
+        weeks_seen.add(wk)
+
+        # Summarize material topics (brief excerpt)
+        mat_text = await read_file_text(mat.get("file_path", ""), mat.get("file_name", ""))
+        excerpt = mat_text[:800] if mat_text else ""
+
+        section = f"\n--- Week {wk}: {mat.get('title', '')} ---\nTopics: {excerpt}"
+
+        # Add student's feedback from that week if available
+        hw_for_week = [h for h in prior_hw if h.get("week_number") == wk]
+        for hw in hw_for_week:
+            sub = sub_by_mat.get(hw["material_id"])
+            if sub:
+                fb = sub.get("instructor_feedback") or sub.get("ai_feedback") or ""
+                if fb:
+                    section += f"\nFeedback received: {fb[:600]}"
+
+        if total_chars + len(section) > max_chars:
+            break
+        parts.append(section)
+        total_chars += len(section)
+
+    return "\n".join(parts) if parts else ""
+
+
 def get_language_instruction(lang: str) -> str:
     """Return AI prompt instruction for the given language code."""
     if lang == "es":
@@ -1814,6 +1886,12 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
     # Build context using helper
     submission_text, context_text = await build_coach_max_context(submission, material)
     
+    # Build cumulative context from prior weeks
+    current_week = material.get("week_number", 1) if material else 1
+    cumulative_ctx = await build_cumulative_context(
+        user["user_id"], submission.get("cohort_id", ""), current_week
+    )
+    
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
@@ -1831,12 +1909,13 @@ Your personality:
 - Use the student's name when possible
 - Answer questions clearly and specifically
 - Reference the course materials and their submission when relevant
+- When relevant, connect current topics back to concepts from earlier weeks
 - Help them understand how to improve
 - Keep responses concise (2-4 paragraphs max)
 - Never give grades or scores
 
-ASSIGNMENT: {material['title'] if material else 'Unknown'}
-WEEK: {material.get('week_number', '?') if material else '?'}
+CURRENT ASSIGNMENT: {material['title'] if material else 'Unknown'}
+CURRENT WEEK: {material.get('week_number', '?') if material else '?'}
 
 THE STUDENT'S SUBMISSION:
 {submission_text[:5000] if submission_text else 'Not available'}
@@ -1844,8 +1923,11 @@ THE STUDENT'S SUBMISSION:
 FEEDBACK THE STUDENT RECEIVED:
 {feedback}
 
-COURSE MATERIALS:
-{context_text[:5000] if context_text else 'Not available'}{get_language_instruction(lang)}"""
+CURRENT WEEK MATERIALS:
+{context_text[:5000] if context_text else 'Not available'}
+
+PRIOR WEEKS CONTEXT (materials covered + student's previous feedback):
+{cumulative_ctx[:5000] if cumulative_ctx else 'This is the first week — no prior context.'}{get_language_instruction(lang)}"""
         ).with_model("openai", "gpt-5.2")
         
         response = await chat.send_message(UserMessage(text=message))
@@ -2153,6 +2235,11 @@ async def submit_on_behalf(
             auto_lang = stu.get("language_preference", "en") if stu else "en"
             auto_lang_instr = get_language_instruction(auto_lang)
             
+            # Build cumulative context from prior weeks
+            auto_cumulative = await build_cumulative_context(
+                student_id, submission_cohort_id, material.get("week_number", 1)
+            )
+            
             chat = LlmChat(
                 api_key=api_key,
                 session_id=f"review_{submission_id}",
@@ -2162,6 +2249,8 @@ Your role is to provide qualitative, structured feedback on homework submissions
 Guidelines:
 - Be warm, supportive, and encouraging
 - Use specific examples from their work to support each point
+- When relevant, reference concepts from earlier weeks to show how the student is building on prior learning
+- Note any improvements or growth patterns compared to prior feedback
 - Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
@@ -2188,13 +2277,16 @@ A brief closing sentence with encouragement and motivation to keep going.{auto_l
 ASSIGNMENT: {material['title']}
 {f"DESCRIPTION: {material['description']}" if material.get('description') else ""}
 
-COURSE CONTEXT (Week {material.get('week_number', '?')} materials):
-{context_text[:8000] if context_text else "No additional context available."}
+CURRENT WEEK CONTEXT (Week {material.get('week_number', '?')} materials):
+{context_text[:6000] if context_text else "No additional context available."}
+
+PRIOR WEEKS CONTEXT (earlier course materials + student's previous feedback):
+{auto_cumulative[:5000] if auto_cumulative else "This is the student's first submission — no prior context."}
 
 STUDENT SUBMISSION:
 {submission_text[:10000]}
 
-Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission."""
+Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""
 
             feedback = await chat.send_message(UserMessage(text=prompt))
             
@@ -2677,6 +2769,11 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     lang = student.get("language_preference", "en") if student else "en"
     lang_instr = get_language_instruction(lang)
     
+    # Build cumulative context from prior weeks
+    cumulative_ctx = await build_cumulative_context(
+        submission["student_id"], submission.get("cohort_id", ""), material.get("week_number", 1)
+    )
+    
     feedback = ""
     try:
         chat = LlmChat(
@@ -2688,6 +2785,8 @@ Your role is to provide qualitative, structured feedback on homework submissions
 Guidelines:
 - Be warm, supportive, and encouraging
 - Use specific examples from their work to support each point
+- When relevant, reference concepts from earlier weeks to show how the student is building on prior learning
+- Note any improvements or growth patterns you see compared to prior feedback
 - Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
@@ -2714,13 +2813,16 @@ A brief closing sentence with encouragement and motivation to keep going.{lang_i
 ASSIGNMENT: {material['title']}
 {f"DESCRIPTION: {material['description']}" if material.get('description') else ""}
 
-COURSE CONTEXT (Week {material['week_number']} materials):
-{context_text[:8000] if context_text else "No additional context available."}
+CURRENT WEEK CONTEXT (Week {material['week_number']} materials):
+{context_text[:6000] if context_text else "No additional context available."}
+
+PRIOR WEEKS CONTEXT (earlier course materials + student's previous feedback):
+{cumulative_ctx[:5000] if cumulative_ctx else "This is the student's first submission — no prior context."}
 
 STUDENT SUBMISSION:
 {submission_text[:10000]}
 
-Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission."""
+Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""
 
         message = UserMessage(text=prompt)
         feedback = await chat.send_message(message)

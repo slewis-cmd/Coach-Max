@@ -159,6 +159,13 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Dashboard analytics datetime parsing bug fixed (handled both string and datetime objects)
 - [x] Tested: 6/6 backend tests passed, frontend code + UI verified
 
+### Cumulative Training Context (April 9, 2026)
+- [x] build_cumulative_context() helper — fetches prior weeks' materials + student's submissions/feedback
+- [x] Coach Max chat now has full prior-weeks context in system prompt
+- [x] AI feedback review (manual + auto) references earlier weeks and student growth
+- [x] Prompts updated to instruct AI to connect current topics to prior learning
+- [x] Tested: AI review references Week 1 in Week 2 feedback, Coach Max answers growth questions
+
 ### Weekly Coach Max Digest Email (April 9, 2026)
 - [x] Automated weekly email to info@theboostpad.org every Monday 9 AM UTC
 - [x] Includes AI-generated summary of student questions per cohort
