@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
@@ -47,19 +47,7 @@ export default function CoachMaxPage() {
     }
   };
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      fetchSubmission();
-      loadChatHistory();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, submissionId]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const fetchSubmission = async () => {
+  const fetchSubmission = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/submissions/${submissionId}`);
       setSubmission(res.data);
@@ -69,9 +57,9 @@ export default function CoachMaxPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [submissionId, navigate]);
 
-  const loadChatHistory = async () => {
+  const loadChatHistory = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/chat/history/${submissionId}`);
       const history = res.data.flatMap(c => [
@@ -80,11 +68,23 @@ export default function CoachMaxPage() {
       ]);
       setMessages(history);
     } catch (_e) {
-      console.log('No chat history found, starting fresh');
+      // First load — no history yet
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [submissionId]);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      fetchSubmission();
+      loadChatHistory();
+    }
+  }, [authLoading, user, fetchSubmission, loadChatHistory]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;

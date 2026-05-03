@@ -27,6 +27,31 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+function ReviewStatusBadge({ isSent, isDraft }) {
+  if (isSent) {
+    return (
+      <>
+        <Mail className="w-4 h-4" />
+        Sent to Student
+      </>
+    );
+  }
+  if (isDraft) {
+    return (
+      <>
+        <FileEdit className="w-4 h-4" />
+        Draft - Review Required
+      </>
+    );
+  }
+  return (
+    <>
+      <Clock className="w-4 h-4" />
+      Pending Review
+    </>
+  );
+}
+
 export default function SubmissionDetail() {
   const { submissionId } = useParams();
   const navigate = useNavigate();
@@ -292,22 +317,7 @@ export default function SubmissionDetail() {
                   ? 'bg-[#E1F0FF] text-[#22438E]' 
                   : 'bg-[#FEF9C3] text-[#1A75BA]'
               }`}>
-                {isSent ? (
-                  <>
-                    <Mail className="w-4 h-4" />
-                    Sent to Student
-                  </>
-                ) : isDraft ? (
-                  <>
-                    <FileEdit className="w-4 h-4" />
-                    Draft - Review Required
-                  </>
-                ) : (
-                  <>
-                    <Clock className="w-4 h-4" />
-                    Pending Review
-                  </>
-                )}
+                <ReviewStatusBadge isSent={isSent} isDraft={isDraft} />
               </div>
             </div>
             

@@ -55,6 +55,12 @@ function StatusBadge({ status }) {
   );
 }
 
+function getWeekNumberClass(status) {
+  if (status === 'feedback_provided') return 'bg-[#22438E] text-white';
+  if (status === 'no_homework') return 'bg-[#B8D4E8] text-[#666666]';
+  return 'bg-[#000000] text-white';
+}
+
 export default function StudentDashboard() {
   const { user, logout, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -279,13 +285,7 @@ export default function StudentDashboard() {
                       onClick={hasFeedback ? () => toggleFeedback(weekKey) : undefined}
                     >
                       {/* Week Number */}
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0 ${
-                        week.status === 'feedback_provided'
-                          ? 'bg-[#22438E] text-white'
-                          : week.status === 'no_homework'
-                          ? 'bg-[#B8D4E8] text-[#666666]'
-                          : 'bg-[#000000] text-white'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0 ${getWeekNumberClass(week.status)}`}>
                         {week.week_number}
                       </div>
 

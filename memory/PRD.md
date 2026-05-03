@@ -202,6 +202,11 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Welcome messages, placeholders, and UI text switch dynamically
 - [x] Tested: 7/7 backend, 100% frontend via Playwright (iteration_18)
 
+### Code Quality Pass 3 (February 2026)
+- [x] Extracted nested ternary in StudentDashboard.js into `getWeekNumberClass(status)` helper
+- [x] Extracted nested ternary in SubmissionDetail.js into `<ReviewStatusBadge>` component
+- [x] Lint clean on both files
+
 ### Test Data Added (April 9, 2026)
 - [x] Expanded system from 12 weeks to 14 weeks (backend validation + student dashboard loop)
 - [x] Added "Test 1" (Week 13) and "Test 2" (Week 14) to Material Library
