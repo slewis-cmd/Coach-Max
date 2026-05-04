@@ -20,7 +20,9 @@ import {
   FileDown,
   Trash2,
   Volume2,
-  Download
+  Download,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -67,6 +69,9 @@ export default function SubmissionDetail() {
   const [deleting, setDeleting] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewText, setPreviewText] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
   const audioRef = React.useRef(null);
 
   useEffect(() => {
@@ -208,6 +213,29 @@ export default function SubmissionDetail() {
     }
   };
 
+  const togglePreview = async () => {
+    if (previewOpen) {
+      setPreviewOpen(false);
+      return;
+    }
+    const ext = (submission?.file_name || '').toLowerCase().split('.').pop();
+    if (ext === 'pdf') {
+      setPreviewOpen(true);
+      return;
+    }
+    // DOCX: fetch extracted text
+    setPreviewLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/api/submissions/${submissionId}/preview-text`);
+      setPreviewText(res.data.text || '');
+      setPreviewOpen(true);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Could not load preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
@@ -330,6 +358,31 @@ export default function SubmissionDetail() {
                     Resubmission #{submission.resubmission_count}
                   </span>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={togglePreview}
+                  disabled={previewLoading}
+                  className="h-7 px-2 ml-1 text-[#22438E] hover:bg-[#E1F0FF]"
+                  data-testid="toggle-preview-btn"
+                >
+                  {previewLoading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
+                      Loading
+                    </>
+                  ) : previewOpen ? (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5 mr-1" />
+                      Hide preview
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3.5 h-3.5 mr-1" />
+                      View preview
+                    </>
+                  )}
+                </Button>
               </div>
               {isInstructor && isSent && !submission.resubmission_allowed && (
                 <Button
@@ -362,6 +415,35 @@ export default function SubmissionDetail() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Inline File Preview */}
+        {previewOpen && submission && (() => {
+          const ext = (submission.file_name || '').toLowerCase().split('.').pop();
+          const token = localStorage.getItem('thinkific_session_token');
+          if (ext === 'pdf') {
+            const src = `${API_URL}/api/submissions/${submissionId}/download?inline=1&token=${encodeURIComponent(token || '')}`;
+            return (
+              <Card className="mb-6 bg-white border-[#B8D4E8]" data-testid="preview-pdf">
+                <CardContent className="p-0">
+                  <iframe
+                    title="Submission preview"
+                    src={src}
+                    className="w-full h-[720px] rounded-md"
+                  />
+                </CardContent>
+              </Card>
+            );
+          }
+          return (
+            <Card className="mb-6 bg-white border-[#B8D4E8]" data-testid="preview-docx">
+              <CardContent className="p-6">
+                <pre className="whitespace-pre-wrap text-sm text-[#1A1A1A] font-sans leading-relaxed max-h-[720px] overflow-auto">
+                  {previewText || 'No extractable text in this file.'}
+                </pre>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* AI Feedback / Editor */}
         {currentFeedback || isDraft ? (

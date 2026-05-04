@@ -2642,8 +2642,8 @@ async def get_submission(submission_id: str, user: dict = Depends(get_current_us
     return submission
 
 @api_router.get("/submissions/{submission_id}/download")
-async def download_submission(submission_id: str, user: dict = Depends(get_current_user)):
-    """Download a student's submitted homework file"""
+async def download_submission(submission_id: str, inline: int = 0, user: dict = Depends(get_current_user)):
+    """Download (or inline-preview) a student's submitted homework file"""
     submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
@@ -2660,11 +2660,34 @@ async def download_submission(submission_id: str, user: dict = Depends(get_curre
     # super_admin can download any submission
     
     file_bytes = await read_bytes_from_doc(submission)
+    filename = submission.get("file_name", "submission")
+    ext = filename.lower().rsplit(".", 1)[-1]
+    media_type = "application/pdf" if ext == "pdf" else "application/octet-stream"
+    disposition = "inline" if inline else "attachment"
     return StreamingResponse(
         io.BytesIO(file_bytes),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{submission.get("file_name", "submission")}"'}
+        media_type=media_type,
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'}
     )
+
+
+@api_router.get("/submissions/{submission_id}/preview-text")
+async def preview_submission_text(submission_id: str, user: dict = Depends(get_current_user)):
+    """Return the extracted text content of a submission (for DOCX inline preview)."""
+    submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    
+    if user["role"] == "student" and submission["student_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if user["role"] == "instructor":
+        cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+        if not cohort or not is_cohort_manager(user, cohort):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    file_bytes = await read_bytes_from_doc(submission)
+    text = extract_text_from_file(file_bytes, submission.get("file_name", ""))
+    return {"text": text, "file_name": submission.get("file_name", "")}
 
 
 @api_router.delete("/submissions/{submission_id}")

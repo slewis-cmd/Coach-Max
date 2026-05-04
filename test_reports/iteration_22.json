@@ -1,0 +1,48 @@
+{
+  "summary": "Verified inline preview feature end-to-end on the preview URL. 10/10 new backend tests pass, plus full 8/8 GridFS regression suite still green. ?inline=1 on /api/submissions/{id}/download returns Content-Disposition: inline and application/pdf media type for PDFs (attachment by default for back-compat). New /preview-text endpoint returns {text, file_name} with extracted body text for DOCX and PDF. Access control matches download endpoint (student -> 403 on other student's submission, unrelated instructor -> 403, owning student -> 200). Legacy file_path-only submissions return HTTP 410 with a clean 'no longer available' message. GET /api/submissions/{id} still returns material + student info.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "GET /api/submissions/{id}/download (no param) -> Content-Disposition: attachment (back-compat preserved)",
+    "GET /api/submissions/{id}/download?inline=1 on a PDF -> Content-Disposition: inline + Content-Type: application/pdf (iframes will render)",
+    "GET /api/submissions/{id}/download?inline=1 on a DOCX -> Content-Disposition: inline + Content-Type: application/octet-stream (expected)",
+    "GET /api/submissions/{id}/preview-text on DOCX -> {text, file_name}; extracted text contains body paragraph",
+    "GET /api/submissions/{id}/preview-text on PDF -> {text, file_name}; text field is a string, file_name ends in .pdf",
+    "ACL: student_b requesting student_a's /preview-text -> HTTP 403",
+    "ACL: student_a requesting own /preview-text -> HTTP 200",
+    "ACL: instructor not assigned to cohort requesting /preview-text -> HTTP 403",
+    "Legacy file_path-only submission -> /preview-text returns HTTP 410 with clean message (no 500, no scary 404)",
+    "Regression: GET /api/submissions/{id} still returns submission doc with material + student blocks"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_submission_preview.py",
+    "/app/test_reports/pytest/test_submission_preview.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:2644 download_submission correctly maps inline=0/1 -> attachment/inline Content-Disposition and picks application/pdf only for .pdf filenames. Good.",
+    "server.py:2674 preview_submission_text reuses the exact same ACL block as download_submission (student-self-check + is_cohort_manager for instructors). Access control is consistent.",
+    "server.py:2688 read_bytes_from_doc + extract_text_from_file is the same path already used by AI review, so DOCX/PDF extraction is already battle-tested.",
+    "Minor DRY suggestion (not blocking): the 6-line ACL block is duplicated in download_submission and preview_submission_text. Consider extracting a `_assert_can_view_submission(user, submission)` helper to keep future endpoints consistent.",
+    "Minor enhancement (not blocking): for non-PDF inline previews, the backend still returns application/octet-stream even when inline=1. Iframes won't render DOCX anyway (that's what /preview-text is for), so this is fine — but if the frontend ever wants inline images, the media-type branch will need broadening."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_submission_preview.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 new tests + 8/8 GridFS regression)",
+    "frontend": "not tested (backend-only scope per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org used via session token seeded directly into Mongo (user_sessions). /app/memory/test_credentials.md is MISSING in this container — recommend creating it to match the standard workflow, though the email/password is provided in the review_request and confirmed seeded in users collection.",
+  "seed_data_creation": "Per-run: 1 TEST_Preview cohort, 2 TEST_prev_* student users (student_a, student_b), 1 TEST_prev_inst_* outsider instructor, 1 TEST Preview library homework material (week 1, released), 1 DOCX submission (student_a), 1 PDF submission (student_b), 1 legacy file_path-only submission (deleted inline). All cleaned up via fixture teardown — verified 0 TEST_* docs remain in cohorts/users/materials after the run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Inline preview + /preview-text verified. Run with env loaded from /app/frontend/.env (REACT_APP_BACKEND_URL) + /app/backend/.env (MONGO_URL, DB_NAME). Test file /app/backend/tests/test_submission_preview.py is a reusable regression suite (~4s). It uses fpdf2 + python-docx (already in backend requirements.txt). One small dev note: fpdf2.output(dest='S') is deprecated in v2.2+ — harmless warning only, test file can be updated later to use pdf.output() returning bytearray directly."
+}
