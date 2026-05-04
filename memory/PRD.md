@@ -214,6 +214,12 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Inline Submission Preview (February 2026)
+- [x] `GET /api/submissions/{id}/download?inline=1` — streams PDF inline with `application/pdf` media type (browser renders in iframe)
+- [x] `GET /api/submissions/{id}/preview-text` — returns extracted text for DOCX (or PDF) with full ACL
+- [x] Frontend "View preview" toggle on SubmissionDetail page (PDF iframe, DOCX as pre-formatted text)
+- [x] 10/10 new + 8/8 regression tests pass (iteration_22.json)
+
 ### Test Data Added (April 9, 2026)
 - [x] Expanded system from 12 weeks to 14 weeks (backend validation + student dashboard loop)
 - [x] Added "Test 1" (Week 13) and "Test 2" (Week 14) to Material Library
