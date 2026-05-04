@@ -1,0 +1,52 @@
+{
+  "summary": "GridFS file-storage migration verified end-to-end. 8/8 backend tests pass against the preview URL. New uploads (library materials + student submissions) are persisted to MongoDB GridFS, downloads stream the exact bytes back, instructor AI review reads from GridFS successfully, deleting a submission cleans up its GridFS entry (no orphans), and legacy disk-only records correctly return HTTP 410 with the fix message.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/library/materials stores file in GridFS (gridfs_id set, file_path empty, fs.files entry matches uploaded length)",
+    "GET /api/materials/{id}/download streams GridFS bytes == upload bytes",
+    "POST /api/materials/{id}/submit (student) writes submission to GridFS (gridfs_id set, file_path empty, fs.files entry length matches)",
+    "GET /api/submissions/{id}/download (instructor/admin) returns exact uploaded bytes from GridFS",
+    "GET /api/submissions/{id} regression: returns submission with material + student info",
+    "POST /api/submissions/{id}/review reads file from GridFS and returns 200 with AI feedback (no 404/410)",
+    "DELETE /api/submissions/{id} removes submission and its GridFS file (no orphan in fs.files)",
+    "Legacy submission (file_path only, gridfs_id=null, missing disk file) -> GET /download returns HTTP 410 with clear 'no longer available' message"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_gridfs_storage.py",
+    "/app/test_reports/pytest/test_gridfs_storage.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:106-128 save_bytes_to_gridfs + read_bytes_from_doc correctly fall back to legacy file_path and raise a clean 410 when the disk file is missing — exactly the fix the user bug required.",
+    "server.py:131-144 delete_file_from_doc is silent on failure (good) and covers both GridFS + disk, ensuring no orphans are left behind.",
+    "server.py:2027-2076 submission write path: old doc is deleted_from_doc BEFORE the new GridFS upload, preventing orphaned GridFS files on resubmission.",
+    "Minor: there are 4 pre-existing submissions in the DB with file_path only and no gridfs_id — those are legacy records that will return 410 (expected per handoff note). If the user wants a one-time migration of existing disk files into GridFS, that is out of scope of this fix but worth documenting.",
+    "Minor: server.py:41-42 UPLOAD_DIR is still created on startup even though nothing writes there anymore; can be removed in a follow-up cleanup but harmless."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_gridfs_storage.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 tests passed)",
+    "frontend": "not tested (backend-only scope)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org is already seeded in users collection. Tests create short-lived session tokens and a disposable student directly in Mongo (user_sessions + users) and clean up after themselves.",
+  "seed_data_creation": "Per-run: one TEST cohort, one TEST_gridfs student user, one TEST library homework material (week 1, released), a test submission for each subtest. All seed data cleaned up at end of module via fixture teardown. Verified fs.files count returns to 0 after run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "GridFS migration verified. Test file /app/backend/tests/test_gridfs_storage.py is a reusable regression suite and takes ~14s. It calls the real AI review endpoint (GPT-5.2 via Emergent LLM key) — budget ~3-10s for that one test. Existing 4 submissions in DB with legacy file_path will always return 410 on download/review — that is expected behavior; do not flag as a bug.",
+  "rca_of_the_issue": {
+    "original_bug": "Instructor review showed 'Submission file not found on server. Please ask the student to resubmit.' because uploads were on ephemeral /app/backend/uploads/ and lost on Kubernetes redeploy.",
+    "fix_verified": "save_bytes_to_gridfs/read_bytes_from_doc/delete_file_from_doc route all new writes through MongoDB GridFS (AsyncIOMotorGridFSBucket). All 4 write sites (library upload, library update, material upload, student submission, submit-on-behalf) store gridfs_id; all 3 read sites (material download, submission download, AI review + Coach Max context) read via read_bytes_from_doc which prefers gridfs_id and only falls back to file_path for legacy records.",
+    "persistence_check": "Verified fs.files entry length matches uploaded bytes and download streams them back byte-for-byte. Deletion removes the GridFS entry (verified fs.files count returns to 0).",
+    "legacy_behavior": "Legacy file_path-only records correctly surface HTTP 410 with clean instructor-facing message — no more scary 404 for current uploads."
+  }
+}

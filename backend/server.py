@@ -1,8 +1,9 @@
 from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Depends, Response, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
+from bson import ObjectId
 import os
 import logging
 from pathlib import Path
@@ -26,6 +27,9 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+# GridFS bucket for persistent file storage (survives pod redeploys)
+fs_bucket = AsyncIOMotorGridFSBucket(db)
 
 # Create the main app
 app = FastAPI()
@@ -99,28 +103,74 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
 
 # ==================== TEXT EXTRACTION HELPERS ====================
 
-async def read_file_text(file_path: str, file_name: str) -> str:
-    """Read file from disk and extract text"""
+async def save_bytes_to_gridfs(content: bytes, filename: str) -> str:
+    """Persist file bytes to MongoDB GridFS. Returns the gridfs_id as a string."""
+    gridfs_id = await fs_bucket.upload_from_stream(filename, content)
+    return str(gridfs_id)
+
+
+async def read_bytes_from_doc(doc: dict) -> bytes:
+    """Read file bytes from a doc. Prefers gridfs_id (persistent), falls back to disk file_path (legacy)."""
+    gridfs_id = doc.get("gridfs_id")
+    if gridfs_id:
+        grid_out = await fs_bucket.open_download_stream(ObjectId(gridfs_id))
+        return await grid_out.read()
+    fp = doc.get("file_path")
+    if fp:
+        try:
+            async with aiofiles.open(fp, "rb") as f:
+                return await f.read()
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=410,
+                detail="This file was uploaded before persistent storage was enabled and is no longer available. Please ask the student to resubmit."
+            )
+    raise HTTPException(status_code=404, detail="File reference missing")
+
+
+async def delete_file_from_doc(doc: dict) -> None:
+    """Delete a file referenced by a doc (GridFS or legacy disk). Silent on failure."""
+    gridfs_id = doc.get("gridfs_id")
+    if gridfs_id:
+        try:
+            await fs_bucket.delete(ObjectId(gridfs_id))
+        except Exception:
+            pass
+    fp = doc.get("file_path")
+    if fp:
+        try:
+            os.remove(fp)
+        except Exception:
+            pass
+
+
+async def read_file_text(doc_or_path, file_name: str = None) -> str:
+    """Read file and extract text. Accepts either a doc dict (preferred) or a legacy (file_path, file_name) pair."""
     try:
-        async with aiofiles.open(file_path, "rb") as f:
+        if isinstance(doc_or_path, dict):
+            doc = doc_or_path
+            file_bytes = await read_bytes_from_doc(doc)
+            return extract_text_from_file(file_bytes, doc.get("file_name", ""))
+        # Legacy signature: (file_path, file_name)
+        async with aiofiles.open(doc_or_path, "rb") as f:
             file_bytes = await f.read()
-        return extract_text_from_file(file_bytes, file_name)
+        return extract_text_from_file(file_bytes, file_name or "")
+    except HTTPException:
+        return ""
     except Exception as e:
-        logger.error(f"Failed to read file {file_path}: {e}")
+        logger.error(f"Failed to read file: {e}")
         return ""
 
 
 async def save_uploaded_file(file: UploadFile, prefix: str) -> tuple:
-    """Save an uploaded file and return (file_path, filename)"""
+    """Save uploaded file to GridFS. Returns (gridfs_id, filename)."""
     filename = file.filename or "unnamed"
     ext = filename.lower().split(".")[-1]
     if ext not in ["pdf", "docx"]:
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
-    file_path = UPLOAD_DIR / f"{prefix}_{filename}"
-    async with aiofiles.open(file_path, "wb") as f:
-        content = await file.read()
-        await f.write(content)
-    return str(file_path), filename
+    content = await file.read()
+    gridfs_id = await save_bytes_to_gridfs(content, f"{prefix}_{filename}")
+    return gridfs_id, filename
 
 
 async def resolve_submission_cohort(material: dict, user: dict, cohort_id: str = None) -> str:
@@ -171,7 +221,7 @@ def build_submission_email_html(user_name: str, material: dict, cohort_name: str
 
 async def build_coach_max_context(submission: dict, material: dict) -> tuple:
     """Build context strings for Coach Max AI tutor. Returns (submission_text, context_text)."""
-    submission_text = await read_file_text(submission["file_path"], submission["file_name"])
+    submission_text = await read_file_text(submission)
     
     context_text = ""
     if material:
@@ -182,7 +232,7 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
         }, {"_id": 0}).to_list(10)
         
         for mat in context_materials:
-            mat_text = await read_file_text(mat["file_path"], mat["file_name"])
+            mat_text = await read_file_text(mat)
             if mat_text:
                 context_text += f"\n--- {mat['title']} ---\n{mat_text[:3000]}"
     
@@ -239,7 +289,7 @@ async def build_cumulative_context(student_id: str, cohort_id: str, current_week
         weeks_seen.add(wk)
 
         # Summarize material topics (brief excerpt)
-        mat_text = await read_file_text(mat.get("file_path", ""), mat.get("file_name", ""))
+        mat_text = await read_file_text(mat)
         excerpt = mat_text[:800] if mat_text else ""
 
         section = f"\n--- Week {wk}: {mat.get('title', '')} ---\nTopics: {excerpt}"
@@ -347,7 +397,8 @@ class Material(BaseModel):
     material_type: str  # "workbook", "case_study", "homework"
     title: str
     description: Optional[str] = None
-    file_path: str
+    file_path: Optional[str] = ""
+    gridfs_id: Optional[str] = None
     file_name: str
     uploaded_by: str
     due_date: Optional[str] = None  # ISO date string for homework assignments
@@ -358,7 +409,8 @@ class Submission(BaseModel):
     material_id: str
     cohort_id: str
     student_id: str
-    file_path: str
+    file_path: Optional[str] = ""
+    gridfs_id: Optional[str] = None
     file_name: str
     status: str = "pending"  # "pending", "draft", "reviewed", "sent"
     ai_feedback: Optional[str] = None
@@ -727,17 +779,13 @@ async def get_admin_stats(user: dict = Depends(require_super_admin)):
 @api_router.delete("/admin/clear-submissions")
 async def clear_all_submissions(user: dict = Depends(require_super_admin)):
     """Clear all homework submissions, files, and tutor chats (super admin only)"""
-    import shutil
+    # Get all submissions so we can clean up attached files (GridFS + legacy disk)
+    submissions = await db.submissions.find({}, {"_id": 0, "file_path": 1, "gridfs_id": 1}).to_list(1000)
     
-    # Get all submission file paths before deleting
-    submissions = await db.submissions.find({}, {"_id": 0, "file_path": 1}).to_list(1000)
-    
-    # Delete files from disk
     deleted_files = 0
     for sub in submissions:
-        fp = sub.get("file_path", "")
-        if fp and os.path.exists(fp):
-            os.remove(fp)
+        if sub.get("gridfs_id") or sub.get("file_path"):
+            await delete_file_from_doc(sub)
             deleted_files += 1
     
     # Delete from database
@@ -1374,13 +1422,10 @@ async def upload_material(
     if ext not in ["pdf", "docx"]:
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
     
-    # Save file
+    # Save file to GridFS (persistent across redeploys)
     material_id = f"mat_{uuid.uuid4().hex[:12]}"
-    file_path = UPLOAD_DIR / f"{material_id}_{filename}"
-    
-    async with aiofiles.open(file_path, "wb") as f:
-        content = await file.read()
-        await f.write(content)
+    content = await file.read()
+    gridfs_id = await save_bytes_to_gridfs(content, f"{material_id}_{filename}")
     
     # Create material record
     material = Material(
@@ -1390,7 +1435,8 @@ async def upload_material(
         material_type=material_type,
         title=title,
         description=description,
-        file_path=str(file_path),
+        file_path="",
+        gridfs_id=gridfs_id,
         file_name=filename,
         uploaded_by=user["user_id"],
         due_date=due_date if due_date else None
@@ -1503,11 +1549,8 @@ async def delete_material(material_id: str, user: dict = Depends(require_instruc
     if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Delete file
-    try:
-        os.remove(material["file_path"])
-    except Exception:
-        pass
+    # Delete file (GridFS + legacy disk)
+    await delete_file_from_doc(material)
     
     await db.materials.delete_one({"material_id": material_id})
     return {"message": "Material deleted"}
@@ -1563,11 +1606,8 @@ async def upload_library_material(
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
     
     material_id = f"lib_{uuid.uuid4().hex[:12]}"
-    file_path = UPLOAD_DIR / f"{material_id}_{filename}"
-    
-    async with aiofiles.open(file_path, "wb") as f:
-        content = await file.read()
-        await f.write(content)
+    content = await file.read()
+    gridfs_id = await save_bytes_to_gridfs(content, f"{material_id}_{filename}")
     
     doc = {
         "material_id": material_id,
@@ -1578,7 +1618,8 @@ async def upload_library_material(
         "material_type": material_type,
         "title": title,
         "description": description,
-        "file_path": str(file_path),
+        "file_path": "",
+        "gridfs_id": gridfs_id,
         "file_name": filename,
         "uploaded_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -1615,17 +1656,13 @@ async def update_library_material(
         if ext not in ["pdf", "docx"]:
             raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
         
-        # Remove old file
-        try:
-            os.remove(material["file_path"])
-        except Exception:
-            pass
+        # Remove old file (GridFS + legacy disk)
+        await delete_file_from_doc(material)
         
-        file_path = UPLOAD_DIR / f"{material_id}_{filename}"
-        async with aiofiles.open(file_path, "wb") as f:
-            content = await file.read()
-            await f.write(content)
-        update_data["file_path"] = str(file_path)
+        content = await file.read()
+        gridfs_id = await save_bytes_to_gridfs(content, f"{material_id}_{filename}")
+        update_data["gridfs_id"] = gridfs_id
+        update_data["file_path"] = ""
         update_data["file_name"] = filename
     
     if update_data:
@@ -1640,10 +1677,7 @@ async def delete_library_material(material_id: str, user: dict = Depends(require
     if not material:
         raise HTTPException(status_code=404, detail="Library material not found")
     
-    try:
-        os.remove(material["file_path"])
-    except Exception:
-        pass
+    await delete_file_from_doc(material)
     
     await db.materials.delete_one({"material_id": material_id})
     return {"message": "Library material deleted"}
@@ -1729,14 +1763,11 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
         elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
             raise HTTPException(status_code=403, detail="Access denied")
     
-    file_path = Path(material["file_path"])
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(
-        path=file_path,
-        filename=material["file_name"],
-        media_type="application/octet-stream"
+    file_bytes = await read_bytes_from_doc(material)
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{material["file_name"]}"'}
     )
 
 
@@ -1991,11 +2022,8 @@ async def submit_homework(
     }, {"_id": 0})
     
     if existing:
-        # Delete old file
-        try:
-            os.remove(existing["file_path"])
-        except Exception:
-            pass
+        # Delete old file (GridFS + legacy disk)
+        await delete_file_from_doc(existing)
     
     # Validate file
     filename = file.filename or "unnamed"
@@ -2003,13 +2031,10 @@ async def submit_homework(
     if ext not in ["pdf", "docx"]:
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
     
-    # Save file
+    # Save file to GridFS (persistent across redeploys)
     submission_id = f"sub_{uuid.uuid4().hex[:12]}"
-    file_path = UPLOAD_DIR / f"{submission_id}_{filename}"
-    
-    async with aiofiles.open(file_path, "wb") as f:
-        content = await file.read()
-        await f.write(content)
+    content = await file.read()
+    gridfs_id = await save_bytes_to_gridfs(content, f"{submission_id}_{filename}")
     
     # Create or update submission
     if existing:
@@ -2018,7 +2043,8 @@ async def submit_homework(
         await db.submissions.update_one(
             {"submission_id": submission_id},
             {"$set": {
-                "file_path": str(file_path),
+                "file_path": "",
+                "gridfs_id": gridfs_id,
                 "file_name": filename,
                 "status": "pending",
                 "ai_feedback": None,
@@ -2039,7 +2065,8 @@ async def submit_homework(
             material_id=material_id,
             cohort_id=submission_cohort_id,
             student_id=user["user_id"],
-            file_path=str(file_path),
+            file_path="",
+            gridfs_id=gridfs_id,
             file_name=filename
         )
         
@@ -2140,10 +2167,7 @@ async def submit_on_behalf(
     }, {"_id": 0})
     
     if existing:
-        try:
-            os.remove(existing["file_path"])
-        except Exception:
-            pass
+        await delete_file_from_doc(existing)
     
     # Validate file
     filename = file.filename or "unnamed"
@@ -2151,19 +2175,18 @@ async def submit_on_behalf(
     if ext not in ["pdf", "docx"]:
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
     
-    # Save file
+    # Save file to GridFS (persistent across redeploys)
     submission_id = f"sub_{uuid.uuid4().hex[:12]}"
-    file_path = UPLOAD_DIR / f"{submission_id}_{filename}"
-    async with aiofiles.open(file_path, "wb") as f:
-        content = await file.read()
-        await f.write(content)
+    content = await file.read()
+    gridfs_id = await save_bytes_to_gridfs(content, f"{submission_id}_{filename}")
     
     if existing:
         submission_id = existing["submission_id"]
         await db.submissions.update_one(
             {"submission_id": submission_id},
             {"$set": {
-                "file_path": str(file_path),
+                "file_path": "",
+                "gridfs_id": gridfs_id,
                 "file_name": filename,
                 "status": "pending",
                 "ai_feedback": None,
@@ -2181,7 +2204,8 @@ async def submit_on_behalf(
             material_id=material_id,
             cohort_id=submission_cohort_id,
             student_id=student_id,
-            file_path=str(file_path),
+            file_path="",
+            gridfs_id=gridfs_id,
             file_name=filename
         )
         doc = submission.model_dump()
@@ -2205,10 +2229,8 @@ async def submit_on_behalf(
                 ]
             }, {"_id": 0}).to_list(10)
             
-            # Extract text from submission
-            async with aiofiles.open(str(file_path), "rb") as f:
-                file_bytes = await f.read()
-            submission_text = extract_text_from_file(file_bytes, filename)
+            # Extract text from submission (read from GridFS — in-memory content is also available)
+            submission_text = extract_text_from_file(content, filename)
             
             if not submission_text.strip():
                 logger.error(f"Auto review: empty submission text for {submission_id}")
@@ -2218,8 +2240,7 @@ async def submit_on_behalf(
             context_text = ""
             for mat in context_materials:
                 try:
-                    async with aiofiles.open(mat["file_path"], "rb") as f:
-                        mat_bytes = await f.read()
+                    mat_bytes = await read_bytes_from_doc(mat)
                     mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
                     context_text += f"\n\n--- {mat['material_type'].upper()}: {mat['title']} ---\n{mat_text[:5000]}"
                 except Exception:
@@ -2638,14 +2659,11 @@ async def download_submission(submission_id: str, user: dict = Depends(get_curre
             raise HTTPException(status_code=403, detail="Access denied")
     # super_admin can download any submission
     
-    file_path = Path(submission["file_path"])
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(
-        path=str(file_path),
-        filename=submission.get("file_name", "submission"),
-        media_type="application/octet-stream"
+    file_bytes = await read_bytes_from_doc(submission)
+    return StreamingResponse(
+        io.BytesIO(file_bytes),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{submission.get("file_name", "submission")}"'}
     )
 
 
@@ -2662,12 +2680,8 @@ async def delete_submission(submission_id: str, user: dict = Depends(require_ins
         if cohort and not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
     
-    # Delete the file
-    try:
-        if submission.get("file_path"):
-            os.remove(submission["file_path"])
-    except Exception:
-        pass
+    # Delete the file (GridFS + legacy disk)
+    await delete_file_from_doc(submission)
     
     # Delete related chat history
     await db.tutor_chats.delete_many({"submission_id": submission_id})
@@ -2732,13 +2746,10 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     
     # Extract text from submission
     try:
-        async with aiofiles.open(submission["file_path"], "rb") as f:
-            file_bytes = await f.read()
-        
+        file_bytes = await read_bytes_from_doc(submission)
         submission_text = extract_text_from_file(file_bytes, submission["file_name"])
-    except FileNotFoundError:
-        logger.error(f"Submission file not found: {submission['file_path']}")
-        raise HTTPException(status_code=404, detail="Submission file not found on server. Please ask the student to resubmit.")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error reading submission {submission['submission_id']}: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Error reading submission file: {type(e).__name__}")
@@ -2750,11 +2761,8 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     context_text = ""
     for mat in context_materials:
         try:
-            async with aiofiles.open(mat["file_path"], "rb") as f:
-                mat_bytes = await f.read()
-            
+            mat_bytes = await read_bytes_from_doc(mat)
             mat_text = extract_text_from_file(mat_bytes, mat["file_name"])
-            
             context_text += f"\n\n--- {mat['material_type'].upper()}: {mat['title']} ---\n{mat_text[:5000]}"
         except Exception:
             pass
@@ -3186,11 +3194,14 @@ async def generate_feedback_audio(submission_id: str, user: dict = Depends(get_c
     if not feedback:
         raise HTTPException(status_code=400, detail="No feedback available")
 
-    # Check cache
+    # Check cache (must have gridfs_id OR disk file still present)
     audio_key = f"feedback_{submission_id}"
     existing = await db.audio_cache.find_one({"audio_key": audio_key}, {"_id": 0})
     if existing:
-        return {"audio_url": f"/api/audio/{existing['filename']}", "cached": True}
+        if existing.get("gridfs_id") or (AUDIO_DIR / existing["filename"]).exists():
+            return {"audio_url": f"/api/audio/{existing['filename']}", "cached": True}
+        # Stale cache — file is gone after redeploy. Drop the stale record and regenerate below.
+        await db.audio_cache.delete_one({"audio_key": audio_key})
 
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -3212,13 +3223,12 @@ async def generate_feedback_audio(submission_id: str, user: dict = Depends(get_c
         raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
 
     filename = f"{audio_key}_{uuid.uuid4().hex[:8]}.mp3"
-    filepath = AUDIO_DIR / filename
-    async with aiofiles.open(str(filepath), "wb") as f:
-        await f.write(audio_bytes)
+    gridfs_id = await save_bytes_to_gridfs(audio_bytes, filename)
 
     await db.audio_cache.insert_one({
         "audio_key": audio_key,
         "filename": filename,
+        "gridfs_id": gridfs_id,
         "submission_id": submission_id,
         "created_at": datetime.now(timezone.utc).isoformat()
     })
@@ -3255,16 +3265,30 @@ async def generate_chat_audio(request: Request, user: dict = Depends(get_current
         raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
 
     filename = f"chat_{uuid.uuid4().hex[:12]}.mp3"
-    filepath = AUDIO_DIR / filename
-    async with aiofiles.open(str(filepath), "wb") as f:
-        await f.write(audio_bytes)
+    gridfs_id = await save_bytes_to_gridfs(audio_bytes, filename)
+    await db.audio_cache.insert_one({
+        "audio_key": f"chat_{filename}",
+        "filename": filename,
+        "gridfs_id": gridfs_id,
+        "submission_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
 
     return {"audio_url": f"/api/audio/{filename}"}
 
 
 @api_router.get("/audio/{filename}")
 async def serve_audio(filename: str):
-    """Serve a generated audio file."""
+    """Serve a generated audio file (from GridFS, falls back to legacy disk cache)."""
+    cache = await db.audio_cache.find_one({"filename": filename}, {"_id": 0})
+    if cache and cache.get("gridfs_id"):
+        audio_bytes = await read_bytes_from_doc(cache)
+        return StreamingResponse(
+            io.BytesIO(audio_bytes),
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    # Legacy disk fallback
     filepath = AUDIO_DIR / filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
