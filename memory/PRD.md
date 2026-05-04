@@ -207,6 +207,13 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Extracted nested ternary in SubmissionDetail.js into `<ReviewStatusBadge>` component
 - [x] Lint clean on both files
 
+### Persistent File Storage (February 2026)
+- [x] **BUG FIX**: Student submissions no longer lost on redeploy — migrated all uploads from ephemeral `/app/backend/uploads/` disk to MongoDB GridFS
+- [x] New helpers: `save_bytes_to_gridfs`, `read_bytes_from_doc`, `delete_file_from_doc`
+- [x] Library materials, cohort materials, student submissions, submit-on-behalf, and TTS audio cache all use GridFS
+- [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
+- [x] 8/8 backend tests pass (iteration_21.json)
+
 ### Test Data Added (April 9, 2026)
 - [x] Expanded system from 12 weeks to 14 weeks (backend validation + student dashboard loop)
 - [x] Added "Test 1" (Week 13) and "Test 2" (Week 14) to Material Library
