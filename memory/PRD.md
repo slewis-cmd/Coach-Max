@@ -218,6 +218,7 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] `GET /api/submissions/{id}/download?inline=1` — streams PDF inline with `application/pdf` media type (browser renders in iframe)
 - [x] `GET /api/submissions/{id}/preview-text` — returns extracted text for DOCX (or PDF) with full ACL
 - [x] Frontend "View preview" toggle on SubmissionDetail page (PDF iframe, DOCX as pre-formatted text)
+- [x] **Side-by-side layout** — when preview is open, desktop switches to 2-column grid (preview left, feedback editor right); preview column is sticky so it stays visible while scrolling feedback; widens container to 1600px
 - [x] 10/10 new + 8/8 regression tests pass (iteration_22.json)
 
 ### Test Data Added (April 9, 2026)

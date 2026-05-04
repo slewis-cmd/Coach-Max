@@ -308,7 +308,7 @@ export default function SubmissionDetail() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 md:px-12 py-8">
+      <main className={`mx-auto px-6 md:px-12 py-8 ${previewOpen ? 'max-w-[1600px]' : 'max-w-4xl'}`}>
         {/* Submission Info */}
         <Card className="bg-white border-[#B8D4E8] mb-6">
           <CardContent className="p-6">
@@ -416,37 +416,40 @@ export default function SubmissionDetail() {
           </CardContent>
         </Card>
 
-        {/* Inline File Preview */}
-        {previewOpen && submission && (() => {
-          const ext = (submission.file_name || '').toLowerCase().split('.').pop();
-          const token = localStorage.getItem('thinkific_session_token');
-          if (ext === 'pdf') {
-            const src = `${API_URL}/api/submissions/${submissionId}/download?inline=1&token=${encodeURIComponent(token || '')}`;
+        {/* Preview + Feedback — side-by-side when preview is open */}
+        <div className={previewOpen ? 'grid lg:grid-cols-2 gap-6 items-start' : ''}>
+          {/* Inline File Preview */}
+          {previewOpen && submission && (() => {
+            const ext = (submission.file_name || '').toLowerCase().split('.').pop();
+            const token = localStorage.getItem('thinkific_session_token');
+            if (ext === 'pdf') {
+              const src = `${API_URL}/api/submissions/${submissionId}/download?inline=1&token=${encodeURIComponent(token || '')}`;
+              return (
+                <Card className="mb-6 bg-white border-[#B8D4E8] lg:sticky lg:top-20 lg:mb-0" data-testid="preview-pdf">
+                  <CardContent className="p-0">
+                    <iframe
+                      title="Submission preview"
+                      src={src}
+                      className="w-full h-[720px] rounded-md"
+                    />
+                  </CardContent>
+                </Card>
+              );
+            }
             return (
-              <Card className="mb-6 bg-white border-[#B8D4E8]" data-testid="preview-pdf">
-                <CardContent className="p-0">
-                  <iframe
-                    title="Submission preview"
-                    src={src}
-                    className="w-full h-[720px] rounded-md"
-                  />
+              <Card className="mb-6 bg-white border-[#B8D4E8] lg:sticky lg:top-20 lg:mb-0" data-testid="preview-docx">
+                <CardContent className="p-6">
+                  <pre className="whitespace-pre-wrap text-sm text-[#1A1A1A] font-sans leading-relaxed max-h-[720px] overflow-auto">
+                    {previewText || 'No extractable text in this file.'}
+                  </pre>
                 </CardContent>
               </Card>
             );
-          }
-          return (
-            <Card className="mb-6 bg-white border-[#B8D4E8]" data-testid="preview-docx">
-              <CardContent className="p-6">
-                <pre className="whitespace-pre-wrap text-sm text-[#1A1A1A] font-sans leading-relaxed max-h-[720px] overflow-auto">
-                  {previewText || 'No extractable text in this file.'}
-                </pre>
-              </CardContent>
-            </Card>
-          );
-        })()}
+          })()}
 
-        {/* AI Feedback / Editor */}
-        {currentFeedback || isDraft ? (
+          {/* AI Feedback / Editor */}
+          <div>
+          {currentFeedback || isDraft ? (
           <div className="animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-light text-[#000000] flex items-center gap-2">
@@ -658,6 +661,8 @@ export default function SubmissionDetail() {
             </ol>
           </div>
         )}
+          </div>
+        </div>
       </main>
     </div>
   );
