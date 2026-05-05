@@ -173,6 +173,30 @@ async def save_uploaded_file(file: UploadFile, prefix: str) -> tuple:
     return gridfs_id, filename
 
 
+def binary_file_response(file_bytes: bytes, filename: str, inline: bool = False, force_pdf: bool = False) -> Response:
+    """Return a Response for binary file downloads with explicit Content-Length.
+    Avoids StreamingResponse so Cloudflare/proxies don't see chunked-encoding without a length
+    (which can surface as a 520 'unknown response' error in the iframe-preview path)."""
+    ext = (filename or "").lower().rsplit(".", 1)[-1]
+    if force_pdf or ext == "pdf":
+        media_type = "application/pdf"
+    else:
+        media_type = "application/octet-stream"
+    disposition = "inline" if inline else "attachment"
+    safe_name = (filename or "file").replace('"', '')
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
+            "Content-Length": str(len(file_bytes)),
+            "Cache-Control": "private, max-age=0, must-revalidate",
+            "Accept-Ranges": "none",
+            "X-Frame-Options": "SAMEORIGIN",
+        }
+    )
+
+
 async def resolve_submission_cohort(material: dict, user: dict, cohort_id: str = None) -> str:
     """Determine which cohort a submission belongs to. Returns cohort_id."""
     if material.get("is_library"):
@@ -1764,11 +1788,7 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
             raise HTTPException(status_code=403, detail="Access denied")
     
     file_bytes = await read_bytes_from_doc(material)
-    return StreamingResponse(
-        io.BytesIO(file_bytes),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{material["file_name"]}"'}
-    )
+    return binary_file_response(file_bytes, material["file_name"], inline=False)
 
 
 # ==================== STUDENT DASHBOARD ENDPOINT ====================
@@ -2661,14 +2681,7 @@ async def download_submission(submission_id: str, inline: int = 0, user: dict = 
     
     file_bytes = await read_bytes_from_doc(submission)
     filename = submission.get("file_name", "submission")
-    ext = filename.lower().rsplit(".", 1)[-1]
-    media_type = "application/pdf" if ext == "pdf" else "application/octet-stream"
-    disposition = "inline" if inline else "attachment"
-    return StreamingResponse(
-        io.BytesIO(file_bytes),
-        media_type=media_type,
-        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'}
-    )
+    return binary_file_response(file_bytes, filename, inline=bool(inline))
 
 
 @api_router.get("/submissions/{submission_id}/preview-text")
@@ -3306,10 +3319,15 @@ async def serve_audio(filename: str):
     cache = await db.audio_cache.find_one({"filename": filename}, {"_id": 0})
     if cache and cache.get("gridfs_id"):
         audio_bytes = await read_bytes_from_doc(cache)
-        return StreamingResponse(
-            io.BytesIO(audio_bytes),
+        return Response(
+            content=audio_bytes,
             media_type="audio/mpeg",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(audio_bytes)),
+                "Cache-Control": "private, max-age=3600",
+                "Accept-Ranges": "none",
+            }
         )
     # Legacy disk fallback
     filepath = AUDIO_DIR / filename

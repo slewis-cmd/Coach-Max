@@ -362,3 +362,130 @@ class TestSubmissionDetailRegression:
         assert data["submission_id"] == docx_submission["submission_id"]
         assert data.get("material") is not None
         assert data.get("student") is not None
+
+
+# ============================================================================
+# Cloudflare 520 fix: verify binary_file_response sets explicit Content-Length
+# (no chunked-transfer) on /submissions/{id}/download, /materials/{id}/download,
+# and /audio/{filename}; verify body bytes round-trip exactly.
+# ============================================================================
+
+
+def _raw_request(url: str, headers: dict = None, params: dict = None):
+    """Disable Accept-Encoding so requests doesn't strip Content-Length on us."""
+    h = dict(headers or {})
+    h.setdefault("Accept-Encoding", "identity")
+    return requests.get(url, headers=h, params=params, timeout=30)
+
+
+class TestSubmissionDownloadContentLengthHeaders:
+    """Cloudflare 520 fix: Response (not StreamingResponse) must set Content-Length,
+    Accept-Ranges: none, Cache-Control, X-Frame-Options."""
+
+    def test_pdf_attachment_has_content_length_matching_body(self, pdf_submission, auth_headers):
+        r = _raw_request(
+            f"{BASE_URL}/api/submissions/{pdf_submission['submission_id']}/download",
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        cl = r.headers.get("Content-Length")
+        assert cl is not None, "Content-Length header missing (Cloudflare 520 root cause)"
+        assert int(cl) == len(r.content), f"Content-Length {cl} != body bytes {len(r.content)}"
+        assert int(cl) == len(pdf_submission["bytes"]), \
+            "Content-Length must equal uploaded byte length"
+        # Should NOT be chunked (the previous bug)
+        te = r.headers.get("Transfer-Encoding", "")
+        assert "chunked" not in te.lower(), f"Transfer-Encoding chunked still present: {te!r}"
+        # Cache + frame headers from the helper
+        assert r.headers.get("Accept-Ranges", "").lower() == "none"
+        # Cache-Control: helper sets "private, max-age=0, must-revalidate" but Cloudflare may
+        # rewrite to "no-store, no-cache, must-revalidate" — both mean "don't cache", which
+        # is what we need so range requests don't poison the proxy.
+        cc = (r.headers.get("Cache-Control") or "").lower()
+        assert "private" in cc or "no-store" in cc or "no-cache" in cc, f"unexpected Cache-Control: {cc!r}"
+        assert r.headers.get("X-Frame-Options", "").upper() == "SAMEORIGIN"
+        # Disposition + media type for attachment branch
+        cd = r.headers.get("Content-Disposition", "")
+        assert cd.lower().startswith("attachment"), cd
+        assert (r.headers.get("Content-Type") or "").startswith("application/pdf")
+
+    def test_pdf_inline_has_content_length_and_xframe_sameorigin(self, pdf_submission, auth_headers):
+        r = _raw_request(
+            f"{BASE_URL}/api/submissions/{pdf_submission['submission_id']}/download",
+            headers=auth_headers, params={"inline": 1},
+        )
+        assert r.status_code == 200, r.text
+        cl = r.headers.get("Content-Length")
+        assert cl is not None, "Content-Length missing on inline PDF response"
+        assert int(cl) == len(r.content)
+        assert int(cl) == len(pdf_submission["bytes"])
+        assert (r.headers.get("Content-Type") or "").startswith("application/pdf")
+        assert r.headers.get("Content-Disposition", "").lower().startswith("inline")
+        # critical for iframe-rendering path that triggered the 520
+        assert r.headers.get("X-Frame-Options", "").upper() == "SAMEORIGIN"
+        assert r.headers.get("Accept-Ranges", "").lower() == "none"
+
+    def test_docx_download_attachment_has_content_length(self, docx_submission, auth_headers):
+        r = _raw_request(
+            f"{BASE_URL}/api/submissions/{docx_submission['submission_id']}/download",
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        cl = r.headers.get("Content-Length")
+        assert cl is not None
+        assert int(cl) == len(r.content)
+        assert r.headers.get("Content-Disposition", "").lower().startswith("attachment")
+
+
+class TestMaterialDownloadContentLength:
+    """/api/materials/{material_id}/download must also set Content-Length / attachment."""
+
+    def test_material_download_has_content_length_and_attachment(self, library_material, auth_headers):
+        r = _raw_request(
+            f"{BASE_URL}/api/materials/{library_material}/download",
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        cl = r.headers.get("Content-Length")
+        assert cl is not None, "Content-Length missing on material download"
+        assert int(cl) == len(r.content)
+        # uploaded as docx -> attachment
+        assert r.headers.get("Content-Disposition", "").lower().startswith("attachment")
+        assert "chunked" not in (r.headers.get("Transfer-Encoding", "") or "").lower()
+
+
+class TestAudioServeContentLength:
+    """/api/audio/{filename} must set Content-Length (no chunked) for GridFS-cached audio."""
+
+    def test_audio_serve_has_content_length(self, mongo):
+        # Seed a fake GridFS-backed audio_cache entry directly so we can hit /api/audio/{filename}
+        # without invoking real TTS. Endpoint is unauthenticated.
+        from gridfs import GridFS
+        client = MongoClient(MONGO_URL)
+        try:
+            fs = GridFS(client[DB_NAME])
+            audio_bytes = b"ID3" + os.urandom(2048)  # tiny opaque "mp3" payload (not real audio)
+            gid = fs.put(audio_bytes, filename="test_cf520_audio.mp3")
+            fname = f"TEST_cf520_{uuid.uuid4().hex[:8]}.mp3"
+            mongo.audio_cache.insert_one({
+                "filename": fname,
+                "gridfs_id": str(gid),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            try:
+                r = _raw_request(f"{BASE_URL}/api/audio/{fname}")
+                assert r.status_code == 200, r.text
+                cl = r.headers.get("Content-Length")
+                assert cl is not None, "Content-Length missing on audio response"
+                assert int(cl) == len(r.content) == len(audio_bytes)
+                assert (r.headers.get("Content-Type") or "").startswith("audio/mpeg")
+                assert "chunked" not in (r.headers.get("Transfer-Encoding", "") or "").lower()
+                assert r.content == audio_bytes, "audio bytes must round-trip"
+            finally:
+                mongo.audio_cache.delete_one({"filename": fname})
+                try:
+                    fs.delete(gid)
+                except Exception:
+                    pass
+        finally:
+            client.close()

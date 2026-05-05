@@ -1,0 +1,49 @@
+{
+  "summary": "Verified the Cloudflare 520 surgical fix: binary_file_response() helper now sets explicit Content-Length on /api/submissions/{id}/download (attachment + inline), /api/materials/{material_id}/download, and /api/audio/{filename}. Added 5 new Content-Length-focused tests to /app/backend/tests/test_submission_preview.py — all 15 tests pass (10 prior preview regression + 5 new). Full GridFS regression suite (8/8) also still green. Cloudflare round-trip confirmed: response captured via the public preview URL shows Content-Length matching body bytes exactly, X-Frame-Options: SAMEORIGIN preserved, Accept-Ranges: none preserved, Transfer-Encoding: chunked NOT present. The previous 520 failure mode (StreamingResponse without Content-Length on iframe-loaded PDFs) is fixed end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "PDF /download (no inline) -> Content-Length set, equals body bytes, attachment, application/pdf, no chunked Transfer-Encoding",
+    "PDF /download?inline=1 -> Content-Length set, inline disposition, application/pdf, X-Frame-Options: SAMEORIGIN, Accept-Ranges: none (Cloudflare-friendly iframe path)",
+    "DOCX /download -> Content-Length set, attachment, equals body bytes",
+    "/api/materials/{id}/download -> Content-Length set, attachment, no chunked encoding",
+    "/api/audio/{filename} (GridFS-backed) -> Content-Length set, audio/mpeg, bytes round-trip exact",
+    "Regression: PDF and DOCX bodies still byte-for-byte equal to uploaded bytes",
+    "Regression: /preview-text still returns {text, file_name} for DOCX and PDF",
+    "Regression: ACL still enforced (student_b -> 403 on student_a's submission, outsider instructor -> 403, student owner -> 200)",
+    "Regression: legacy file_path-only submissions still return HTTP 410 with clean message",
+    "Regression: GET /api/submissions/{id} still returns submission with material + student blocks",
+    "Regression: full /app/backend/tests/test_gridfs_storage.py (8/8) pass"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_submission_preview.py",
+    "/app/test_reports/pytest/test_submission_preview.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:176 binary_file_response correctly sets Content-Length=str(len(file_bytes)), Accept-Ranges: none, X-Frame-Options: SAMEORIGIN, and Cache-Control. This buffers the entire file in memory which is fine for the current PDF/DOCX size profile (typically <10 MB) but becomes risky for very large materials in the future — note for capacity planning, not a current bug.",
+    "server.py:3317 serve_audio uses an inline Response(...) call instead of going through binary_file_response. Behaves identically and tests pass, but DRY would benefit from passing through binary_file_response(audio_bytes, filename, force_pdf=False) — minor refactor only.",
+    "Observed at runtime: Cloudflare overrides backend Cache-Control 'private, max-age=0, must-revalidate' to 'no-store, no-cache, must-revalidate'. Semantically equivalent (don't cache), so the 520 fix still holds — test was relaxed to accept either form.",
+    "FileResponse fallback in serve_audio (legacy disk path, line 3336) does NOT explicitly set Content-Length. Starlette's FileResponse does set it from os.stat though, so this is fine in practice. Worth noting for completeness if disk fallback ever serves prod traffic."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_submission_preview.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 preview tests + 8/8 GridFS regression)",
+    "frontend": "not tested (backend-only scope per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org from /app/memory/test_credentials.md, used via session token seeded into user_sessions collection.",
+  "seed_data_creation": "Per-run (all cleaned up via fixtures): 1 TEST_Preview cohort, 2 TEST_prev_* student users, 1 TEST_prev_inst_* outsider instructor, 1 TEST Preview library DOCX material (week 1, released), 1 DOCX submission (student_a), 1 PDF submission (student_b), 1 legacy file_path-only submission (deleted inline), 1 TEST_cf520 audio_cache entry + GridFS payload (deleted inline).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Cloudflare 520 fix verified. The new TestSubmissionDownloadContentLengthHeaders, TestMaterialDownloadContentLength, and TestAudioServeContentLength classes in test_submission_preview.py disable Accept-Encoding (sets to 'identity') so requests doesn't auto-decompress and strip Content-Length — mimicking iframe behavior more closely. If any future change goes back to StreamingResponse(io.BytesIO(...)) without setting Content-Length, these tests will catch it. Note the deprecated fpdf2 'dest=S' warning is harmless and pre-existing.",
+  "rca of the issue": "Cloudflare 520 reproduced in production from StreamingResponse(io.BytesIO(...)) which omits Content-Length and falls back to chunked Transfer-Encoding. When an iframe loads a PDF, the browser issues a Range request — Cloudflare's proxy receives a chunked response without Content-Length and returns 520 'Web server is returning an unknown error'. Mitigation: introduced binary_file_response() that uses fastapi Response(content=bytes) with explicit Content-Length, Accept-Ranges: none (so browsers don't issue Range requests), X-Frame-Options: SAMEORIGIN (so iframe is allowed), and Cache-Control. Verified end-to-end through the Cloudflare-fronted preview URL: Content-Length now matches body bytes exactly, no chunked Transfer-Encoding."
+}
