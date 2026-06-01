@@ -55,6 +55,18 @@ function StatusBadge({ status }) {
   );
 }
 
+function EmptyStateCard({ icon: Icon, title, message }) {
+  return (
+    <Card className="bg-white border-[#B8D4E8] border-dashed">
+      <CardContent className="p-12 text-center">
+        <Icon className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-[#000000] mb-2">{title}</h3>
+        <p className="text-[#333333]">{message}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function getWeekNumberClass(status) {
   if (status === 'feedback_provided') return 'bg-[#22438E] text-white';
   if (status === 'no_homework') return 'bg-[#B8D4E8] text-[#666666]';
@@ -244,23 +256,21 @@ export default function StudentDashboard() {
           </p>
         </div>
 
-        {!activeCohort ? (
-          <Card className="bg-white border-[#B8D4E8] border-dashed">
-            <CardContent className="p-12 text-center">
-              <BookOpen className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[#000000] mb-2">No courses yet</h3>
-              <p className="text-[#333333]">Your instructor will add you to a cohort soon</p>
-            </CardContent>
-          </Card>
-        ) : activeCohort.weeks.length === 0 ? (
-          <Card className="bg-white border-[#B8D4E8] border-dashed">
-            <CardContent className="p-12 text-center">
-              <Clock className="w-12 h-12 text-[#94B8D9] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[#000000] mb-2">No weeks released yet</h3>
-              <p className="text-[#333333]">Your instructor will release course weeks as the program progresses</p>
-            </CardContent>
-          </Card>
-        ) : (
+        {!activeCohort && (
+          <EmptyStateCard
+            icon={BookOpen}
+            title="No courses yet"
+            message="Your instructor will add you to a cohort soon"
+          />
+        )}
+        {activeCohort && activeCohort.weeks.length === 0 && (
+          <EmptyStateCard
+            icon={Clock}
+            title="No weeks released yet"
+            message="Your instructor will release course weeks as the program progresses"
+          />
+        )}
+        {activeCohort && activeCohort.weeks.length > 0 && (
           <div className="space-y-3" data-testid="weekly-progress">
             {activeCohort.weeks.map((week) => {
               const weekKey = `${activeCohort.cohort_id}-${week.week_number}`;

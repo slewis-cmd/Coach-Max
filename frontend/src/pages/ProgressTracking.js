@@ -53,6 +53,12 @@ const downloadFile = async (url, filename) => {
   }
 };
 
+function getCompletionColorClass(rate) {
+  if (rate >= 80) return 'text-[#22438E]';
+  if (rate >= 50) return 'text-[#1A75BA]';
+  return 'text-red-600';
+}
+
 function StudentWeekRow({ week }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -379,11 +385,7 @@ export default function ProgressTracking() {
                                 <Progress value={student.completion_rate} className="h-2" />
                               </div>
                               <div className="w-14 text-right">
-                                <span className={`text-sm font-medium ${
-                                  student.completion_rate >= 80 ? 'text-[#22438E]' :
-                                  student.completion_rate >= 50 ? 'text-[#1A75BA]' :
-                                  'text-red-600'
-                                }`}>
+                                <span className={`text-sm font-medium ${getCompletionColorClass(student.completion_rate)}`}>
                                   {student.completion_rate}%
                                 </span>
                               </div>

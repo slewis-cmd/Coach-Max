@@ -214,6 +214,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Code Quality Pass 4 — Nested Ternaries (February 2026)
+- [x] Extracted `PreviewToggleContent` component in SubmissionDetail.js (was 3-state ternary for button label)
+- [x] Extracted `EmptyStateCard` component in StudentDashboard.js (was nested ternary for no-cohort / no-weeks / weeks states)
+- [x] Extracted `getCompletionColorClass()` helper in ProgressTracking.js (was nested ternary for completion-rate text color)
+- [x] Lint clean across frontend; smoke test passed
+- [x] **Refused (incorrect):** PEP 8 `is None` → `== None` reversal — PEP 8 mandates `is None`
+- [x] **Deferred:** httpOnly cookies migration (proxy reliability), backend function refactors (need scoped sessions)
+
 ### Component Refactor — SubmissionDetail (February 2026)
 - [x] Split SubmissionDetail.js (670 → 566 lines) into 4 focused sub-components:
   - `/components/submission/SubmissionPreviewPane.js` (PDF iframe + DOCX text panel, 36 lines)

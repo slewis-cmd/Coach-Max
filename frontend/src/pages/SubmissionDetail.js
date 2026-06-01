@@ -55,6 +55,31 @@ function ReviewStatusBadge({ isSent, isDraft }) {
   );
 }
 
+function PreviewToggleContent({ previewLoading, previewOpen }) {
+  if (previewLoading) {
+    return (
+      <>
+        <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
+        Loading
+      </>
+    );
+  }
+  if (previewOpen) {
+    return (
+      <>
+        <EyeOff className="w-3.5 h-3.5 mr-1" />
+        Hide preview
+      </>
+    );
+  }
+  return (
+    <>
+      <Eye className="w-3.5 h-3.5 mr-1" />
+      View preview
+    </>
+  );
+}
+
 export default function SubmissionDetail() {
   const { submissionId } = useParams();
   const navigate = useNavigate();
@@ -367,22 +392,7 @@ export default function SubmissionDetail() {
                   className="h-7 px-2 ml-1 text-[#22438E] hover:bg-[#E1F0FF]"
                   data-testid="toggle-preview-btn"
                 >
-                  {previewLoading ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
-                      Loading
-                    </>
-                  ) : previewOpen ? (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5 mr-1" />
-                      Hide preview
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5 mr-1" />
-                      View preview
-                    </>
-                  )}
+                  <PreviewToggleContent previewLoading={previewLoading} previewOpen={previewOpen} />
                 </Button>
               </div>
               {isInstructor && isSent && !submission.resubmission_allowed && (
