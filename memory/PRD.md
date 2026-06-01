@@ -214,6 +214,14 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Component Refactor — SubmissionDetail (February 2026)
+- [x] Split SubmissionDetail.js (670 → 566 lines) into 4 focused sub-components:
+  - `/components/submission/SubmissionPreviewPane.js` (PDF iframe + DOCX text panel, 36 lines)
+  - `/components/submission/FeedbackEditor.js` (edit-mode textarea + save controls, 54 lines)
+  - `/components/submission/FeedbackDisplay.js` (read-only feedback + audio player, 67 lines)
+  - `/components/submission/ReviewWorkflow.js` (3-step instructor workflow checklist, 27 lines)
+- [x] All data-testid contracts preserved; 10/10 frontend regression flows pass (iteration_26.json)
+
 ### Library Material View / Inline Preview (February 2026)
 - [x] `GET /api/materials/{id}/download?inline=1` — streams material inline (PDF iframe-renders directly)
 - [x] `GET /api/materials/{id}/preview-text` — returns extracted text for DOCX (or PDF) with full ACL
