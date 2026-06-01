@@ -3,8 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { Textarea } from '../components/ui/textarea';
-import { Label } from '../components/ui/label';
 import { 
   ArrowLeft,
   File,
@@ -19,13 +17,16 @@ import {
   RefreshCw,
   FileDown,
   Trash2,
-  Volume2,
   Download,
   Eye,
   EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { SubmissionPreviewPane } from '../components/submission/SubmissionPreviewPane';
+import { FeedbackEditor } from '../components/submission/FeedbackEditor';
+import { FeedbackDisplay } from '../components/submission/FeedbackDisplay';
+import { ReviewWorkflow } from '../components/submission/ReviewWorkflow';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -419,33 +420,13 @@ export default function SubmissionDetail() {
         {/* Preview + Feedback — side-by-side when preview is open */}
         <div className={previewOpen ? 'grid lg:grid-cols-2 gap-6 items-start' : ''}>
           {/* Inline File Preview */}
-          {previewOpen && submission && (() => {
-            const ext = (submission.file_name || '').toLowerCase().split('.').pop();
-            const token = localStorage.getItem('thinkific_session_token');
-            if (ext === 'pdf') {
-              const src = `${API_URL}/api/submissions/${submissionId}/download?inline=1&token=${encodeURIComponent(token || '')}`;
-              return (
-                <Card className="mb-6 bg-white border-[#B8D4E8] lg:sticky lg:top-20 lg:mb-0" data-testid="preview-pdf">
-                  <CardContent className="p-0">
-                    <iframe
-                      title="Submission preview"
-                      src={src}
-                      className="w-full h-[720px] rounded-md"
-                    />
-                  </CardContent>
-                </Card>
-              );
-            }
-            return (
-              <Card className="mb-6 bg-white border-[#B8D4E8] lg:sticky lg:top-20 lg:mb-0" data-testid="preview-docx">
-                <CardContent className="p-6">
-                  <pre className="whitespace-pre-wrap text-sm text-[#1A1A1A] font-sans leading-relaxed max-h-[720px] overflow-auto">
-                    {previewText || 'No extractable text in this file.'}
-                  </pre>
-                </CardContent>
-              </Card>
-            );
-          })()}
+          {previewOpen && (
+            <SubmissionPreviewPane
+              submission={submission}
+              submissionId={submissionId}
+              previewText={previewText}
+            />
+          )}
 
           {/* AI Feedback / Editor */}
           <div>
@@ -525,104 +506,32 @@ export default function SubmissionDetail() {
             </div>
 
             {isEditing ? (
-              <Card className="bg-white border-[#B8D4E8]">
-                <CardContent className="p-6">
-                  <Label className="text-sm text-[#333333] mb-2 block">
-                    Review and edit the AI-generated feedback before sending to the student
-                  </Label>
-                  <Textarea
-                    value={editedFeedback}
-                    onChange={(e) => setEditedFeedback(e.target.value)}
-                    className="min-h-[300px] mb-4 font-normal"
-                    placeholder="Enter feedback for the student..."
-                    data-testid="feedback-editor"
-                  />
-                  <div className="flex items-center justify-end gap-2">
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setIsEditing(false);
-                        setEditedFeedback(currentFeedback);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleSaveFeedback}
-                      disabled={saving}
-                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
-                      data-testid="save-feedback-btn"
-                    >
-                      {saving ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                    <Button 
-                      onClick={async () => {
-                        await handleSaveFeedback();
-                        if (editedFeedback.trim()) {
-                          handleExportPDF();
-                        }
-                      }}
-                      disabled={saving || exporting}
-                      className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
-                    >
-                      <FileDown className="w-4 h-4 mr-2" />
-                      Save & Send
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <FeedbackEditor
+                editedFeedback={editedFeedback}
+                setEditedFeedback={setEditedFeedback}
+                saving={saving}
+                exporting={exporting}
+                onCancel={() => {
+                  setIsEditing(false);
+                  setEditedFeedback(currentFeedback);
+                }}
+                onSave={handleSaveFeedback}
+                onSaveAndSend={async () => {
+                  await handleSaveFeedback();
+                  if (editedFeedback.trim()) {
+                    handleExportPDF();
+                  }
+                }}
+              />
             ) : (
-              <Card className={isSent ? "bg-[#F0FDF4] border-[#B8D4E8]" : "bg-[#F0F9FF] border-[#BAE6FD]"}>
-                <CardContent className="p-8">
-                  <div className="feedback-letter text-[#166534] whitespace-pre-wrap leading-relaxed">
-                    {currentFeedback}
-                  </div>
-                  
-                  {/* Audio Player */}
-                  <div className="mt-6 pt-4 border-t border-[#B8D4E8]">
-                    {audioUrl ? (
-                      <div className="flex items-center gap-3" data-testid="audio-player">
-                        <audio ref={audioRef} src={audioUrl} controls className="flex-1 h-10" />
-                        <a
-                          href={audioUrl}
-                          download
-                          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#22438E] text-white rounded-lg hover:bg-[#1A3A7A] transition-colors"
-                          data-testid="download-audio-btn"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          MP3
-                        </a>
-                      </div>
-                    ) : (
-                      <Button
-                        onClick={handleGenerateAudio}
-                        disabled={generatingAudio}
-                        variant="outline"
-                        className="border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]"
-                        data-testid="generate-audio-btn"
-                      >
-                        {generatingAudio ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-[#22438E] border-t-transparent rounded-full animate-spin mr-2"></div>
-                            Generating Audio...
-                          </>
-                        ) : (
-                          <>
-                            <Volume2 className="w-4 h-4 mr-2" />
-                            Listen to Feedback
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                  
-                  <div className="mt-4 text-right">
-                    <p className="text-sm text-[#22438E] italic">
-                      {isSent ? '— Feedback sent to student' : '— Draft (Not yet sent to student)'}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <FeedbackDisplay
+                isSent={isSent}
+                currentFeedback={currentFeedback}
+                audioUrl={audioUrl}
+                audioRef={audioRef}
+                generatingAudio={generatingAudio}
+                onGenerateAudio={handleGenerateAudio}
+              />
             )}
           </div>
         ) : (
@@ -643,23 +552,11 @@ export default function SubmissionDetail() {
 
         {/* Workflow info for instructors */}
         {isInstructor && !isSent && (
-          <div className="mt-6 p-4 bg-[#D0E6F9] rounded-lg">
-            <h3 className="text-sm font-medium text-[#000000] mb-2">Review Workflow</h3>
-            <ol className="text-sm text-[#333333] space-y-1">
-              <li className={`flex items-center gap-2 ${currentFeedback ? 'text-[#22438E]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${currentFeedback ? 'bg-[#E1F0FF] text-[#22438E]' : 'bg-[#B8D4E8] text-[#666666]'}`}>1</span>
-                Generate AI feedback
-              </li>
-              <li className={`flex items-center gap-2 ${submission.instructor_feedback ? 'text-[#22438E]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${submission.instructor_feedback ? 'bg-[#E1F0FF] text-[#22438E]' : 'bg-[#B8D4E8] text-[#666666]'}`}>2</span>
-                Review and edit feedback
-              </li>
-              <li className={`flex items-center gap-2 ${isSent ? 'text-[#22438E]' : ''}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isSent ? 'bg-[#E1F0FF] text-[#22438E]' : 'bg-[#B8D4E8] text-[#666666]'}`}>3</span>
-                Send feedback to student via email
-              </li>
-            </ol>
-          </div>
+          <ReviewWorkflow
+            hasFeedback={!!currentFeedback}
+            hasInstructorFeedback={!!submission.instructor_feedback}
+            isSent={isSent}
+          />
         )}
           </div>
         </div>

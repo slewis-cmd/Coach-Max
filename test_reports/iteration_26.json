@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend regression test of the SubmissionDetail.js component-extraction refactor (now 566 lines + 4 new sub-components in /components/submission/). Ran full Playwright walkthrough as super_admin slewis@theboostpad.org against the preview URL: SubmissionDetail page renders, PDF inline preview iframe (data-testid='preview-pdf') works, side-by-side grid layout activates with preview open, Edit Feedback opens textarea (data-testid='feedback-editor') with Save Changes (data-testid='save-feedback-btn') — edit persists and editor closes after save, Listen to Feedback (data-testid='generate-audio-btn') generates audio and renders data-testid='audio-player', Send Feedback to Student button (data-testid='export-pdf-btn') is present, 3-step Review Workflow checklist renders for instructors on both draft and pending submissions, Generate AI Feedback (data-testid='generate-review-btn') is visible on pending submissions. Zero page errors. All previously-passing data-testid contracts preserved by the refactor.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/seed_admin_session.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SubmissionPreviewPane.js reads `localStorage.getItem('thinkific_session_token')` directly — the token key is also defined in AuthContext.js as TOKEN_KEY. Consider exporting TOKEN_KEY (or a getStoredToken helper) from AuthContext so the literal isn't duplicated across SubmissionPreviewPane, MaterialLibrary, ProgressTracking, CohortDetail, utils/download.js — that's ~7 places where the key is hardcoded and would all need updating if it changes.",
+    "SubmissionDetail.js (566 lines) still hosts all data fetching + 8 mutation handlers + JSX. With the new sub-components in place, the next refactor could pull state+handlers into a useSubmission hook (separating data from presentation), bringing SubmissionDetail under 300 lines.",
+    "FeedbackEditor's 'Save & Send' button has no data-testid (only Save Changes does). If future tests need to drive Save & Send programmatically, add data-testid='save-and-send-btn' for parity.",
+    "ReviewWorkflow component receives 3 separate boolean props — could be simplified to a single `status` prop with values 'awaiting-ai' | 'awaiting-edit' | 'awaiting-send' | 'sent' to make the state machine explicit."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested (scope per request: frontend only)",
+    "frontend": "100% (all 10 regression flows in the review request pass)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org. Playwright test seeded a session token (sess_*) directly into user_sessions collection via /app/tests/seed_admin_session.py and set it in localStorage as 'thinkific_session_token' — confirmed working. Token deleted after test run.",
+  "seed_data_creation": "1 ephemeral session token in user_sessions (deleted post-run). Reused 2 existing test submissions in mongo: 'sub-test-review-check' (draft, has ai_feedback, .pdf) and 'sub-student-cannot-delete' (pending, no feedback, .pdf). No new submission docs created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Refactor is a pure component-extraction — no behavior change. All 4 new components in /app/frontend/src/components/submission/ (SubmissionPreviewPane, FeedbackEditor, FeedbackDisplay, ReviewWorkflow) wire up correctly with parent state. Reuse /app/tests/seed_admin_session.py to seed a super_admin session token for future Playwright runs (prints token to stdout). DOCX preview path (data-testid='preview-docx') was NOT exercised because no .docx submission exists in seed data — the component code path mirrors the PDF branch and uses /api/submissions/{id}/preview-text which was already validated in iteration_25 backend tests, so coverage is acceptable; if a future test wants to exercise it, upload a .docx submission first.",
+  "rca of the issue": "N/A — no bugs found. Refactor verified working end-to-end."
+}
