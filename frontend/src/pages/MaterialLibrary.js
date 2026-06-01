@@ -14,7 +14,7 @@ import {
 } from '../components/ui/select';
 import { 
   ArrowLeft, Upload, BookMarked, ClipboardList, Trash2, Download, 
-  Plus, Link2, Unlink, File, CheckCircle, Copy
+  Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -51,6 +51,10 @@ export default function MaterialLibrary() {
   const [form, setForm] = useState({
     title: '', description: '', week_number: 1, material_type: 'workbook', file: null
   });
+  // Inline preview state
+  const [previewMat, setPreviewMat] = useState(null);     // material being previewed (null when closed)
+  const [previewText, setPreviewText] = useState('');     // DOCX extracted text
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && isInstructor) {
@@ -121,6 +125,26 @@ export default function MaterialLibrary() {
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to duplicate');
+    }
+  };
+
+  const handlePreview = async (mat) => {
+    const ext = (mat.file_name || '').toLowerCase().split('.').pop();
+    if (ext === 'pdf') {
+      setPreviewMat(mat);
+      setPreviewText('');
+      return;
+    }
+    // DOCX: fetch extracted text
+    setPreviewLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/api/materials/${mat.material_id}/preview-text`);
+      setPreviewText(res.data.text || '');
+      setPreviewMat(mat);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Could not load preview');
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -228,9 +252,23 @@ export default function MaterialLibrary() {
                           </p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0 ml-4">
+                          <Button
+                            variant="ghost" size="icon"
+                            onClick={() => handlePreview(mat)}
+                            disabled={previewLoading}
+                            title="View / Read"
+                            data-testid={`view-lib-${mat.material_id}`}
+                          >
+                            {previewLoading && previewMat?.material_id === mat.material_id ? (
+                              <RefreshCw className="w-4 h-4 text-[#22438E] animate-spin" />
+                            ) : (
+                              <Eye className="w-4 h-4 text-[#22438E]" />
+                            )}
+                          </Button>
                           <Button 
                             variant="ghost" size="icon"
                             onClick={() => downloadFile(`${API_URL}/api/materials/${mat.material_id}/download`, mat.file_name)}
+                            title="Download"
                             data-testid={`download-lib-${mat.material_id}`}
                           >
                             <Download className="w-4 h-4 text-[#333333]" />
@@ -407,6 +445,53 @@ export default function MaterialLibrary() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAssign(null)} className="rounded-lg">Done</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inline File Preview Dialog */}
+      <Dialog open={!!previewMat} onOpenChange={(open) => { if (!open) { setPreviewMat(null); setPreviewText(''); } }}>
+        <DialogContent className="bg-white max-w-5xl w-[95vw] p-0" data-testid="library-preview-dialog">
+          <DialogHeader className="px-6 pt-6 pb-3 border-b border-[#B8D4E8]">
+            <DialogTitle className="font-normal text-xl flex items-center justify-between gap-4">
+              <span className="truncate">{previewMat?.title || 'Preview'}</span>
+              <button
+                onClick={() => downloadFile(`${API_URL}/api/materials/${previewMat?.material_id}/download`, previewMat?.file_name)}
+                className="inline-flex items-center gap-1.5 text-sm text-[#22438E] hover:bg-[#E1F0FF] px-3 py-1.5 rounded-md font-normal"
+                data-testid="preview-download-btn"
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </button>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {previewMat?.file_name} · Week {previewMat?.week_number}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-6 pb-6 pt-2">
+            {previewMat && (() => {
+              const ext = (previewMat.file_name || '').toLowerCase().split('.').pop();
+              const token = localStorage.getItem('thinkific_session_token');
+              if (ext === 'pdf') {
+                const src = `${API_URL}/api/materials/${previewMat.material_id}/download?inline=1&token=${encodeURIComponent(token || '')}`;
+                return (
+                  <iframe
+                    title="Material preview"
+                    src={src}
+                    className="w-full h-[75vh] rounded-md border border-[#B8D4E8]"
+                    data-testid="library-preview-pdf"
+                  />
+                );
+              }
+              return (
+                <pre
+                  className="whitespace-pre-wrap text-sm text-[#1A1A1A] font-sans leading-relaxed max-h-[75vh] overflow-auto border border-[#B8D4E8] rounded-md p-4 bg-[#FAFAFA]"
+                  data-testid="library-preview-docx"
+                >
+                  {previewText || 'No extractable text in this file.'}
+                </pre>
+              );
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1868,8 +1868,8 @@ async def unassign_library_material(material_id: str, request: Request, user: di
 
 
 @api_router.get("/materials/{material_id}/download")
-async def download_material(material_id: str, user: dict = Depends(get_current_user)):
-    """Download a material file"""
+async def download_material(material_id: str, inline: int = 0, user: dict = Depends(get_current_user)):
+    """Download (or inline-preview with ?inline=1) a material file"""
     material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
@@ -1900,7 +1900,39 @@ async def download_material(material_id: str, user: dict = Depends(get_current_u
             raise HTTPException(status_code=403, detail="Access denied")
     
     file_bytes = await read_bytes_from_doc(material)
-    return binary_file_response(file_bytes, material["file_name"], inline=False)
+    return binary_file_response(file_bytes, material["file_name"], inline=bool(inline))
+
+
+@api_router.get("/materials/{material_id}/preview-text")
+async def preview_material_text(material_id: str, user: dict = Depends(get_current_user)):
+    """Return the extracted text content of a material (for DOCX inline preview)."""
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    
+    # Same ACL as download
+    if material.get("is_library"):
+        if user["role"] not in ["instructor", "super_admin"]:
+            assigned_cohorts = material.get("cohort_ids", [])
+            student_cohorts = await db.cohorts.find(
+                {"cohort_id": {"$in": assigned_cohorts}, "student_ids": user["user_id"]},
+                {"_id": 0, "cohort_id": 1}
+            ).to_list(1)
+            if not student_cohorts:
+                raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        cohort = await db.cohorts.find_one({"cohort_id": material["cohort_id"]}, {"_id": 0})
+        if not cohort:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        if user["role"] in ["instructor", "super_admin"]:
+            if user["role"] == "instructor" and not is_cohort_manager(user, cohort):
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif user["role"] == "student" and user["user_id"] not in cohort.get("student_ids", []):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    file_bytes = await read_bytes_from_doc(material)
+    text = extract_text_from_file(file_bytes, material.get("file_name", ""))
+    return {"text": text, "file_name": material.get("file_name", "")}
 
 
 # ==================== STUDENT DASHBOARD ENDPOINT ====================

@@ -1,0 +1,36 @@
+{
+  "summary": "Validated the new Material Library inline preview contract. Added /app/backend/tests/test_material_preview.py (15 tests, all passing) covering: download back-compat (attachment), ?inline=1 contract on PDF (inline + application/pdf + X-Frame-Options SAMEORIGIN + Content-Length), DOCX inline (octet-stream + inline disposition), preview-text happy path for DOCX (body text) and PDF (non-empty text), ACL (student not-in-cohort 403 / student in-cohort 200 on library material, outsider instructor 403 / managing admin 200 on non-library cohort material), legacy file_path-only missing-file -> 410, download bytes round-trip regression for both library and cohort-specific materials, /api/library/materials list still exposes cohort_ids + assigned_cohorts, and both auth paths (Authorization: Bearer header AND ?token=<session_token> query param used by the iframe) work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_material_preview.py",
+    "/app/test_reports/pytest/pytest_material_preview.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 4219 lines — exceeds the 700-line guideline; consider splitting routers (materials, submissions, cohorts, auth, library) into separate modules for maintainability.",
+    "Tests required loading /app/frontend/.env explicitly because REACT_APP_BACKEND_URL is not exported to the pytest process. Considered adding a conftest.py loading both .env files once for the whole tests/ folder (left for main agent).",
+    "download_material and preview_material_text duplicate the same ACL block verbatim (~25 lines each). Extract a single helper `_assert_material_read_access(user, material)` to keep ACL logic in one place — reduces drift risk when permission rules change.",
+    "read_bytes_from_doc only emits 410 for FileNotFoundError on the legacy file_path branch; if gridfs_id is set but the GridFS object is deleted, the underlying open_download_stream raises NoFile and currently propagates as a 500. Consider catching gridfs.errors.NoFile and converting to 410 with the same clean message for parity."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_material_preview.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15)",
+    "frontend": "not tested (frontend out of scope per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org auto-seeded; tests inject session tokens directly into user_sessions collection.",
+  "seed_data_creation": "All ephemeral: 1 cohort (TEST_MatPrev_*), 3 users (1 student-in, 1 student-out, 1 outsider instructor) + admin session, 1 library DOCX material, 1 library PDF material, 1 cohort-specific DOCX material, 1 legacy 410 material doc. All teardown verified — 0 TEST_* docs remaining in mongo post-run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_material_preview.py for regression on /api/materials/{id}/download?inline=1 and /api/materials/{id}/preview-text. It loads /app/frontend/.env to pick up REACT_APP_BACKEND_URL — copy that pattern for future tests or have main agent add a conftest.py. The PDF preview body assertion is loose (just non-empty string) because fpdf2 PDFs sometimes do not extract cleanly with all libraries — keep it permissive.",
+  "rca of the issue": "N/A — no bugs found; the new inline preview + preview-text endpoints behave per spec."
+}
