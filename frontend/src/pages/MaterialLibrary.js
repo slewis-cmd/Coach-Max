@@ -14,7 +14,7 @@ import {
 } from '../components/ui/select';
 import { 
   ArrowLeft, Upload, BookMarked, ClipboardList, Trash2, Download, 
-  Plus, Link2, Unlink, File, CheckCircle
+  Plus, Link2, Unlink, File, CheckCircle, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -111,6 +111,16 @@ export default function MaterialLibrary() {
       fetchData();
     } catch (error) {
       toast.error('Failed to delete');
+    }
+  };
+
+  const handleDuplicate = async (materialId) => {
+    try {
+      await axios.post(`${API_URL}/api/library/materials/${materialId}/duplicate`);
+      toast.success('Material duplicated as template');
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to duplicate');
     }
   };
 
@@ -224,6 +234,14 @@ export default function MaterialLibrary() {
                             data-testid={`download-lib-${mat.material_id}`}
                           >
                             <Download className="w-4 h-4 text-[#333333]" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
+                            onClick={() => handleDuplicate(mat.material_id)}
+                            title="Duplicate / Save as Template"
+                            data-testid={`duplicate-lib-${mat.material_id}`}
+                          >
+                            <Copy className="w-4 h-4 text-[#22438E]" />
                           </Button>
                           <Button 
                             variant="ghost" size="icon"

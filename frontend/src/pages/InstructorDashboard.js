@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { 
   BookOpen, Users, Plus, LogOut, ChevronRight, Upload,
-  AlertCircle, FileEdit, Mail, TrendingUp, Download, Bell, MessageCircle
+  AlertCircle, FileEdit, Mail, TrendingUp, Download, Bell, MessageCircle, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -77,8 +77,7 @@ export default function InstructorDashboard() {
       toast.success('Cohort created successfully!');
       setShowCreateCohort(false);
       setNewCohort({ name: '', description: '' });
-      fetchData();
-    } catch (error) {
+      fetchData();    } catch (error) {
       toast.error('Failed to create cohort');
     } finally {
       setCreating(false);
@@ -86,6 +85,16 @@ export default function InstructorDashboard() {
   };
 
   const handleLogout = async () => { await logout(); navigate('/'); };
+
+  const handleDuplicateCohort = async (cohortId) => {
+    try {
+      const res = await axios.post(`${API_URL}/api/cohorts/${cohortId}/duplicate`);
+      toast.success(`Cohort duplicated (${res.data.cohort_materials_copied || 0} materials copied, ${res.data.library_materials_linked || 0} library items linked)`);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to duplicate cohort');
+    }
+  };
 
   const pendingSubmissions = submissions.filter(s => s.status === 'pending');
   const draftSubmissions = submissions.filter(s => s.status === 'draft');
@@ -294,8 +303,18 @@ export default function InstructorDashboard() {
                   data-testid={`cohort-card-${cohort.cohort_id}`}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg font-normal flex items-center justify-between">
-                      {cohort.name}
-                      <ChevronRight className="w-5 h-5 text-[#94B8D9] group-hover:text-[#000000] transition-colors" />
+                      <span className="truncate">{cohort.name}</span>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDuplicateCohort(cohort.cohort_id); }}
+                          className="p-1.5 rounded-md hover:bg-[#E1F0FF] text-[#22438E] opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Duplicate / Save as Template"
+                          data-testid={`duplicate-cohort-${cohort.cohort_id}`}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <ChevronRight className="w-5 h-5 text-[#94B8D9] group-hover:text-[#000000] transition-colors" />
+                      </div>
                     </CardTitle>
                     <CardDescription>{cohort.description || 'No description'}</CardDescription>
                   </CardHeader>

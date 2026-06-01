@@ -1,0 +1,35 @@
+{
+  "summary": "Backend-only testing of new POST /api/library/materials/{id}/duplicate and POST /api/cohorts/{id}/duplicate endpoints. Created /app/backend/tests/test_duplicate_endpoints.py with 8 pytest cases covering happy path, file-bytes integrity (GridFS), template behavior (empty cohort_ids/student_ids), source-not-mutated, library re-link on cohort duplicate, inline material cloning with new gridfs_id, no submission copy, ACL 403 for outsider instructor, 404 for missing cohort, 410 for legacy library material with missing disk file, plus regression for /assign, /unassign, PUT /library/materials/{id}. All 8 tests PASSED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_duplicate_endpoints.py",
+    "/app/test_reports/pytest/test_duplicate_endpoints.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 4187 lines — should be split into modular routers (cohorts, materials, library, submissions, auth) for maintainability.",
+    "duplicate_library_material does not perform any cohort-management ACL check (any instructor or super_admin can duplicate any library material). That matches library-as-shared-templates intent, but worth confirming with PM. The cohort duplicate path correctly enforces is_cohort_manager.",
+    "duplicate_cohort silently skips inline materials whose files are missing (legacy disk-only). It returns cohort_materials_copied count, but caller has no signal that some were skipped — consider returning a 'skipped' counter for transparency.",
+    "duplicate_cohort uses .to_list(500) — hardcoded limit could silently truncate for very large cohorts. Consider paginating or removing the limit.",
+    "Cohort.instructor_id field is set on duplicate but legacy single-instructor field is being phased out — fine for now, but flag for future cleanup.",
+    "PUT /library/materials/{id} declares title/description/week_number as plain function params (becomes query params) while also accepting UploadFile — inconsistent with REST conventions but functional; documented behavior so kept as-is."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_duplicate_endpoints.py"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "Super admin slewis@theboostpad.org auto-seeded; sessions inserted directly to user_sessions per /app/memory/test_credentials.md.",
+  "seed_data_creation": "Per-module fixtures create: 1 super-admin session, 1 inside-instructor (TEST_dup_inst_*), 1 outside-instructor (TEST_dup_out_*), 1 student (TEST_dup_stu_*), 1 cohort (TEST_DUP_Cohort_*) with released_weeks=[1,2], 1 library homework material assigned to cohort, 1 inline workbook material. All cleaned up in teardown plus best-effort autouse cleanup of duplicated cohorts/materials and their GridFS bytes.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable harness at /app/backend/tests/test_duplicate_endpoints.py. Run with: REACT_APP_BACKEND_URL/MONGO_URL/DB_NAME env vars exported (taken from .env files). Pytest run takes ~3s. Library-duplicate ACL is permissive (any instructor) — confirm if stricter rule is desired. Frontend Copy buttons on MaterialLibrary.js + InstructorDashboard.js were NOT tested per request.",
+  "rca of the issue": "N/A — no failures after fixing two of my own initial test contract mismatches (unassign uses singular cohort_id; PUT /library/materials uses query params, not form data)."
+}

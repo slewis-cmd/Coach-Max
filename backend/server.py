@@ -1706,6 +1706,118 @@ async def delete_library_material(material_id: str, user: dict = Depends(require
     await db.materials.delete_one({"material_id": material_id})
     return {"message": "Library material deleted"}
 
+@api_router.post("/library/materials/{material_id}/duplicate")
+async def duplicate_library_material(material_id: str, user: dict = Depends(require_instructor)):
+    """Duplicate a library material as an unassigned template. Copies the GridFS file too."""
+    src = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="Library material not found")
+    
+    # Copy file bytes to a new GridFS entry (so deleting the original won't affect the copy)
+    try:
+        file_bytes = await read_bytes_from_doc(src)
+    except HTTPException as e:
+        if e.status_code == 410:
+            raise HTTPException(status_code=410, detail="Original file is no longer available; cannot duplicate.")
+        raise
+    
+    new_material_id = f"lib_{uuid.uuid4().hex[:12]}"
+    new_gridfs_id = await save_bytes_to_gridfs(file_bytes, f"{new_material_id}_{src['file_name']}")
+    
+    doc = {
+        "material_id": new_material_id,
+        "is_library": True,
+        "cohort_id": None,
+        "cohort_ids": [],  # template — unassigned
+        "week_number": src.get("week_number", 1),
+        "material_type": src.get("material_type"),
+        "title": f"{src.get('title', 'Untitled')} (Copy)",
+        "description": src.get("description"),
+        "file_path": "",
+        "gridfs_id": new_gridfs_id,
+        "file_name": src["file_name"],
+        "uploaded_by": user["user_id"],
+        "duplicated_from": material_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.materials.insert_one(doc)
+    return {"material_id": new_material_id, "message": "Material duplicated as template"}
+
+
+@api_router.post("/cohorts/{cohort_id}/duplicate")
+async def duplicate_cohort(cohort_id: str, user: dict = Depends(require_instructor)):
+    """Duplicate a cohort as a template: copies materials assignments + release config; does NOT copy students or submissions."""
+    src = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    if not is_cohort_manager(user, src):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    new_cohort = Cohort(
+        name=f"{src.get('name', 'Untitled')} (Copy)",
+        description=src.get("description"),
+        instructor_id=user["user_id"],
+        instructor_ids=[user["user_id"]],
+        student_ids=[]  # template — start with no students
+    )
+    doc = new_cohort.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    # Carry over released_weeks config (keeps the same week-release pattern)
+    doc["released_weeks"] = list(src.get("released_weeks", []))
+    doc["duplicated_from"] = cohort_id
+    await db.cohorts.insert_one(doc)
+    
+    # Re-assign all library materials that were linked to the source cohort
+    src_lib_assignments = await db.materials.find(
+        {"is_library": True, "cohort_ids": cohort_id},
+        {"_id": 0, "material_id": 1}
+    ).to_list(500)
+    
+    for mat in src_lib_assignments:
+        await db.materials.update_one(
+            {"material_id": mat["material_id"]},
+            {"$addToSet": {"cohort_ids": new_cohort.cohort_id}}
+        )
+    
+    # Also duplicate cohort-specific (non-library) materials by cloning file + record
+    src_inline_mats = await db.materials.find(
+        {"cohort_id": cohort_id, "is_library": {"$ne": True}},
+        {"_id": 0}
+    ).to_list(500)
+    
+    inline_copied = 0
+    for mat in src_inline_mats:
+        try:
+            mat_bytes = await read_bytes_from_doc(mat)
+        except HTTPException:
+            continue  # skip mats whose files are gone (legacy disk-only records)
+        new_mat_id = f"mat_{uuid.uuid4().hex[:12]}"
+        new_gridfs_id = await save_bytes_to_gridfs(mat_bytes, f"{new_mat_id}_{mat['file_name']}")
+        new_mat = {
+            "material_id": new_mat_id,
+            "cohort_id": new_cohort.cohort_id,
+            "week_number": mat.get("week_number", 1),
+            "material_type": mat.get("material_type"),
+            "title": mat.get("title", "Untitled"),
+            "description": mat.get("description"),
+            "file_path": "",
+            "gridfs_id": new_gridfs_id,
+            "file_name": mat["file_name"],
+            "uploaded_by": user["user_id"],
+            "due_date": mat.get("due_date"),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.materials.insert_one(new_mat)
+        inline_copied += 1
+    
+    return {
+        "cohort_id": new_cohort.cohort_id,
+        "library_materials_linked": len(src_lib_assignments),
+        "cohort_materials_copied": inline_copied,
+        "message": "Cohort duplicated as template"
+    }
+
+
 @api_router.post("/library/materials/{material_id}/assign")
 async def assign_library_material(material_id: str, request: Request, user: dict = Depends(require_instructor)):
     """Assign a library material to one or more cohorts"""
