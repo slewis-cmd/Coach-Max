@@ -214,6 +214,12 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Library Material View / Inline Preview (February 2026)
+- [x] `GET /api/materials/{id}/download?inline=1` — streams material inline (PDF iframe-renders directly)
+- [x] `GET /api/materials/{id}/preview-text` — returns extracted text for DOCX (or PDF) with full ACL
+- [x] Frontend View button on each MaterialLibrary row → opens a centered modal with PDF iframe or DOCX text; includes inline Download button
+- [x] 15/15 backend tests pass (iteration_25.json)
+
 ### Duplicate / Save as Template (February 2026)
 - [x] `POST /api/library/materials/{id}/duplicate` — clones a library material as an unassigned template (new GridFS file, title suffixed with " (Copy)")
 - [x] `POST /api/cohorts/{id}/duplicate` — clones a cohort: new instructor=current user, empty students, carries `released_weeks` over, re-links library materials, clones non-library materials' GridFS files; does NOT copy submissions
