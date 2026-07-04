@@ -1,0 +1,44 @@
+{
+  "summary": "Backend-only regression + feature test of the new Course-Wide (is_global) library materials feature. Created /app/backend/tests/test_global_materials.py with 12 pytest cases covering: upload with is_global true/false/omitted, GET /api/library/materials returns is_global flag, assign global+regular to cohort, /api/student/dashboard.course_resources (populated + empty cases), submission review endpoint prepends globals to context, and regression checks on duplicate + download. 11/12 pass; the sole failure is a real bug in POST /api/library/materials/{id}/duplicate — it does NOT copy the is_global field, so duplicating a Course-Wide material silently produces a regular library material (breaks the review request's explicit requirement).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/library/materials/{id}/duplicate",
+        "issue": "The duplicate handler builds a fresh doc at server.py line 1750-1765 and omits the is_global field entirely. Duplicating a global (Course-Wide) material returns a document with is_global=None (Mongo docs.get() → None; treated as falsy). Effect: the duplicate is no longer included in build_cumulative_context, review_submission's context prepend, or student/dashboard.course_resources — the Course-Wide behavior is silently lost on copy. Fix: add `\"is_global\": src.get(\"is_global\", False),` to the doc dict at line ~1755, alongside preserving week_number=0 for globals (currently week_number comes from src.get('week_number', 1) which already yields 0 for globals, so that part is OK).",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_global_materials.py",
+    "/app/test_reports/pytest/global_materials_results.xml"
+  ],
+  "action_items": [
+    "server.py line 1750 (duplicate_library_material): add `\"is_global\": src.get(\"is_global\", False),` to the new doc dict so duplicating a Course-Wide material preserves its global flag."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 1755: `src.get('week_number', 1)` in duplicate_library_material — for global materials week_number is 0, which .get() correctly returns, but the fallback default of 1 is inconsistent with the upload path which stores 0 for globals. Not a bug in practice but noise-worthy.",
+    "server.py get_library_materials (line 1605) does not return an explicit `is_global` field on legacy materials that predate this feature; they carry no `is_global` key so JSON responses have it absent (not `false`). Frontend should treat missing as false — verified in dashboard's `[m for m in library_materials if m.get('is_global')]` filter, but a defensive $setOnInsert or migration would future-proof this.",
+    "server.py build_cumulative_context (line 273): the `is_library: True, is_global: True, cohort_ids: cohort_id` filter uses cohort_ids as a scalar (relies on Mongo's array-contains behavior). Correct, but comment or explicit `$in` would improve readability.",
+    "The review_submission endpoint prepends globals BEFORE current-week context (line 2978: `list(global_materials) + list(context_materials)`). This ordering was implemented per spec but note: if globals are large, they may crowd out the current-week context in the [:5000] truncation window. Consider capping global excerpt sizes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_global_materials.py (new — 12 tests, 11 passing)"
+  ],
+  "success_rate": {
+    "backend": "91.7% (11/12)",
+    "frontend": "not tested (scope: backend only)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org — session token seeded directly into user_sessions via pytest fixture (deleted post-run). Additional test instructor and student users seeded with TEST_GLOBAL_ prefix, all cleaned up in module teardown.",
+  "seed_data_creation": "Per-run ephemeral: 1 super_admin session token, 1 instructor user+session, 1 student user+session, 1 cohort (TEST_GLOBAL_Cohort_*), ~10 library materials (all TEST_GLOBAL_ prefixed), 1 cohort-specific homework material, 1 student submission, 1 GridFS pair per material/submission. All rows and GridFS files removed by fixture teardown + safety-net regex delete by title prefix.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_global_materials.py is idempotent and self-cleaning; re-run any time after main agent applies the one-line fix at server.py:1755 to add `\"is_global\": src.get(\"is_global\", False),`. To reproduce failure: pytest /app/backend/tests/test_global_materials.py::TestDuplicatePreservesIsGlobal -v with REACT_APP_BACKEND_URL exported. All 12 tests take ~15s total (review test hits real GPT-5.2 via EMERGENT_LLM_KEY).",
+  "rca of the issue": "RCA — POST /api/library/materials/{id}/duplicate creates a brand-new dict at server.py:1750-1765 instead of copying src via {**src, ...overrides}. When is_global was added to the upload path (line 1661), the duplicate path was not updated in parallel, so the field silently drops on duplication. Reproduction: (1) upload lib material with is_global=true → doc.is_global=True, week=0. (2) POST /library/materials/{id}/duplicate. (3) Fetch duplicate: is_global is missing (dict.get → None). Mitigation: add `\"is_global\": src.get(\"is_global\", False),` to the doc dict; optionally rewrite as `doc = {**src, \"material_id\": new_material_id, \"cohort_ids\": [], \"gridfs_id\": new_gridfs_id, \"title\": f\"{src['title']} (Copy)\", \"duplicated_from\": material_id, \"created_at\": ...}` to future-proof against similar drift."
+}

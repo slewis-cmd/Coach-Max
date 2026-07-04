@@ -256,6 +256,39 @@ export default function StudentDashboard() {
           </p>
         </div>
 
+        {activeCohort && activeCohort.course_resources && activeCohort.course_resources.length > 0 && (
+          <Card className="mb-6 bg-white border-[#B8D4E8]" data-testid="course-resources-section">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen className="w-4 h-4 text-[#22438E]" />
+                <h2 className="text-sm font-semibold text-[#22438E] uppercase tracking-wide">
+                  Course Resources
+                </h2>
+                <span className="text-xs text-[#666666] ml-1">— applies across all weeks</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {activeCohort.course_resources.map((mat) => (
+                  <button
+                    key={mat.material_id}
+                    onClick={() =>
+                      downloadFile(
+                        `${API_URL}/api/materials/${mat.material_id}/download`,
+                        mat.file_name
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 text-xs bg-[#E1F0FF] border border-[#B8D4E8] text-[#22438E] rounded-lg px-3 py-2 hover:bg-[#B8D4E8] transition-colors"
+                    title={mat.description || mat.title}
+                    data-testid={`course-resource-${mat.material_id}`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    {mat.title}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {!activeCohort && (
           <EmptyStateCard
             icon={BookOpen}

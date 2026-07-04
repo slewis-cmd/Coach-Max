@@ -49,8 +49,10 @@ export default function MaterialLibrary() {
   const [showAssign, setShowAssign] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    title: '', description: '', week_number: 1, material_type: 'workbook', file: null
+    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false
   });
+  // Filter: show all | week-based | course-wide only
+  const [filter, setFilter] = useState('all');
   // Inline preview state
   const [previewMat, setPreviewMat] = useState(null);     // material being previewed (null when closed)
   const [previewText, setPreviewText] = useState('');     // DOCX extracted text
@@ -91,14 +93,15 @@ export default function MaterialLibrary() {
         title: form.title,
         description: form.description || '',
         week_number: form.week_number,
-        material_type: form.material_type
+        material_type: form.material_type,
+        is_global: form.is_global ? 'true' : 'false'
       });
       await axios.post(`${API_URL}/api/library/materials?${params.toString()}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success('Material added to library!');
       setShowUpload(false);
-      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null });
+      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Upload failed');
@@ -223,6 +226,29 @@ export default function MaterialLibrary() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 md:px-12 py-8">
+        {/* Filter tabs */}
+        {materials.length > 0 && (
+          <div className="mb-5 flex items-center gap-2" data-testid="library-filter">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'week', label: 'Weekly' },
+              { key: 'global', label: 'Course-Wide' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  filter === key
+                    ? 'bg-[#22438E] text-white border-[#22438E]'
+                    : 'bg-white text-[#22438E] border-[#B8D4E8] hover:bg-[#E1F0FF]'
+                }`}
+                data-testid={`library-filter-${key}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {materials.length === 0 ? (
           <Card className="bg-white border-[#B8D4E8] border-dashed">
             <CardContent className="p-12 text-center">
@@ -236,7 +262,13 @@ export default function MaterialLibrary() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {materials.map((mat) => (
+            {materials
+              .filter((m) => {
+                if (filter === 'all') return true;
+                if (filter === 'global') return !!m.is_global;
+                return !m.is_global;
+              })
+              .map((mat) => (
               <Card key={mat.material_id} className="bg-white border-[#B8D4E8]" data-testid={`library-material-${mat.material_id}`}>
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">
@@ -246,9 +278,19 @@ export default function MaterialLibrary() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between mb-1">
                         <div>
-                          <h3 className="font-medium text-[#000000]">{mat.title}</h3>
+                          <h3 className="font-medium text-[#000000] flex items-center gap-2">
+                            {mat.title}
+                            {mat.is_global && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#22438E] text-white px-2 py-0.5 rounded-full uppercase tracking-wide"
+                                data-testid={`global-badge-${mat.material_id}`}
+                              >
+                                Course-Wide
+                              </span>
+                            )}
+                          </h3>
                           <p className="text-xs text-[#666666]">
-                            Week {mat.week_number} · {typeLabel(mat.material_type)} · {mat.file_name}
+                            {mat.is_global ? 'All weeks' : `Week ${mat.week_number}`} · {typeLabel(mat.material_type)} · {mat.file_name}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0 ml-4">
@@ -354,8 +396,12 @@ export default function MaterialLibrary() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Week Number</Label>
-                <Select value={String(form.week_number)} onValueChange={(v) => setForm({...form, week_number: parseInt(v)})}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <Select
+                  value={String(form.week_number)}
+                  onValueChange={(v) => setForm({...form, week_number: parseInt(v)})}
+                  disabled={form.is_global}
+                >
+                  <SelectTrigger className="mt-1" data-testid="lib-week-select"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Array.from({length: 14}, (_, i) => (
                       <SelectItem key={i+1} value={String(i+1)}>Week {i+1}</SelectItem>
@@ -375,6 +421,20 @@ export default function MaterialLibrary() {
                 </Select>
               </div>
             </div>
+            <label className="flex items-start gap-3 p-3 border border-[#B8D4E8] rounded-lg cursor-pointer hover:bg-[#E1F0FF] transition-colors" data-testid="lib-is-global-toggle">
+              <input
+                type="checkbox"
+                className="mt-1 w-4 h-4 accent-[#22438E]"
+                checked={form.is_global}
+                onChange={(e) => setForm({...form, is_global: e.target.checked})}
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-[#000000]">Course-Wide Resource</div>
+                <div className="text-xs text-[#666666] mt-0.5">
+                  Applies across all weeks. Automatically included in every AI feedback prompt and shown at the top of the student dashboard.
+                </div>
+              </div>
+            </label>
             <div>
               <Label>File (PDF or DOCX)</Label>
               <div className="mt-1">

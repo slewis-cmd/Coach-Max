@@ -264,17 +264,37 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
 
 
 async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000) -> str:
-    """Build cumulative context from all prior weeks: materials + student submissions + feedback."""
-    if not current_week or current_week <= 1:
-        return ""
-
+    """Build cumulative context from all prior weeks: materials + student submissions + feedback.
+    Always includes Course-Wide Resources (is_global=True) regardless of week."""
     parts = []
     total_chars = 0
+
+    # Course-Wide Resources: always included, regardless of current week
+    global_materials = await db.materials.find({
+        "is_library": True,
+        "is_global": True,
+        "cohort_ids": cohort_id
+    }, {"_id": 0}).to_list(20)
+
+    for mat in global_materials:
+        mat_text = await read_file_text(mat)
+        excerpt = mat_text[:1200] if mat_text else ""
+        if not excerpt:
+            continue
+        section = f"\n--- COURSE-WIDE RESOURCE: {mat.get('title', '')} ---\n{excerpt}"
+        if total_chars + len(section) > max_chars:
+            break
+        parts.append(section)
+        total_chars += len(section)
+
+    # If it's Week 1, only global resources apply (no prior weeks)
+    if not current_week or current_week <= 1:
+        return "\n".join(parts) if parts else ""
 
     # Get all prior materials (weeks 1 to current_week-1)
     prior_materials = await db.materials.find({
         "cohort_ids": cohort_id,
-        "week_number": {"$lt": current_week},
+        "week_number": {"$lt": current_week, "$gt": 0},
         "material_type": {"$in": ["workbook", "case_study"]}
     }, {"_id": 0}).sort("week_number", 1).to_list(100)
 
@@ -1618,9 +1638,11 @@ async def upload_library_material(
     title: str,
     file: UploadFile = File(...),
     description: str = "",
+    is_global: bool = False,
     user: dict = Depends(require_instructor)
 ):
-    """Upload a material to the central library (workbooks and case studies only)"""
+    """Upload a material to the central library (workbooks and case studies only).
+    is_global=True marks the material as a Course-Wide Resource (spans all weeks; auto-included in every AI review)."""
     if material_type not in ["workbook", "case_study", "homework"]:
         raise HTTPException(status_code=400, detail="Library supports workbooks, case studies, and homework")
     
@@ -1636,9 +1658,10 @@ async def upload_library_material(
     doc = {
         "material_id": material_id,
         "is_library": True,
+        "is_global": bool(is_global),
         "cohort_id": None,
         "cohort_ids": [],
-        "week_number": week_number,
+        "week_number": 0 if is_global else week_number,
         "material_type": material_type,
         "title": title,
         "description": description,
@@ -1964,6 +1987,19 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
         ).to_list(100)
         materials.extend(library_materials)
         
+        # Course-Wide Resources: global materials that this cohort has been given access to
+        global_mats = [m for m in library_materials if m.get("is_global")]
+        course_resources = [
+            {
+                "material_id": m["material_id"],
+                "title": m.get("title", ""),
+                "material_type": m.get("material_type", ""),
+                "file_name": m.get("file_name", ""),
+                "description": m.get("description", "")
+            }
+            for m in global_mats
+        ]
+        
         submissions = await db.submissions.find(
             {"student_id": user["user_id"], "cohort_id": cohort["cohort_id"]},
             {"_id": 0}
@@ -2030,6 +2066,7 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
             "cohort_id": cohort["cohort_id"],
             "cohort_name": cohort.get("name", ""),
             "description": cohort.get("description", ""),
+            "course_resources": course_resources,
             "weeks": weeks
         })
     
@@ -2392,6 +2429,14 @@ async def submit_on_behalf(
                     {"cohort_id": submission_cohort_id}
                 ]
             }, {"_id": 0}).to_list(10)
+            
+            # Always include Course-Wide Resources
+            global_materials = await db.materials.find({
+                "is_library": True,
+                "is_global": True,
+                "cohort_ids": submission_cohort_id
+            }, {"_id": 0}).to_list(20)
+            context_materials = list(global_materials) + list(context_materials)
             
             # Extract text from submission (read from GridFS — in-memory content is also available)
             submission_text = extract_text_from_file(content, filename)
@@ -2923,6 +2968,14 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
         "week_number": material["week_number"],
         "material_type": {"$in": ["workbook", "case_study"]}
     }, {"_id": 0}).to_list(10)
+    
+    # Always include Course-Wide Resources (is_global=True library materials linked to this cohort)
+    global_materials = await db.materials.find({
+        "is_library": True,
+        "is_global": True,
+        "cohort_ids": submission["cohort_id"]
+    }, {"_id": 0}).to_list(20)
+    context_materials = list(global_materials) + list(context_materials)
     
     # Extract text from submission
     try:
