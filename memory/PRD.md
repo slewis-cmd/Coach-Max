@@ -214,6 +214,16 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Course-Wide (Global) Library Materials (February 2026)
+- [x] Materials can be marked `is_global=True` — spans all weeks (week_number=0)
+- [x] `POST /api/library/materials` accepts `is_global` query param; upload dialog has a Course-Wide checkbox
+- [x] `GET /api/student/dashboard` returns `course_resources: [...]` at each cohort level with the assigned global materials
+- [x] `build_cumulative_context()` and `review_submission` always prepend global materials to AI context, regardless of week
+- [x] `submit_on_behalf` auto-review also prepends globals
+- [x] `duplicate_library_material` now preserves `is_global` flag
+- [x] Frontend: Material Library filter tab (All | Weekly | Course-Wide), badge on each row, Student Dashboard "Course Resources" section at top
+- [x] 12/12 backend tests pass (iteration_28.json)
+
 ### Code Quality Pass 4 — Nested Ternaries (February 2026)
 - [x] Extracted `PreviewToggleContent` component in SubmissionDetail.js (was 3-state ternary for button label)
 - [x] Extracted `EmptyStateCard` component in StudentDashboard.js (was nested ternary for no-cohort / no-weeks / weeks states)
