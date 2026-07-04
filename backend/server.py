@@ -145,10 +145,20 @@ async def delete_file_from_doc(doc: dict) -> None:
 
 
 async def read_file_text(doc_or_path, file_name: str = None) -> str:
-    """Read file and extract text. Accepts either a doc dict (preferred) or a legacy (file_path, file_name) pair."""
+    """Read file and extract text. Accepts either a doc dict (preferred) or a legacy (file_path, file_name) pair.
+    For video materials, returns the stored Whisper transcript."""
     try:
         if isinstance(doc_or_path, dict):
             doc = doc_or_path
+            # Video materials: return stored transcript
+            if doc.get("material_type") == "video":
+                transcript = (doc.get("transcript") or "").strip()
+                if transcript:
+                    label = "VIDEO TRANSCRIPT"
+                    if doc.get("video_url"):
+                        label += f" ({doc.get('video_url')})"
+                    return f"[{label}]\n{transcript}"
+                return ""
             file_bytes = await read_bytes_from_doc(doc)
             return extract_text_from_file(file_bytes, doc.get("file_name", ""))
         # Legacy signature: (file_path, file_name)
@@ -171,6 +181,93 @@ async def save_uploaded_file(file: UploadFile, prefix: str) -> tuple:
     content = await file.read()
     gridfs_id = await save_bytes_to_gridfs(content, f"{prefix}_{filename}")
     return gridfs_id, filename
+
+
+async def transcribe_video_material(material_id: str) -> None:
+    """Background task: pull video bytes from GridFS, extract mono 32kbps mp3 audio via ffmpeg, transcribe via Whisper, save transcript.
+    Runs OUT-OF-BAND (fire-and-forget)."""
+    import tempfile
+    import subprocess
+    try:
+        material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+        if not material or not material.get("gridfs_id"):
+            return
+        
+        file_bytes = await read_bytes_from_doc(material)
+        file_ext = (material.get("file_name") or "video.mp4").split(".")[-1].lower()
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_ext}", delete=False) as vid_tmp:
+            vid_tmp.write(file_bytes)
+            vid_path = vid_tmp.name
+
+        audio_path = vid_path + ".mp3"
+        try:
+            # Extract audio: mono, 16 kHz, 32 kbps mp3 — Whisper-friendly, keeps ~60 min under 25 MB
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", audio_path],
+                capture_output=True,
+                timeout=600
+            )
+            if proc.returncode != 0:
+                logger.error(f"ffmpeg failed for material {material_id}: {proc.stderr[:500].decode(errors='ignore')}")
+                await db.materials.update_one(
+                    {"material_id": material_id},
+                    {"$set": {"transcription_status": "failed"}}
+                )
+                return
+
+            # Whisper 25 MB limit
+            audio_size = os.path.getsize(audio_path)
+            if audio_size > 25 * 1024 * 1024:
+                logger.error(f"Audio too large for Whisper ({audio_size} bytes) — material {material_id}")
+                await db.materials.update_one(
+                    {"material_id": material_id},
+                    {"$set": {"transcription_status": "failed_too_large"}}
+                )
+                return
+
+            api_key = os.environ.get("EMERGENT_LLM_KEY")
+            if not api_key:
+                logger.error("Whisper: EMERGENT_LLM_KEY not set")
+                await db.materials.update_one(
+                    {"material_id": material_id},
+                    {"$set": {"transcription_status": "failed"}}
+                )
+                return
+
+            from emergentintegrations.llm.openai import OpenAISpeechToText
+            stt = OpenAISpeechToText(api_key=api_key)
+            with open(audio_path, "rb") as audio_file:
+                response = await stt.transcribe(
+                    file=audio_file,
+                    model="whisper-1",
+                    response_format="text"
+                )
+            transcript_text = response if isinstance(response, str) else getattr(response, "text", "")
+            await db.materials.update_one(
+                {"material_id": material_id},
+                {"$set": {
+                    "transcript": (transcript_text or "").strip(),
+                    "transcription_status": "done"
+                }}
+            )
+            logger.info(f"Transcribed material {material_id}: {len(transcript_text or '')} chars")
+        finally:
+            for p in (vid_path, audio_path):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+    except Exception as e:
+        logger.exception(f"Transcription pipeline error for {material_id}: {e}")
+        try:
+            await db.materials.update_one(
+                {"material_id": material_id},
+                {"$set": {"transcription_status": "failed"}}
+            )
+        except Exception:
+            pass
 
 
 def binary_file_response(file_bytes: bytes, filename: str, inline: bool = False, force_pdf: bool = False) -> Response:
@@ -252,7 +349,7 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
         context_materials = await db.materials.find({
             "cohort_id": submission["cohort_id"],
             "week_number": material.get("week_number"),
-            "material_type": {"$in": ["workbook", "case_study"]}
+            "material_type": {"$in": ["workbook", "case_study", "video"]}
         }, {"_id": 0}).to_list(10)
         
         for mat in context_materials:
@@ -295,7 +392,7 @@ async def build_cumulative_context(student_id: str, cohort_id: str, current_week
     prior_materials = await db.materials.find({
         "cohort_ids": cohort_id,
         "week_number": {"$lt": current_week, "$gt": 0},
-        "material_type": {"$in": ["workbook", "case_study"]}
+        "material_type": {"$in": ["workbook", "case_study", "video"]}
     }, {"_id": 0}).sort("week_number", 1).to_list(100)
 
     # Also check single cohort_id field for backwards compat
@@ -303,7 +400,7 @@ async def build_cumulative_context(student_id: str, cohort_id: str, current_week
         prior_materials = await db.materials.find({
             "cohort_id": cohort_id,
             "week_number": {"$lt": current_week},
-            "material_type": {"$in": ["workbook", "case_study"]}
+            "material_type": {"$in": ["workbook", "case_study", "video"]}
         }, {"_id": 0}).sort("week_number", 1).to_list(100)
 
     # Get all prior homework materials to find submissions
@@ -1636,24 +1733,49 @@ async def upload_library_material(
     week_number: int,
     material_type: str,
     title: str,
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
     description: str = "",
     is_global: bool = False,
+    video_url: str = "",
     user: dict = Depends(require_instructor)
 ):
-    """Upload a material to the central library (workbooks and case studies only).
-    is_global=True marks the material as a Course-Wide Resource (spans all weeks; auto-included in every AI review)."""
-    if material_type not in ["workbook", "case_study", "homework"]:
-        raise HTTPException(status_code=400, detail="Library supports workbooks, case studies, and homework")
-    
-    filename = file.filename or "unnamed"
-    ext = filename.lower().split(".")[-1]
-    if ext not in ["pdf", "docx"]:
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
+    """Upload a material to the central library (workbooks, case studies, homework, and videos).
+    is_global=True marks the material as a Course-Wide Resource (spans all weeks; auto-included in every AI review).
+    For material_type=video, either upload a file (MP4/MOV/WEBM/M4A/MP3) OR pass video_url (YouTube/Vimeo/Loom)."""
+    if material_type not in ["workbook", "case_study", "homework", "video"]:
+        raise HTTPException(status_code=400, detail="Library supports workbooks, case studies, homework, and videos")
     
     material_id = f"lib_{uuid.uuid4().hex[:12]}"
-    content = await file.read()
-    gridfs_id = await save_bytes_to_gridfs(content, f"{material_id}_{filename}")
+    gridfs_id = ""
+    filename = ""
+    is_url_video = False
+
+    if material_type == "video":
+        video_url = (video_url or "").strip()
+        if video_url:
+            # External URL (YouTube / Vimeo / Loom / etc.)
+            if not (video_url.startswith("http://") or video_url.startswith("https://")):
+                raise HTTPException(status_code=400, detail="video_url must be a valid http(s) URL")
+            filename = video_url
+            is_url_video = True
+        else:
+            if file is None or not file.filename:
+                raise HTTPException(status_code=400, detail="Provide either a video file or video_url")
+            filename = file.filename
+            ext = filename.lower().split(".")[-1]
+            if ext not in ["mp4", "mov", "webm", "m4v", "mp3", "m4a", "wav"]:
+                raise HTTPException(status_code=400, detail="Video must be MP4, MOV, WEBM, M4V, MP3, M4A, or WAV")
+            content = await file.read()
+            gridfs_id = await save_bytes_to_gridfs(content, f"{material_id}_{filename}")
+    else:
+        if file is None or not file.filename:
+            raise HTTPException(status_code=400, detail="File is required for non-video materials")
+        filename = file.filename
+        ext = filename.lower().split(".")[-1]
+        if ext not in ["pdf", "docx"]:
+            raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
+        content = await file.read()
+        gridfs_id = await save_bytes_to_gridfs(content, f"{material_id}_{filename}")
     
     doc = {
         "material_id": material_id,
@@ -1668,12 +1790,38 @@ async def upload_library_material(
         "file_path": "",
         "gridfs_id": gridfs_id,
         "file_name": filename,
+        "video_url": video_url if material_type == "video" and is_url_video else "",
+        "transcript": "",
+        "transcription_status": "pending" if material_type == "video" and not is_url_video else "n/a",
         "uploaded_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.materials.insert_one(doc)
     
+    # For uploaded video files, kick off transcription in the background
+    if material_type == "video" and not is_url_video and gridfs_id:
+        asyncio.create_task(transcribe_video_material(material_id))
+    
     return {"material_id": material_id, "message": "Material added to library"}
+
+
+@api_router.post("/library/materials/{material_id}/transcribe")
+async def trigger_transcription(material_id: str, user: dict = Depends(require_instructor)):
+    """Manually (re-)trigger transcription of a video material."""
+    material = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Library material not found")
+    if material.get("material_type") != "video":
+        raise HTTPException(status_code=400, detail="Only video materials can be transcribed")
+    if not material.get("gridfs_id"):
+        raise HTTPException(status_code=400, detail="Cannot transcribe external URL videos (only uploaded files)")
+    
+    await db.materials.update_one(
+        {"material_id": material_id},
+        {"$set": {"transcription_status": "pending", "transcript": ""}}
+    )
+    asyncio.create_task(transcribe_video_material(material_id))
+    return {"message": "Transcription started"}
 
 @api_router.put("/library/materials/{material_id}")
 async def update_library_material(
@@ -1996,6 +2144,7 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                 "title": m.get("title", ""),
                 "material_type": m.get("material_type", ""),
                 "file_name": m.get("file_name", ""),
+                "video_url": m.get("video_url", ""),
                 "description": m.get("description", "")
             }
             for m in global_mats
@@ -2424,7 +2573,7 @@ async def submit_on_behalf(
             # Get context materials for this week
             context_materials = await db.materials.find({
                 "week_number": material.get("week_number"),
-                "material_type": {"$in": ["workbook", "case_study"]},
+                "material_type": {"$in": ["workbook", "case_study", "video"]},
                 "$or": [
                     {"cohort_ids": submission_cohort_id},
                     {"cohort_id": submission_cohort_id}
@@ -2967,7 +3116,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     context_materials = await db.materials.find({
         "cohort_id": submission["cohort_id"],
         "week_number": material["week_number"],
-        "material_type": {"$in": ["workbook", "case_study"]}
+        "material_type": {"$in": ["workbook", "case_study", "video"]}
     }, {"_id": 0}).to_list(10)
     
     # Always include Course-Wide Resources (is_global=True library materials linked to this cohort)

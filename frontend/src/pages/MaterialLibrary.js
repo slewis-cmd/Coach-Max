@@ -14,7 +14,7 @@ import {
 } from '../components/ui/select';
 import { 
   ArrowLeft, Upload, BookMarked, ClipboardList, Trash2, Download, 
-  Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw
+  Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw, Video, Play
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -49,7 +49,7 @@ export default function MaterialLibrary() {
   const [showAssign, setShowAssign] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false
+    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: ''
   });
   // Filter: show all | week-based | course-wide only
   const [filter, setFilter] = useState('all');
@@ -80,28 +80,40 @@ export default function MaterialLibrary() {
   };
 
   const handleUpload = async () => {
-    if (!form.title.trim() || !form.file) {
-      toast.error('Please provide a title and file');
+    if (!form.title.trim()) {
+      toast.error('Please provide a title');
+      return;
+    }
+    const isVideo = form.material_type === 'video';
+    const usingUrl = isVideo && !!form.video_url.trim();
+    if (isVideo) {
+      if (!form.file && !usingUrl) {
+        toast.error('For a video, either upload a file or paste a YouTube/Vimeo URL');
+        return;
+      }
+    } else if (!form.file) {
+      toast.error('Please select a file');
       return;
     }
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', form.file);
+      if (form.file && !usingUrl) formData.append('file', form.file);
       // Backend expects non-file fields as query parameters
       const params = new URLSearchParams({
         title: form.title,
         description: form.description || '',
         week_number: form.week_number,
         material_type: form.material_type,
-        is_global: form.is_global ? 'true' : 'false'
+        is_global: form.is_global ? 'true' : 'false',
+        video_url: usingUrl ? form.video_url.trim() : ''
       });
       await axios.post(`${API_URL}/api/library/materials?${params.toString()}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      toast.success('Material added to library!');
+      toast.success(isVideo && !usingUrl ? 'Video uploaded — transcription in progress' : 'Material added to library!');
       setShowUpload(false);
-      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false });
+      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '' });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Upload failed');
@@ -132,6 +144,12 @@ export default function MaterialLibrary() {
   };
 
   const handlePreview = async (mat) => {
+    // Videos: open dialog directly, no text extraction
+    if (mat.material_type === 'video') {
+      setPreviewMat(mat);
+      setPreviewText('');
+      return;
+    }
     const ext = (mat.file_name || '').toLowerCase().split('.').pop();
     if (ext === 'pdf') {
       setPreviewMat(mat);
@@ -186,18 +204,21 @@ export default function MaterialLibrary() {
   const typeIcon = (type) => {
     if (type === 'workbook') return <BookMarked className="w-5 h-5 text-[#22438E]" />;
     if (type === 'case_study') return <ClipboardList className="w-5 h-5 text-[#1A75BA]" />;
+    if (type === 'video') return <Video className="w-5 h-5 text-[#22438E]" />;
     return <File className="w-5 h-5 text-[#22438E]" />;
   };
 
   const typeBg = (type) => {
     if (type === 'workbook') return 'bg-[#E1F0FF]';
     if (type === 'case_study') return 'bg-[#7CBAE6]';
+    if (type === 'video') return 'bg-[#FDE68A]';
     return 'bg-[#E1F0FF]';
   };
 
   const typeLabel = (type) => {
     if (type === 'workbook') return 'Workbook';
     if (type === 'case_study') return 'Case Study';
+    if (type === 'video') return 'Video';
     return 'Homework';
   };
 
@@ -233,6 +254,7 @@ export default function MaterialLibrary() {
               { key: 'all', label: 'All' },
               { key: 'week', label: 'Weekly' },
               { key: 'global', label: 'Course-Wide' },
+              { key: 'video', label: 'Videos' },
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -266,6 +288,7 @@ export default function MaterialLibrary() {
               .filter((m) => {
                 if (filter === 'all') return true;
                 if (filter === 'global') return !!m.is_global;
+                if (filter === 'video') return m.material_type === 'video';
                 return !m.is_global;
               })
               .map((mat) => (
@@ -278,7 +301,7 @@ export default function MaterialLibrary() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between mb-1">
                         <div>
-                          <h3 className="font-medium text-[#000000] flex items-center gap-2">
+                          <h3 className="font-medium text-[#000000] flex items-center gap-2 flex-wrap">
                             {mat.title}
                             {mat.is_global && (
                               <span
@@ -288,9 +311,30 @@ export default function MaterialLibrary() {
                                 Course-Wide
                               </span>
                             )}
+                            {mat.material_type === 'video' && mat.video_url && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#EF4444] text-white px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                External Link
+                              </span>
+                            )}
+                            {mat.material_type === 'video' && mat.transcription_status === 'pending' && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#F59E0B] text-white px-2 py-0.5 rounded-full">
+                                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                                Transcribing…
+                              </span>
+                            )}
+                            {mat.material_type === 'video' && mat.transcription_status === 'done' && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#22438E] text-white px-2 py-0.5 rounded-full">
+                                Transcript ready
+                              </span>
+                            )}
+                            {mat.material_type === 'video' && (mat.transcription_status === 'failed' || mat.transcription_status === 'failed_too_large') && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#EF4444] text-white px-2 py-0.5 rounded-full">
+                                Transcription failed
+                              </span>
+                            )}
                           </h3>
                           <p className="text-xs text-[#666666]">
-                            {mat.is_global ? 'All weeks' : `Week ${mat.week_number}`} · {typeLabel(mat.material_type)} · {mat.file_name}
+                            {mat.is_global ? 'All weeks' : `Week ${mat.week_number}`} · {typeLabel(mat.material_type)} · {mat.material_type === 'video' && mat.video_url ? mat.video_url : mat.file_name}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0 ml-4">
@@ -307,14 +351,16 @@ export default function MaterialLibrary() {
                               <Eye className="w-4 h-4 text-[#22438E]" />
                             )}
                           </Button>
-                          <Button 
-                            variant="ghost" size="icon"
-                            onClick={() => downloadFile(`${API_URL}/api/materials/${mat.material_id}/download`, mat.file_name)}
-                            title="Download"
-                            data-testid={`download-lib-${mat.material_id}`}
-                          >
-                            <Download className="w-4 h-4 text-[#333333]" />
-                          </Button>
+                          {!(mat.material_type === 'video' && mat.video_url) && (
+                            <Button 
+                              variant="ghost" size="icon"
+                              onClick={() => downloadFile(`${API_URL}/api/materials/${mat.material_id}/download`, mat.file_name)}
+                              title="Download"
+                              data-testid={`download-lib-${mat.material_id}`}
+                            >
+                              <Download className="w-4 h-4 text-[#333333]" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost" size="icon"
                             onClick={() => handleDuplicate(mat.material_id)}
@@ -417,6 +463,7 @@ export default function MaterialLibrary() {
                     <SelectItem value="workbook">Workbook</SelectItem>
                     <SelectItem value="case_study">Case Study</SelectItem>
                     <SelectItem value="homework">Homework</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -435,19 +482,59 @@ export default function MaterialLibrary() {
                 </div>
               </div>
             </label>
-            <div>
-              <Label>File (PDF or DOCX)</Label>
-              <div className="mt-1">
-                <label htmlFor="lib-file-upload" className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#B8D4E8] rounded-lg cursor-pointer hover:border-[#000000] transition-colors">
-                  <Upload className="w-5 h-5 text-[#666666]" />
-                  <span className="text-sm text-[#333333]">
-                    {form.file ? form.file.name : 'Click to select file'}
-                  </span>
-                </label>
-                <input id="lib-file-upload" data-testid="lib-file-input" type="file" accept=".pdf,.docx"
-                  className="hidden" onChange={(e) => setForm({...form, file: e.target.files?.[0] || null})} />
+            {form.material_type === 'video' ? (
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="lib-video-url">YouTube / Vimeo / Loom URL</Label>
+                  <Input
+                    id="lib-video-url"
+                    data-testid="lib-video-url-input"
+                    placeholder="https://youtube.com/watch?v=..."
+                    value={form.video_url}
+                    onChange={(e) => setForm({...form, video_url: e.target.value, file: e.target.value ? null : form.file})}
+                    className="mt-1"
+                    disabled={!!form.file}
+                  />
+                  <p className="text-xs text-[#666666] mt-1">Paste a video URL (external videos are stored as a link).</p>
+                </div>
+                <div className="text-xs text-center text-[#666666]">— or —</div>
+                <div>
+                  <Label>Upload video file (MP4, MOV, WEBM, up to ~100 MB)</Label>
+                  <div className="mt-1">
+                    <label htmlFor="lib-video-file-upload" className={`flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#B8D4E8] rounded-lg transition-colors ${form.video_url ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[#000000]'}`}>
+                      <Upload className="w-5 h-5 text-[#666666]" />
+                      <span className="text-sm text-[#333333]">
+                        {form.file ? form.file.name : 'Click to select video file'}
+                      </span>
+                    </label>
+                    <input
+                      id="lib-video-file-upload"
+                      data-testid="lib-video-file-input"
+                      type="file"
+                      accept="video/*,.mp4,.mov,.webm,.m4v,.mp3,.m4a,.wav"
+                      className="hidden"
+                      disabled={!!form.video_url}
+                      onChange={(e) => setForm({...form, file: e.target.files?.[0] || null, video_url: e.target.files?.[0] ? '' : form.video_url})}
+                    />
+                  </div>
+                  <p className="text-xs text-[#666666] mt-1">Uploaded videos are automatically transcribed via Whisper so the AI can reference them.</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <Label>File (PDF or DOCX)</Label>
+                <div className="mt-1">
+                  <label htmlFor="lib-file-upload" className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#B8D4E8] rounded-lg cursor-pointer hover:border-[#000000] transition-colors">
+                    <Upload className="w-5 h-5 text-[#666666]" />
+                    <span className="text-sm text-[#333333]">
+                      {form.file ? form.file.name : 'Click to select file'}
+                    </span>
+                  </label>
+                  <input id="lib-file-upload" data-testid="lib-file-input" type="file" accept=".pdf,.docx"
+                    className="hidden" onChange={(e) => setForm({...form, file: e.target.files?.[0] || null})} />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
@@ -514,23 +601,79 @@ export default function MaterialLibrary() {
           <DialogHeader className="px-6 pt-6 pb-3 border-b border-[#B8D4E8]">
             <DialogTitle className="font-normal text-xl flex items-center justify-between gap-4">
               <span className="truncate">{previewMat?.title || 'Preview'}</span>
-              <button
-                onClick={() => downloadFile(`${API_URL}/api/materials/${previewMat?.material_id}/download`, previewMat?.file_name)}
-                className="inline-flex items-center gap-1.5 text-sm text-[#22438E] hover:bg-[#E1F0FF] px-3 py-1.5 rounded-md font-normal"
-                data-testid="preview-download-btn"
-              >
-                <Download className="w-4 h-4" />
-                Download
-              </button>
+              {!(previewMat?.material_type === 'video' && previewMat?.video_url) && (
+                <button
+                  onClick={() => downloadFile(`${API_URL}/api/materials/${previewMat?.material_id}/download`, previewMat?.file_name)}
+                  className="inline-flex items-center gap-1.5 text-sm text-[#22438E] hover:bg-[#E1F0FF] px-3 py-1.5 rounded-md font-normal"
+                  data-testid="preview-download-btn"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </button>
+              )}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              {previewMat?.file_name} · Week {previewMat?.week_number}
+              {previewMat?.material_type === 'video' && previewMat?.video_url
+                ? previewMat.video_url
+                : `${previewMat?.file_name || ''} · Week ${previewMat?.week_number || ''}`}
             </DialogDescription>
           </DialogHeader>
           <div className="px-6 pb-6 pt-2">
             {previewMat && (() => {
               const ext = (previewMat.file_name || '').toLowerCase().split('.').pop();
               const token = localStorage.getItem('thinkific_session_token');
+              // Video preview
+              if (previewMat.material_type === 'video') {
+                const url = previewMat.video_url || '';
+                // YouTube
+                const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{6,})/);
+                if (ytMatch) {
+                  return (
+                    <iframe
+                      title="Video preview"
+                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                      className="w-full h-[75vh] rounded-md border border-[#B8D4E8]"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      data-testid="library-preview-youtube"
+                    />
+                  );
+                }
+                // Vimeo
+                const vmMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+                if (vmMatch) {
+                  return (
+                    <iframe
+                      title="Video preview"
+                      src={`https://player.vimeo.com/video/${vmMatch[1]}`}
+                      className="w-full h-[75vh] rounded-md border border-[#B8D4E8]"
+                      allow="autoplay; fullscreen; picture-in-picture"
+                      allowFullScreen
+                      data-testid="library-preview-vimeo"
+                    />
+                  );
+                }
+                // Other external URL — fallback to plain link
+                if (url) {
+                  return (
+                    <div className="p-8 text-center border border-[#B8D4E8] rounded-md">
+                      <a href={url} target="_blank" rel="noreferrer" className="text-[#22438E] underline break-all">
+                        {url}
+                      </a>
+                    </div>
+                  );
+                }
+                // Uploaded video file — HTML5 player streams from the download endpoint (inline)
+                const src = `${API_URL}/api/materials/${previewMat.material_id}/download?inline=1&token=${encodeURIComponent(token || '')}`;
+                return (
+                  <video
+                    src={src}
+                    controls
+                    className="w-full h-[75vh] rounded-md border border-[#B8D4E8] bg-black"
+                    data-testid="library-preview-video"
+                  />
+                );
+              }
               if (ext === 'pdf') {
                 const src = `${API_URL}/api/materials/${previewMat.material_id}/download?inline=1&token=${encodeURIComponent(token || '')}`;
                 return (

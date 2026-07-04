@@ -1,0 +1,50 @@
+{
+  "summary": "Tested new Video Materials feature (POST /api/library/materials with material_type='video' — file or URL, plus /transcribe endpoint, duplicate regression, and student dashboard). 16 of 18 backend tests pass (88.9%). End-to-end Whisper transcription via emergentintegrations.OpenAISpeechToText works — pipeline transitioned pending → done within ~4s on a 3s WAV sine (transcript empty since no words, which is expected). Two failures uncovered a real bug in duplicate_library_material() — see backend_issues.critical below.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/library/materials/{id}/duplicate",
+        "issue": "Duplicating a URL-based video (no gridfs_id) returns 404 'File reference missing'. The handler unconditionally calls read_bytes_from_doc(src) at server.py:1889 without checking material_type=='video' + video_url. It also omits video_url, transcript, and transcription_status from the new doc (server.py:1898-1914), so even for uploaded videos the copy loses transcription state.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/library/materials/{id}/duplicate (uploaded video)",
+        "issue": "New doc is missing transcription_status entirely — should be 'pending' (to re-transcribe from copied GridFS file) or 'done' (if we choose to copy transcript). Also missing video_url (should be '' for uploaded) and transcript fields. Downstream read_file_text() will return empty string for the duplicate video."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_video_materials.py",
+    "/app/test_reports/pytest/video_materials.xml"
+  ],
+  "action_items": [
+    "Fix duplicate_library_material at /app/backend/server.py:1880-1916 to (a) short-circuit for URL videos: skip read_bytes_from_doc and copy video_url over verbatim with gridfs_id='' and transcription_status='n/a'; (b) for uploaded videos, include transcription_status='pending' (and transcript='') in the new doc plus fire asyncio.create_task(transcribe_video_material(new_material_id)); (c) always include video_url, transcript, transcription_status keys in the duplicate doc so schema stays consistent."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1880 duplicate_library_material is not video-aware. Recommended patch: guard block similar to upload_library_material — if src.material_type=='video' and src.video_url: skip GridFS copy; else if video upload: copy GridFS + set transcription_status='pending' + schedule background transcription; always propagate video_url, transcript, transcription_status keys.",
+    "server.py:1731 upload_library_material: file=File(None) works — verified workbook/case_study still reject missing file with 400. Good.",
+    "server.py:186 transcribe_video_material: emergentintegrations.OpenAISpeechToText().transcribe with response_format='text' returns a plain str; the response.text fallback is dead code but harmless.",
+    "server.py:2141 student dashboard course_resources correctly includes video_url — verified via test.",
+    "server.py:147 read_file_text video branch returns transcript with '[VIDEO TRANSCRIPT]' label — good for downstream AI context. Empty transcript falls through to '' string (acceptable)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_video_materials.py (new)"
+  ],
+  "success_rate": {
+    "backend": "88.9% (16/18)",
+    "frontend": "not tested (scope: backend only per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org — session token seeded directly into user_sessions via pytest fixture (deleted on teardown).",
+  "seed_data_creation": "Per-run ephemeral admin session, instructor + student users, one cohort, and TEST_VIDEO_ prefixed materials. All cleaned by module-scope autouse teardown (materials + GridFS chunks/files).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Two duplicate-related tests should re-run after fix: TestDuplicateVideo::test_duplicate_url_video_preserves_url_and_status and TestDuplicateVideo::test_duplicate_uploaded_video_resets_transcription in /app/backend/tests/test_video_materials.py. Export env vars first: `export $(grep -v '^#' /app/frontend/.env | xargs) && export $(grep -v '^#' /app/backend/.env | xargs)`. ffmpeg is at /usr/bin/ffmpeg. Whisper pipeline confirmed working (uses emergentintegrations.llm.openai.OpenAISpeechToText, model=whisper-1). A 3-second sine tone was transcribed to done status in ~4s; note that a tone has no words so transcript comes back as empty string — this is expected behavior, not a bug.",
+  "rca of the issue": "duplicate_library_material at server.py:1880-1916 was written before the video feature was added and was never updated. It (a) assumes every library material has a downloadable GridFS/disk file (crashes for URL-only videos), and (b) constructs the new doc with a fixed field list that predates the video schema (missing video_url, transcript, transcription_status). Reproduction: POST /api/library/materials with material_type=video + video_url=https://youtube.com/... then POST /api/library/materials/{id}/duplicate → 404 'File reference missing'. Mitigation is above under action_items."
+}

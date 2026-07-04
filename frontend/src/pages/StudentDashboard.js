@@ -8,7 +8,7 @@ import {
 } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { 
-  BookOpen, LogOut, Upload, CheckCircle, Clock, MessageSquare, FileText,
+  BookOpen, LogOut, Upload, CheckCircle, Clock, MessageSquare, FileText, PlayCircle,
   ChevronDown, ChevronUp, File, Calendar, Hourglass, Send, X, MessageCircle, Download,
   Globe
 } from 'lucide-react';
@@ -267,23 +267,32 @@ export default function StudentDashboard() {
                 <span className="text-xs text-[#666666] ml-1">— applies across all weeks</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {activeCohort.course_resources.map((mat) => (
-                  <button
-                    key={mat.material_id}
-                    onClick={() =>
+                {activeCohort.course_resources.map((mat) => {
+                  const isVideo = mat.material_type === 'video';
+                  const isUrlVideo = isVideo && !!mat.video_url;
+                  const handleClick = () => {
+                    if (isUrlVideo) {
+                      window.open(mat.video_url, '_blank', 'noopener,noreferrer');
+                    } else {
                       downloadFile(
                         `${API_URL}/api/materials/${mat.material_id}/download`,
                         mat.file_name
-                      )
+                      );
                     }
-                    className="inline-flex items-center gap-1.5 text-xs bg-[#E1F0FF] border border-[#B8D4E8] text-[#22438E] rounded-lg px-3 py-2 hover:bg-[#B8D4E8] transition-colors"
-                    title={mat.description || mat.title}
-                    data-testid={`course-resource-${mat.material_id}`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    {mat.title}
-                  </button>
-                ))}
+                  };
+                  return (
+                    <button
+                      key={mat.material_id}
+                      onClick={handleClick}
+                      className="inline-flex items-center gap-1.5 text-xs bg-[#E1F0FF] border border-[#B8D4E8] text-[#22438E] rounded-lg px-3 py-2 hover:bg-[#B8D4E8] transition-colors"
+                      title={mat.description || mat.title}
+                      data-testid={`course-resource-${mat.material_id}`}
+                    >
+                      {isVideo ? <PlayCircle className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                      {mat.title}
+                    </button>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
