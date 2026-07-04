@@ -16,44 +16,10 @@ import { toast } from 'sonner';
 import axios from 'axios';
 import { downloadFile } from '../utils/download';
 import { CoachMaxChat } from '../components/student/CoachMaxChat';
+import { StatusBadge } from '../components/student/StatusBadge';
+import { HomeworkTrackRow } from '../components/student/HomeworkTrackRow';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-
-const STATUS_CONFIG = {
-  no_homework: { label: '', color: '', icon: null },
-  waiting_on_submission: {
-    label: 'Waiting on Submission',
-    color: 'bg-[#FEF3C7] text-[#92400E]',
-    icon: Clock
-  },
-  submitted: {
-    label: 'Submitted',
-    color: 'bg-[#DBEAFE] text-[#1E40AF]',
-    icon: Send
-  },
-  under_review: {
-    label: 'Under Review',
-    color: 'bg-[#E1F0FF] text-[#6B21A8]',
-    icon: Hourglass
-  },
-  feedback_provided: {
-    label: 'Feedback Provided',
-    color: 'bg-[#E1F0FF] text-[#22438E]',
-    icon: CheckCircle
-  }
-};
-
-function StatusBadge({ status }) {
-  const config = STATUS_CONFIG[status];
-  if (!config || !config.label) return null;
-  const Icon = config.icon;
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${config.color}`} data-testid={`status-${status}`}>
-      {Icon && <Icon className="w-3 h-3" />}
-      {config.label}
-    </span>
-  );
-}
 
 function EmptyStateCard({ icon: Icon, title, message }) {
   return (
@@ -316,164 +282,96 @@ export default function StudentDashboard() {
           <div className="space-y-3" data-testid="weekly-progress">
             {activeCohort.weeks.map((week) => {
               const weekKey = `${activeCohort.cohort_id}-${week.week_number}`;
-              const isExpanded = expandedWeek === weekKey;
-              const hasFeedback = week.status === 'feedback_provided' && week.feedback;
-              const hasHomework = week.status !== 'no_homework';
-              const canSubmit = hasHomework && (week.status === 'waiting_on_submission' || week.status === 'submitted' || week.status === 'under_review' || week.status === 'feedback_provided');
-              const hasSubmission = week.submission && week.status !== 'waiting_on_submission';
+              const homeworks = week.homeworks && week.homeworks.length > 0
+                ? week.homeworks
+                : (week.homework ? [{ ...week.homework, submission: week.submission, status: week.status, feedback: week.feedback }] : []);
+              const hasHomework = homeworks.length > 0;
+              const hasAnyFeedback = homeworks.some(h => h.status === 'feedback_provided' && h.feedback);
 
               return (
                 <Card
                   key={week.week_number}
                   className={`bg-white border-[#B8D4E8] transition-all ${
-                    hasFeedback ? 'hover:shadow-md' : ''
+                    hasAnyFeedback ? 'hover:shadow-md' : ''
                   } ${!hasHomework ? 'opacity-50' : ''}`}
                   data-testid={`week-${week.week_number}`}
                 >
-                  <CardContent className="p-0">
-                    {/* Week Row */}
-                    <div
-                      className={`flex items-center gap-4 p-4 md:p-5 ${hasFeedback ? 'cursor-pointer' : ''}`}
-                      onClick={hasFeedback ? () => toggleFeedback(weekKey) : undefined}
-                    >
-                      {/* Week Number */}
+                  <CardContent className="p-4 md:p-5">
+                    {/* Week Header */}
+                    <div className="flex items-center gap-4 mb-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm flex-shrink-0 ${getWeekNumberClass(week.status)}`}>
                         {week.week_number}
                       </div>
-
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 flex-wrap">
                           <h3 className="font-medium text-[#000000] text-sm md:text-base">
                             Week {week.week_number}
                           </h3>
                           <StatusBadge status={week.status} />
+                          {homeworks.length > 1 && (
+                            <span className="text-xs text-[#666666]">
+                              {homeworks.length} exercises
+                            </span>
+                          )}
                         </div>
-                        {week.homework && (
-                          <p className="text-sm text-[#333333] mt-0.5 truncate">
-                            {week.homework.title}
-                            {week.homework.due_date && (
-                              <span className="inline-flex items-center gap-1 ml-3 text-xs text-[#92400E]">
-                                <Calendar className="w-3 h-3" />
-                                Due {new Date(week.homework.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            )}
-                          </p>
-                        )}
-                        {week.submission && week.status !== 'waiting_on_submission' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadFile(
-                                `${API_URL}/api/submissions/${week.submission.submission_id}/download`,
-                                week.submission.file_name
-                              );
-                            }}
-                            className="inline-flex items-center gap-1.5 mt-1 text-xs text-[#22438E] hover:text-[#1A3A7A] transition-colors"
-                            data-testid={`download-submission-${week.week_number}`}
-                          >
-                            <File className="w-3 h-3" />
-                            Your submission: {week.submission.file_name}
-                            <Download className="w-3 h-3 ml-0.5" />
-                          </button>
-                        )}
                         {!hasHomework && (
                           <p className="text-sm text-[#666666] mt-0.5">No assignment yet</p>
                         )}
                       </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {canSubmit && (
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openUpload(week.homework, activeCohort.cohort_id);
-                            }}
-                            className={`rounded-lg text-xs md:text-sm ${
-                              hasSubmission 
-                                ? 'bg-[#1A75BA] text-white hover:bg-[#713F12]' 
-                                : 'bg-[#22438E] text-white hover:bg-[#1A3A7A]'
-                            }`}
-                            data-testid={`submit-week-${week.week_number}`}
-                          >
-                            <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            {hasSubmission ? 'Resubmit' : 'Submit'}
-                          </Button>
-                        )}
-                        {hasFeedback && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-[#22438E] hover:bg-[#E1F0FF]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFeedback(weekKey);
-                            }}
-                            data-testid={`view-feedback-${week.week_number}`}
-                          >
-                            <MessageSquare className="w-4 h-4 mr-1" />
-                            Feedback
-                            {isExpanded ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-                          </Button>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Expanded Feedback */}
-                    {hasFeedback && isExpanded && (
-                      <div className="border-t border-[#B8D4E8] p-5 md:p-6 bg-[#F0FDF4] animate-fade-in" data-testid={`feedback-content-${week.week_number}`}>
-                        {/* Week Materials - downloadable */}
-                        {week.materials && week.materials.length > 0 && (
-                          <div className="mb-4 pb-3 border-b border-[#B8D4E8]">
-                            <p className="text-xs font-medium text-[#22438E] uppercase tracking-wide mb-2">Week Materials</p>
-                            <div className="flex flex-wrap gap-2">
-                              {week.materials.map(mat => (
-                                <button
-                                  key={mat.material_id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    downloadFile(
-                                      `${API_URL}/api/materials/${mat.material_id}/download`,
-                                      mat.file_name
-                                    );
-                                  }}
-                                  className="inline-flex items-center gap-1.5 text-xs bg-white border border-[#B8D4E8] text-[#22438E] rounded-lg px-2.5 py-1.5 hover:bg-[#E1F0FF] transition-colors"
-                                  data-testid={`download-material-${mat.material_id}`}
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  {mat.file_name}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-[#22438E]" />
-                            <span className="text-sm font-medium text-[#22438E]">Instructor Feedback</span>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setChatOpen({
-                                submissionId: week.submission.submission_id,
-                                weekNumber: week.week_number
-                              });
-                            }}
-                            className="border-[#1A75BA] text-[#1A75BA] hover:bg-[#E1F0FF] rounded-lg"
-                            data-testid={`ask-coach-max-${week.week_number}`}
-                          >
-                            <MessageCircle className="w-4 h-4 mr-1.5" />
-                            Ask Coach Max
-                          </Button>
+                    {/* Week Materials — downloadable when any feedback exists */}
+                    {hasAnyFeedback && week.materials && week.materials.length > 0 && (
+                      <div className="mb-3 pb-3 border-b border-[#B8D4E8]">
+                        <p className="text-xs font-medium text-[#22438E] uppercase tracking-wide mb-2">Week Materials</p>
+                        <div className="flex flex-wrap gap-2">
+                          {week.materials.map(mat => (
+                            <button
+                              key={mat.material_id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadFile(
+                                  `${API_URL}/api/materials/${mat.material_id}/download`,
+                                  mat.file_name
+                                );
+                              }}
+                              className="inline-flex items-center gap-1.5 text-xs bg-white border border-[#B8D4E8] text-[#22438E] rounded-lg px-2.5 py-1.5 hover:bg-[#E1F0FF] transition-colors"
+                              data-testid={`download-material-${mat.material_id}`}
+                            >
+                              <FileText className="w-3 h-3" />
+                              {mat.file_name}
+                            </button>
+                          ))}
                         </div>
-                        <div className="text-sm text-[#000000] whitespace-pre-wrap leading-relaxed pl-6">
-                          {week.feedback}
-                        </div>
+                      </div>
+                    )}
+
+                    {/* Homework tracks (one row per track) */}
+                    {hasHomework && (
+                      <div className="space-y-2">
+                        {homeworks.map((hw, idx) => {
+                          const trackKey = `${weekKey}-${hw.material_id}`;
+                          const isExpanded = expandedWeek === trackKey;
+                          const showLabel = homeworks.length > 1 ? `Exercise ${idx + 1}` : null;
+                          return (
+                            <HomeworkTrackRow
+                              key={hw.material_id}
+                              hw={hw}
+                              weekNumber={week.week_number}
+                              cohortId={activeCohort.cohort_id}
+                              showLabel={showLabel}
+                              isExpanded={isExpanded}
+                              onToggleExpand={(e) => {
+                                if (e) e.stopPropagation();
+                                toggleFeedback(trackKey);
+                              }}
+                              onOpenUpload={(hwWithCohort) => openUpload(hwWithCohort, activeCohort.cohort_id)}
+                              onAskCoachMax={(submissionId, weekNumber) =>
+                                setChatOpen({ submissionId, weekNumber })
+                              }
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </CardContent>

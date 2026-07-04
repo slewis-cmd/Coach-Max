@@ -2189,8 +2189,9 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
             
             week_data = {
                 "week_number": week_num,
-                "homework": None,
-                "submission": None,
+                "homework": None,          # kept for back-compat = first homework
+                "submission": None,        # kept for back-compat = first submission
+                "homeworks": [],           # NEW: full array (supports N tracks per week)
                 "status": "no_homework",
                 "feedback": None,
                 "materials": []
@@ -2205,20 +2206,30 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                     "file_name": mat.get("file_name", "")
                 })
             
-            if homework_list:
-                hw = homework_list[0]
-                week_data["homework"] = {
+            # Rank statuses so the top-level status = least-complete across all homeworks
+            status_rank = {
+                "no_homework": 0,
+                "feedback_provided": 1,
+                "under_review": 2,
+                "submitted": 3,
+                "waiting_on_submission": 4,
+            }
+            worst_status = "no_homework"
+            
+            for hw in homework_list:
+                hw_entry = {
                     "material_id": hw["material_id"],
                     "title": hw.get("title", ""),
                     "description": hw.get("description", ""),
                     "due_date": hw.get("due_date"),
-                    "file_name": hw.get("file_name", "")
+                    "file_name": hw.get("file_name", ""),
+                    "submission": None,
+                    "status": "waiting_on_submission",
+                    "feedback": None,
                 }
-                week_data["status"] = "waiting_on_submission"
-                
                 sub = next((s for s in submissions if s.get("material_id") == hw["material_id"]), None)
                 if sub:
-                    week_data["submission"] = {
+                    hw_entry["submission"] = {
                         "submission_id": sub["submission_id"],
                         "file_name": sub.get("file_name", ""),
                         "submitted_at": sub.get("submitted_at", ""),
@@ -2226,12 +2237,33 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                         "resubmission_count": sub.get("resubmission_count", 0)
                     }
                     if sub.get("status") == "pending":
-                        week_data["status"] = "submitted"
+                        hw_entry["status"] = "submitted"
                     elif sub.get("status") == "draft":
-                        week_data["status"] = "under_review"
+                        hw_entry["status"] = "under_review"
                     elif sub.get("status") == "sent":
-                        week_data["status"] = "feedback_provided"
-                        week_data["feedback"] = sub.get("instructor_feedback") or sub.get("ai_feedback")
+                        hw_entry["status"] = "feedback_provided"
+                        hw_entry["feedback"] = sub.get("instructor_feedback") or sub.get("ai_feedback")
+                
+                week_data["homeworks"].append(hw_entry)
+                if status_rank.get(hw_entry["status"], 0) > status_rank.get(worst_status, 0):
+                    worst_status = hw_entry["status"]
+            
+            if homework_list:
+                first = week_data["homeworks"][0]
+                # Legacy fields (single-homework consumers)
+                week_data["homework"] = {
+                    "material_id": first["material_id"],
+                    "title": first["title"],
+                    "description": first["description"],
+                    "due_date": first["due_date"],
+                    "file_name": first["file_name"],
+                }
+                week_data["submission"] = first["submission"]
+                week_data["status"] = worst_status
+                # Legacy top-level feedback: prefer any feedback_provided entry
+                fb_entry = next((h for h in week_data["homeworks"] if h["status"] == "feedback_provided"), None)
+                if fb_entry:
+                    week_data["feedback"] = fb_entry["feedback"]
             
             weeks.append(week_data)
         

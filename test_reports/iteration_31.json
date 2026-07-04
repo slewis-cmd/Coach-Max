@@ -1,0 +1,35 @@
+{
+  "summary": "Backend testing of the multi-homework-per-week feature in /api/student/dashboard. Verified that (a) single-homework cohorts still return a 1-element homeworks[] array with legacy homework/submission fields populated, (b) 2-homework weeks return a 2-element array with per-material_id status/submission/feedback, (c) overall week.status = least-complete across all HWs using the status_rank ordering, (d) student-submit and instructor-review are per-material and independent, and (e) course_resources + week.materials regression fields are unchanged. All 16 tests PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multi_homework_dashboard.py",
+    "/app/test_reports/pytest/multi_homework_dashboard.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:2188-2268 status_rank logic is correct: dict lookup with default 0 correctly handles the 'no_homework' baseline; iteration keeps the max-ranked (least complete) status. Verified all 6 combinations (both-waiting, sent+waiting, sent+pending, sent+draft, both-sent, draft+pending).",
+    "server.py:2251-2266 legacy field mapping is sound. week.homework -> first entry of homeworks[]; week.submission -> first entry's submission; week.feedback -> first feedback_provided entry's feedback (not necessarily first). Consider aligning legacy feedback to first HW's feedback for stricter back-compat, but current behavior is arguably better (surfaces any feedback available).",
+    "server.py:2244 uses `sub.get('instructor_feedback') or sub.get('ai_feedback')` for the per-HW feedback field — matches ask-tutor + send-feedback semantics.",
+    "Materials query at server.py:2150 loads only cohort-scoped materials (not library materials assigned to the cohort). Homework materials from the library that are cohort-linked would NOT appear as homework tracks unless duplicated into the cohort. Not a regression from this change but worth calling out if the product wants library homework to count as a track.",
+    "Note: /api/materials/{id}/submit doesn't strictly validate PDF magic bytes — only extension. Tests use a minimal valid-ish PDF; still passes. Not a blocker."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (16/16)",
+    "frontend": "not tested (scope: backend only per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org — seeded a session token directly into user_sessions via pytest fixture (deleted on teardown). Additional per-module ephemeral instructor + student users.",
+  "seed_data_creation": "Per-run: 1 admin session, 1 instructor + 1 student user, 1 cohort with released_weeks=[3,5], 2 homework materials (HW1_A, HW1_B) in week 3 + 1 workbook + 1 case_study, and 2 additional homework materials (HW_X, HW_Y) in week 5 for status-rank isolation tests. All prefixed TEST_MHW_. Fully cleaned up (users, sessions, materials, submissions, GridFS blobs) in autouse teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Multi-homework feature is fully green (16/16). If the main agent later fixes the library-homework-as-track gap, re-run: `pytest /app/backend/tests/test_multi_homework_dashboard.py -v`. Env export: `export $(grep -v '^#' /app/frontend/.env | xargs) && export $(grep -v '^#' /app/backend/.env | xargs)`. Live AI review was intentionally skipped (GPT-5.2 latency); per-material AI review behavior is validated via DB-state simulation + authz + not-found checks on /submissions/{id}/review.",
+  "rca of the issue": "Not applicable — no regression found. The rewrite of get_student_dashboard (server.py ~2188) correctly aggregates N homeworks per week and preserves legacy top-level fields; status_rank produces the least-complete overall status; per-material submissions and reviews remain isolated by submission.material_id."
+}
