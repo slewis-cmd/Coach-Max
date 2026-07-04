@@ -214,6 +214,18 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Multi-Homework per Week (February 2026)
+- [x] `/api/student/dashboard` now returns `weeks[i].homeworks[]` — full array of homework tracks per week
+- [x] Each homework entry has its own `status`, `submission`, `feedback`, `due_date`
+- [x] Overall week status = least-complete across all homeworks (via `status_rank`)
+- [x] Legacy `homework` / `submission` / `feedback` top-level fields preserved (point to first homework)
+- [x] Frontend Student Dashboard renders one row per homework in the week card, with "Exercise 1" / "Exercise 2" labels when 2+
+- [x] Each homework has its own Submit/Resubmit button, feedback expand, and Ask Coach Max button
+- [x] Extracted `<HomeworkTrackRow>` and `<StatusBadge>` into `/components/student/`
+- [x] Library homework materials assigned to a cohort also appear as tracks (via the existing library_materials.extend flow)
+- [x] Submissions, AI reviews, and feedback emails all remain per-material-id (no changes needed)
+- [x] 16/16 backend tests pass (iteration_31.json)
+
 ### Video Library Materials (February 2026)
 - [x] New `material_type: "video"` — supports both **MP4/MOV/WEBM/M4A/WAV uploads** and **YouTube/Vimeo/Loom URLs**
 - [x] Uploaded videos → **auto-transcribed via OpenAI Whisper** (background task using ffmpeg to extract mono 16kHz 32kbps audio, then `emergentintegrations.OpenAISpeechToText` with `whisper-1`)
