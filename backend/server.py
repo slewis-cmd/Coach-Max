@@ -1879,21 +1879,36 @@ async def delete_library_material(material_id: str, user: dict = Depends(require
 
 @api_router.post("/library/materials/{material_id}/duplicate")
 async def duplicate_library_material(material_id: str, user: dict = Depends(require_instructor)):
-    """Duplicate a library material as an unassigned template. Copies the GridFS file too."""
+    """Duplicate a library material as an unassigned template.
+    - PDF/DOCX/uploaded video: copies GridFS bytes into a new entry.
+    - URL-based video: copies the video_url reference only (no GridFS)."""
     src = await db.materials.find_one({"material_id": material_id, "is_library": True}, {"_id": 0})
     if not src:
         raise HTTPException(status_code=404, detail="Library material not found")
     
-    # Copy file bytes to a new GridFS entry (so deleting the original won't affect the copy)
-    try:
-        file_bytes = await read_bytes_from_doc(src)
-    except HTTPException as e:
-        if e.status_code == 410:
-            raise HTTPException(status_code=410, detail="Original file is no longer available; cannot duplicate.")
-        raise
+    is_video = src.get("material_type") == "video"
+    is_url_video = is_video and bool(src.get("video_url"))
     
     new_material_id = f"lib_{uuid.uuid4().hex[:12]}"
-    new_gridfs_id = await save_bytes_to_gridfs(file_bytes, f"{new_material_id}_{src['file_name']}")
+    new_gridfs_id = ""
+    
+    if not is_url_video:
+        # Copy file bytes to a new GridFS entry
+        try:
+            file_bytes = await read_bytes_from_doc(src)
+        except HTTPException as e:
+            if e.status_code == 410:
+                raise HTTPException(status_code=410, detail="Original file is no longer available; cannot duplicate.")
+            raise
+        new_gridfs_id = await save_bytes_to_gridfs(file_bytes, f"{new_material_id}_{src['file_name']}")
+    
+    # transcription_status: URL videos → 'n/a'; uploaded videos → 'pending' (re-transcribe copy); others → 'n/a'
+    if is_url_video:
+        new_transcription_status = "n/a"
+    elif is_video:
+        new_transcription_status = "pending"
+    else:
+        new_transcription_status = "n/a"
     
     doc = {
         "material_id": new_material_id,
@@ -1907,12 +1922,20 @@ async def duplicate_library_material(material_id: str, user: dict = Depends(requ
         "description": src.get("description"),
         "file_path": "",
         "gridfs_id": new_gridfs_id,
-        "file_name": src["file_name"],
+        "file_name": src.get("file_name", ""),
+        "video_url": src.get("video_url", "") if is_url_video else "",
+        "transcript": "",
+        "transcription_status": new_transcription_status,
         "uploaded_by": user["user_id"],
         "duplicated_from": material_id,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.materials.insert_one(doc)
+    
+    # Fire background transcription for the copied uploaded video
+    if is_video and not is_url_video and new_gridfs_id:
+        asyncio.create_task(transcribe_video_material(new_material_id))
+    
     return {"material_id": new_material_id, "message": "Material duplicated as template"}
 
 

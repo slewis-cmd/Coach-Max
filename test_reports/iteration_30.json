@@ -1,0 +1,33 @@
+{
+  "summary": "Retest of duplicate_library_material fix (server.py:1880-1939) in the Video Materials feature. Full test_video_materials.py suite now passes 18/18 (was 16/18 in iteration_29). Both previously failing duplicate tests now pass. Also verified end-to-end via ad-hoc script that a duplicated uploaded video (a) gets its own distinct gridfs_id, (b) fires the background transcribe_video_material task, and (c) reaches transcription_status='done' independently of the source.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_video_materials.py",
+    "/app/test_reports/pytest/video_materials.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1880-1939 duplicate_library_material fix looks clean: correctly branches on is_url_video vs is_video-uploaded vs other, propagates video_url/gridfs_id/transcription_status appropriately, and fires asyncio.create_task(transcribe_video_material(new_material_id)) only when a new GridFS blob was actually written. Confirmed behaviorally.",
+    "Minor: transcript field is hard-reset to '' for uploaded-video duplicates even though the original may already have a transcript. Since background re-transcription is scheduled, this is correct but slightly wasteful for large videos — consider copying the transcript and skipping re-transcription in a future optimization. Not blocking.",
+    "410 handling on read_bytes_from_doc during duplicate is now explicit — nice defensive re-raise."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (18/18)",
+    "frontend": "not tested (scope: backend only per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org — session token seeded directly into user_sessions via pytest fixture (deleted on teardown).",
+  "seed_data_creation": "Per-run ephemeral admin session, instructor + student users, one cohort, and TEST_VIDEO_ prefixed materials. All cleaned by module-scope autouse teardown (materials + GridFS chunks/files).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Video Materials feature is fully green (18/18). No open issues on duplicate_library_material. If future changes touch duplicate flow, re-run: `pytest /app/backend/tests/test_video_materials.py -v`. Env export: `export $(grep -v '^#' /app/frontend/.env | xargs) && export $(grep -v '^#' /app/backend/.env | xargs)`. Whisper pipeline uses emergentintegrations OpenAISpeechToText (whisper-1) and completes ~4s on a 3s WAV.",
+  "rca of the issue": "Previous iteration_29 failure RCA: duplicate_library_material assumed all materials had a GridFS file and did not propagate video-specific fields. Fix: added is_video/is_url_video branching, skip GridFS copy for URL videos (video_url preserved, transcription_status='n/a'), for uploaded videos copy GridFS bytes + set transcription_status='pending' + schedule background transcription. Verified: both automated tests pass and manual end-to-end run shows duplicate reaches independent 'done' state with distinct gridfs_id."
+}
