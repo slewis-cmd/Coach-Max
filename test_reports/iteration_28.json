@@ -1,0 +1,32 @@
+{
+  "summary": "Retest of TestDuplicatePreservesIsGlobal after one-line fix at /app/backend/server.py:1753 adding `\"is_global\": bool(src.get(\"is_global\", False))` to the duplicate handler. Both previously failing tests now PASS. Ran full test_global_materials.py suite for regression: 12/12 pass (previously 11/12). Fix verified — duplicating a Course-Wide (global) material now preserves is_global=True and week_number=0; duplicating a regular material preserves is_global=False.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_global_materials.py",
+    "/app/test_reports/pytest/global_materials_duplicate_retest.xml",
+    "/app/test_reports/pytest/global_materials_full_retest.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1753 fix uses `bool(src.get('is_global', False))` which is defensive and correct. week_number fallback at line 1756 was also improved to `0 if src.get('is_global') else 1` which aligns duplicate defaults with the upload path — good hardening beyond the minimal fix."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (12/12)",
+    "frontend": "not tested (scope: backend only)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org — session token seeded directly into user_sessions via pytest fixture (deleted post-run).",
+  "seed_data_creation": "Same as iteration_27: per-run ephemeral admin session, instructor+student users, cohorts and TEST_GLOBAL_ prefixed materials. All cleaned up by module teardown fixture.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The is_global duplicate fix is verified. Full suite (12 tests, ~11s) runs green. Export env vars before pytest: `export $(grep -v '^#' /app/frontend/.env | xargs) && export $(grep -v '^#' /app/backend/.env | xargs)` — REACT_APP_BACKEND_URL, MONGO_URL, DB_NAME are required.",
+  "rca of the issue": "Original bug: duplicate_library_material at server.py:1750 built a fresh doc dict and omitted is_global. Fix applied by main agent adds `\"is_global\": bool(src.get(\"is_global\", False))` at line 1753 and also improves week_number fallback to `0 if src.get('is_global') else 1` at line 1756. Verified via TestDuplicatePreservesIsGlobal::test_duplicate_global_material_keeps_is_global (asserts is_global=True and week_number=0) and test_duplicate_non_global_material_stays_non_global (asserts not is_global). Both pass."
+}

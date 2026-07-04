@@ -1750,9 +1750,10 @@ async def duplicate_library_material(material_id: str, user: dict = Depends(requ
     doc = {
         "material_id": new_material_id,
         "is_library": True,
+        "is_global": bool(src.get("is_global", False)),
         "cohort_id": None,
         "cohort_ids": [],  # template — unassigned
-        "week_number": src.get("week_number", 1),
+        "week_number": src.get("week_number", 0 if src.get("is_global") else 1),
         "material_type": src.get("material_type"),
         "title": f"{src.get('title', 'Untitled')} (Copy)",
         "description": src.get("description"),
