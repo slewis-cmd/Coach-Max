@@ -214,6 +214,17 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Video Library Materials (February 2026)
+- [x] New `material_type: "video"` — supports both **MP4/MOV/WEBM/M4A/WAV uploads** and **YouTube/Vimeo/Loom URLs**
+- [x] Uploaded videos → **auto-transcribed via OpenAI Whisper** (background task using ffmpeg to extract mono 16kHz 32kbps audio, then `emergentintegrations.OpenAISpeechToText` with `whisper-1`)
+- [x] Transcript stored on the material doc; automatically included in AI feedback context (`read_file_text` returns transcript for video materials)
+- [x] `POST /api/library/materials/{id}/transcribe` — manually re-trigger transcription
+- [x] `transcription_status` field: pending / done / failed / failed_too_large / n/a
+- [x] Frontend: new "Videos" filter tab, Video option in upload dialog with mutually-exclusive File/URL inputs, HTML5 `<video>` preview for uploads, YouTube/Vimeo iframe for URL videos, transcription-status badges on rows
+- [x] Student Dashboard "Course Resources" chips open URL videos in new tab (Play icon), download files otherwise
+- [x] `duplicate_library_material` is now video-aware (URL preserved for URL videos; new GridFS + background re-transcription for uploaded videos)
+- [x] 18/18 backend tests pass (iteration_30.json)
+
 ### Course-Wide (Global) Library Materials (February 2026)
 - [x] Materials can be marked `is_global=True` — spans all weeks (week_number=0)
 - [x] `POST /api/library/materials` accepts `is_global` query param; upload dialog has a Course-Wide checkbox
