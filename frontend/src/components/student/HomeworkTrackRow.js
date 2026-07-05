@@ -3,6 +3,7 @@ import { Calendar, File, Download, Upload, MessageSquare, MessageCircle, Chevron
 import { Button } from '../ui/button';
 import { downloadFile } from '../../utils/download';
 import { StatusBadge } from './StatusBadge';
+import { useBranding } from '../../context/BrandingContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -16,6 +17,8 @@ export function HomeworkTrackRow({
   onOpenUpload,
   onAskCoachMax,
 }) {
+  const { branding } = useBranding();
+  const persona = branding.ai_persona_name || 'Coach Max';
   const hasFeedback = hw.status === 'feedback_provided' && hw.feedback;
   const hasSubmission = !!hw.submission;
   const canSubmit = hw.status === 'waiting_on_submission' || hw.status === 'submitted' || hw.status === 'under_review' || hw.status === 'feedback_provided';
@@ -115,7 +118,7 @@ export function HomeworkTrackRow({
               data-testid={`ask-coach-max-${weekNumber}-${hw.material_id}`}
             >
               <MessageCircle className="w-4 h-4 mr-1.5" />
-              Ask Coach Max
+              Ask {persona}
             </Button>
           </div>
           <div className="text-sm text-[#000000] whitespace-pre-wrap leading-relaxed">

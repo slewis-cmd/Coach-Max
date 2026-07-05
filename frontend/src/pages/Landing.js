@@ -1,11 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranding } from '../context/BrandingContext';
 import { Button } from '../components/ui/button';
 import { BookOpen, Users, FileText, Sparkles, ArrowRight } from 'lucide-react';
 
 export default function Landing() {
   const { login, isAuthenticated, loading } = useAuth();
+  const { branding } = useBranding();
   const navigate = useNavigate();
 
   // Redirect authenticated users to dashboard
@@ -32,7 +34,7 @@ export default function Landing() {
             <div className="w-8 h-8 bg-[#22438E] rounded-lg flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-[#000000]">The Boost Pad</span>
+            <span className="font-semibold text-[#000000]" data-testid="brand-app-name-nav">{branding.app_name}</span>
           </div>
           <Button 
             data-testid="login-button"
@@ -183,7 +185,7 @@ export default function Landing() {
             <div className="w-6 h-6 bg-[#22438E] rounded flex items-center justify-center">
               <BookOpen className="w-3 h-3 text-white" />
             </div>
-            <span className="text-sm text-[#666666]">The Boost Pad</span>
+            <span className="text-sm text-[#666666]">{branding.app_name}</span>
           </div>
           <p className="text-sm text-[#666666]">© 2024 All rights reserved.</p>
         </div>

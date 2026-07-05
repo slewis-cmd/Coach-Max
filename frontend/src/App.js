@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { BrandingProvider } from "./context/BrandingContext";
 import { Toaster } from "./components/ui/sonner";
 
 // Pages
@@ -16,6 +17,7 @@ import ProgressTracking from "./pages/ProgressTracking";
 import MaterialLibrary from "./pages/MaterialLibrary";
 import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
+import BrandingSettings from "./pages/BrandingSettings";
 import InvitePage from "./pages/InvitePage";
 import DirectSubmit from "./pages/DirectSubmit";
 import CoachMaxPage from "./pages/CoachMaxPage";
@@ -145,6 +147,11 @@ const AppRouter = () => {
           <AdminManagement />
         </ProtectedRoute>
       } />
+      <Route path="/admin/branding" element={
+        <ProtectedRoute>
+          <BrandingSettings />
+        </ProtectedRoute>
+      } />
       <Route path="/invite/:code" element={<InvitePage />} />
       <Route path="/submit/:materialId" element={<DirectSubmit />} />
       <Route path="/coach-max/:submissionId" element={
@@ -166,10 +173,12 @@ const AppRouter = () => {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRouter />
-        <Toaster position="top-right" richColors />
-      </AuthProvider>
+      <BrandingProvider>
+        <AuthProvider>
+          <AppRouter />
+          <Toaster position="top-right" richColors />
+        </AuthProvider>
+      </BrandingProvider>
     </BrowserRouter>
   );
 }

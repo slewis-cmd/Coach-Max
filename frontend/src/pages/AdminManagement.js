@@ -150,14 +150,23 @@ export default function AdminManagement() {
             </div>
           </div>
           
-          <Button 
-            onClick={() => setShowInvite(true)}
-            className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
-            data-testid="invite-instructor-btn"
-          >
-            <UserPlus className="w-4 h-4 mr-2" />
-            Invite Instructor
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/admin/branding"
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF] rounded-lg text-sm"
+              data-testid="branding-nav-btn"
+            >
+              Branding
+            </Link>
+            <Button 
+              onClick={() => setShowInvite(true)}
+              className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg"
+              data-testid="invite-instructor-btn"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite Instructor
+            </Button>
+          </div>
         </div>
       </header>
 

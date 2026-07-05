@@ -1,0 +1,40 @@
+{
+  "summary": "Backend testing of the new platform branding (SaaS white-label) layer. Verified GET/PUT /api/settings/branding contract: public GET returns defaults on fresh state; PUT requires super_admin (401 no-token, 403 instructor, 403 student, 200 super_admin); partial payload merges + persists correctly and untouched fields fall back to DEFAULT_BRANDING; unknown-only payload returns 400 while mixed payloads keep valid fields and drop unknowns. Confirmed the 30s in-process cache returns identical bodies across 5 rapid GETs. Persona injection into Coach Max chat (POST /api/chat/ask-tutor) works with both a persona-name override AND an ai_system_prompt override active — endpoint returns 200 and the chat entry is persisted to db.tutor_chats. Email-sender-name override survives the send-feedback pipeline (POST /api/submissions/{id}/send-feedback returns 200 both under default and custom sender name). Regression paths for default persona chat + default sender email both pass. 14/14 tests PASS. Teardown restores DEFAULT_BRANDING (verified via post-run GET).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_platform_branding.py",
+    "/app/test_reports/pytest/platform_branding.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:72-88 get_branding() cache is process-local (per uvicorn worker). If backend scales to multiple workers, PUT invalidation only clears the caller's worker; other workers keep the stale cache for up to 30s. Acceptable for single-instance now, but worth noting as we productionize the SaaS layer. Consider a Mongo change-stream OR a cache_version doc for cross-worker invalidation.",
+    "server.py:665-668 GET /settings/branding is public which is correct (needed by BrandingProvider before login), but this also means any anonymous user can enumerate the ai_system_prompt (which becomes part of the LLM system message). If prompts ever encode sensitive tenant instructions, restrict ai_system_prompt to authenticated GET or return a redacted variant on the public endpoint.",
+    "server.py:672-685 PUT accepts partial payloads and filters unknown fields via set-intersection — clean. No type/length validation though: {\"primary_color\": \"not-a-hex\"} or {\"logo_url\": \"javascript:alert(1)\"} would persist. Consider Pydantic validators for primary_color (hex regex) and logo_url/favicon_url (http/https URL only) to harden against admin-side XSS via injected logo URLs.",
+    "server.py:2400-2431 ai_system_prompt override branch replaces {persona} placeholder but drops ALL contextual scaffolding (submission_text, feedback, cumulative_ctx, material title, etc.). A super admin who sets a custom prompt is silently opting the tenant out of every piece of Coach Max context. Recommend either (a) documenting this loudly in the admin UI, or (b) always appending the CONTEXT block below the override so tenants can customize tone without losing grounding.",
+    "server.py:114-140 send_email_notification builds 'from' as f\"{sender_name} <{SENDER_EMAIL}>\". SENDER_EMAIL is not derived from branding, only the display name is. That's fine but confusing — the admin UI should make it clear that the domain part is fixed per install.",
+    "server.py:3389-3473 send-feedback email body is hard-coded to 'The Boost Pad' at line 3451 (footer) and uses primary_color #22438E hard-coded at lines 3422/3439. Branding is applied to the sender name but NOT to email body copy/colors. For a true white-label, the email HTML must also read from get_branding() (app_name, primary_color, logo_url). This is a P1 gap for the SaaS story though not a functional regression today.",
+    "server.py:3477+ export_feedback_pdf (PDF-attached feedback email) — need to spot-check whether it also uses branding.email_sender_name and branding-driven header colors. Referenced by main agent's PRD line 3620-3625 but I did not exercise this path today (would require file/GridFS upload). Recommend adding a follow-up test that hits POST /api/submissions/{id}/export-pdf under a custom email_sender_name and inspects the response.",
+    "General: no tenant_id / workspace_id yet on the branding doc — {_id: 'branding'} is truly singleton. When multi-tenant lands this will need a compound key + per-request tenant resolution."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_platform_branding.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14)",
+    "frontend": "not tested (scope: backend only per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org used only as the role reference; actual API auth uses ephemeral TEST_BRAND_* users + session tokens seeded directly into user_sessions (Authorization: Bearer). All cleaned up in fixture teardown.",
+  "seed_data_creation": "Per-module fixture creates: 1 super_admin + 1 instructor + 1 student user (with sessions), 1 cohort (released_weeks=[1], student & instructor linked), 1 homework material (week 1), 1 submission in status='sent' with instructor_feedback populated. All prefixed TEST_BRAND_. Autouse per-test hook wipes db.platform_settings between tests so each starts from defaults. Teardown restores DEFAULT_BRANDING via PUT AND deletes the branding doc + all TEST_BRAND_* rows across users / user_sessions / cohorts / materials / submissions.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Branding layer is green (14/14). Env export before rerun: `export $(grep -v '^#' /app/frontend/.env | xargs) && export $(grep -v '^#' /app/backend/.env | xargs)`. Run: `pytest /app/backend/tests/test_platform_branding.py -v`. Post-run branding is confirmed reset to DEFAULT_BRANDING via curl. Follow-ups worth testing when features land: (a) branded email HTML body/colors from get_branding(), (b) export_feedback_pdf under custom sender name, (c) admin-side validation of primary_color hex + logo_url schemes, (d) cross-worker cache invalidation once we scale beyond a single uvicorn worker.",
+  "rca of the issue": "Not applicable — no regression, no failing tests. All contract, ACL, persistence, cache, persona-injection, and email-sender flows behave as designed."
+}

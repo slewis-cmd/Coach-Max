@@ -3,10 +3,13 @@ import { Button } from '../ui/button';
 import { MessageCircle, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { useBranding } from '../../context/BrandingContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
+  const { branding } = useBranding();
+  const persona = branding.ai_persona_name || 'Coach Max';
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -49,7 +52,7 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
       });
       setMessages(prev => [...prev, { role: 'coach', text: res.data.response }]);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Coach Max is unavailable right now');
+      toast.error(error.response?.data?.detail || `${persona} is unavailable right now`);
       setMessages(prev => [...prev, { role: 'coach', text: "Sorry, I'm having trouble right now. Please try again in a moment." }]);
     } finally {
       setSending(false);
@@ -67,7 +70,7 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
               <MessageCircle className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-medium text-sm">Coach Max</h3>
+              <h3 className="font-medium text-sm" data-testid="coach-chat-title">{persona}</h3>
               <p className="text-xs text-white/60">Week {weekNumber} feedback discussion</p>
             </div>
           </div>
@@ -83,7 +86,7 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
               <div className="w-14 h-14 bg-[#E1F0FF] rounded-full flex items-center justify-center mx-auto mb-3">
                 <MessageCircle className="w-7 h-7 text-[#22438E]" />
               </div>
-              <h4 className="font-medium text-[#000000] mb-1">Hi! I'm Coach Max</h4>
+              <h4 className="font-medium text-[#000000] mb-1">Hi! I&apos;m {persona}</h4>
               <p className="text-sm text-[#333333] max-w-xs mx-auto">
                 Ask me anything about your Week {weekNumber} feedback. I'm here to help you grow!
               </p>
@@ -102,7 +105,7 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
                   : 'bg-white border border-[#B8D4E8] text-[#000000] rounded-bl-md shadow-sm'
               }`}>
                 {msg.role === 'coach' && (
-                  <p className="text-xs font-medium text-[#22438E] mb-1">Coach Max</p>
+                  <p className="text-xs font-medium text-[#22438E] mb-1">{persona}</p>
                 )}
                 <div className="whitespace-pre-wrap">{msg.text}</div>
               </div>
@@ -127,7 +130,7 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
         <div className="border-t border-[#B8D4E8] p-3 flex items-center gap-2 bg-white flex-shrink-0">
           <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Ask Coach Max a question..."
+            placeholder={`Ask ${persona} a question...`}
             className="flex-1 px-4 py-2.5 bg-[#D0E6F9] rounded-full text-sm outline-none focus:ring-2 focus:ring-[#22438E]/20"
             disabled={sending} data-testid="coach-max-input" />
           <Button size="icon" onClick={handleSend} disabled={sending || !input.trim()}

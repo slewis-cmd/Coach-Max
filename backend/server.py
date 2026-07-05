@@ -51,6 +51,41 @@ logger = logging.getLogger(__name__)
 # Configure Resend
 resend.api_key = os.environ.get("RESEND_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL") or "info@theboostpad.org"
+
+# ==================== PLATFORM BRANDING ====================
+# Defaults are used when the platform_settings collection is empty (fresh install).
+# White-label buyers override these via GET/PUT /api/settings/branding.
+DEFAULT_BRANDING = {
+    "app_name": "The Boost Pad",
+    "ai_persona_name": "Coach Max",
+    "primary_color": "#22438E",
+    "logo_url": "",
+    "favicon_url": "",
+    "email_sender_name": "The Boost Pad",
+    "tagline": "AI-powered learning coach",
+    "ai_system_prompt": "You are {persona}, a friendly, supportive AI tutor for a leadership development course.",
+}
+
+_branding_cache = None
+_branding_cache_ts = 0
+
+async def get_branding() -> dict:
+    """Return the current platform branding config (cached 30s)."""
+    global _branding_cache, _branding_cache_ts
+    import time
+    now = time.time()
+    if _branding_cache and (now - _branding_cache_ts) < 30:
+        return _branding_cache
+    doc = await db.platform_settings.find_one({"_id": "branding"}, {"_id": 0})
+    merged = {**DEFAULT_BRANDING, **(doc or {})}
+    _branding_cache = merged
+    _branding_cache_ts = now
+    return merged
+
+def invalidate_branding_cache():
+    global _branding_cache, _branding_cache_ts
+    _branding_cache = None
+    _branding_cache_ts = 0
 # Force override if stale resend.dev value is still in env
 if "resend.dev" in SENDER_EMAIL:
     SENDER_EMAIL = "info@theboostpad.org"
@@ -83,8 +118,10 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
         return None
     
     try:
+        branding = await get_branding()
+        sender_name = branding.get("email_sender_name") or "The Boost Pad"
         params = {
-            "from": f"The Boost Pad <{SENDER_EMAIL}>",
+            "from": f"{sender_name} <{SENDER_EMAIL}>",
             "to": [to_email],
             "subject": subject,
             "html": html_content
@@ -622,6 +659,30 @@ def is_cohort_manager(user: dict, cohort: dict) -> bool:
         return True
     uid = user.get("user_id")
     return uid in cohort.get("instructor_ids", []) or cohort.get("instructor_id") == uid
+
+# ==================== BRANDING ENDPOINTS ====================
+
+@api_router.get("/settings/branding")
+async def get_branding_endpoint():
+    """Return current platform branding (public — used by every page on load)."""
+    return await get_branding()
+
+
+@api_router.put("/settings/branding")
+async def update_branding(request: Request, user: dict = Depends(require_super_admin)):
+    """Update platform branding (super admin only)."""
+    payload = await request.json()
+    allowed = set(DEFAULT_BRANDING.keys())
+    updates = {k: v for k, v in payload.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid branding fields supplied")
+    await db.platform_settings.update_one(
+        {"_id": "branding"},
+        {"$set": updates},
+        upsert=True
+    )
+    invalidate_branding_cache()
+    return await get_branding()
 
 # ==================== AUTH ENDPOINTS ====================
 
@@ -2334,11 +2395,11 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="AI service not configured")
     
     response = ""
+    branding = await get_branding()
+    persona = branding.get("ai_persona_name", "Coach Max")
+    persona_override = (branding.get("ai_system_prompt") or "").strip()
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"coach_max_{user['user_id']}_{submission_id}",
-            system_message=f"""You are Coach Max, a friendly, supportive AI tutor for a leadership development course.
+        default_prompt = f"""You are {persona}, a friendly, supportive AI tutor for a leadership development course.
 A student has received feedback on their homework and wants to discuss it with you.
 
 Your personality:
@@ -2365,13 +2426,21 @@ CURRENT WEEK MATERIALS:
 
 PRIOR WEEKS CONTEXT (materials covered + student's previous feedback):
 {cumulative_ctx[:5000] if cumulative_ctx else 'This is the first week — no prior context.'}{get_language_instruction(lang)}"""
+
+        system_prompt = (persona_override.replace("{persona}", persona)
+                         if persona_override else default_prompt)
+
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"coach_max_{user['user_id']}_{submission_id}",
+            system_message=system_prompt
         ).with_model("openai", "gpt-5.2")
         
         response = await chat.send_message(UserMessage(text=message))
         
     except Exception as e:
         logger.error(f"Coach Max error: {e}")
-        raise HTTPException(status_code=500, detail="Coach Max is unavailable right now")
+        raise HTTPException(status_code=500, detail=f"{persona} is unavailable right now")
     
     # Store chat in DB
     chat_entry = {
@@ -3552,8 +3621,10 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     if resend.api_key:
         try:
             pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+            _branding = await get_branding()
+            _sender_name = _branding.get("email_sender_name") or "The Boost Pad"
             email_params = {
-                "from": f"The Boost Pad <{SENDER_EMAIL}>",
+                "from": f"{_sender_name} <{SENDER_EMAIL}>",
                 "to": [student["email"]],
                 "subject": f"{'Tu Reporte de Retroalimentacion' if pdf_lang == 'es' else 'Your Feedback Report'}: {material_title} - {pdf_t['week']} {week_num}",
                 "html": f"""
