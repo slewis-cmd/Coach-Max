@@ -214,6 +214,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Platform Branding / White-Label Prep (February 2026)
+- [x] `GET /api/settings/branding` (public) + `PUT /api/settings/branding` (super admin) — persisted in `platform_settings` collection
+- [x] Fields: app_name, ai_persona_name, primary_color, logo_url, favicon_url, email_sender_name, tagline, ai_system_prompt
+- [x] Backend: `get_branding()` helper with 30s in-process cache; wired into Coach Max chat persona + email sender name; `ai_system_prompt` override supported
+- [x] Frontend: `BrandingContext` fetches on mount, applies to browser tab title, favicon, CSS `--brand-primary`, Landing page nav/footer, Coach Max chat UI
+- [x] New `/admin/branding` page for Super Admin — form for all fields incl. color picker; reload after save
+- [x] 14/14 backend tests pass (iteration_32.json)
+- [x] Foundation for licensing "My Professor" — rebrand a deployment via config, no code changes
+
 ### Multi-Homework per Week (February 2026)
 - [x] `/api/student/dashboard` now returns `weeks[i].homeworks[]` — full array of homework tracks per week
 - [x] Each homework entry has its own `status`, `submission`, `feedback`, `due_date`
