@@ -214,6 +214,17 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] Legacy records (file_path only) gracefully return HTTP 410 with clear resubmit message
 - [x] 8/8 backend tests pass (iteration_21.json)
 
+### Google Drive Homework Links (February 2026)
+- [x] `drive_folder_url` optional field on `Material` (homework only)
+- [x] `POST /api/cohorts/{id}/materials` + `POST /api/library/materials` accept `drive_folder_url` (dropped silently for non-homework types)
+- [x] New `PUT /api/materials/{id}/drive-link` — super admin or cohort manager only; validates via `_validate_drive_url()` (urlparse-based, rejects `javascript:`, `ftp://`, bare hosts, etc.)
+- [x] `/api/submit-link/{id}` returns the drive URL; student dashboard `homeworks[].drive_folder_url` populated
+- [x] Frontend: **Cohort Materials tab** — new "Add/Change Drive Folder" button per homework (`window.prompt` for MVP UX, PUT to /drive-link)
+- [x] **Public /submit/{id} page** — when Drive folder is set, prominent "Step 1: Upload to Google Drive" hint with "Open Drive Folder" button above the file upload
+- [x] **Student Dashboard homework rows** — "Drive" button opens the folder in a new tab, sitting next to Submit
+- [x] Renamed "Copy Submission Link for Thinkific" → "Copy Submission Link"
+- [x] 15/15 backend tests pass (iteration_33.json); URL validation hardened per review
+
 ### Platform Branding / White-Label Prep (February 2026)
 - [x] `GET /api/settings/branding` (public) + `PUT /api/settings/branding` (super admin) — persisted in `platform_settings` collection
 - [x] Fields: app_name, ai_persona_name, primary_color, logo_url, favicon_url, email_sender_name, tagline, ai_system_prompt

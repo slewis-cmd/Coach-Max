@@ -1644,7 +1644,7 @@ async def upload_material(
         file_name=filename,
         uploaded_by=user["user_id"],
         due_date=due_date if due_date else None,
-        drive_folder_url=(drive_folder_url or "").strip() if material_type == "homework" else ""
+        drive_folder_url=_validate_drive_url(drive_folder_url) if material_type == "homework" else ""
     )
     
     doc = material.model_dump()
@@ -1652,6 +1652,21 @@ async def upload_material(
     await db.materials.insert_one(doc)
     
     return {"material_id": material_id, "message": "Material uploaded"}
+
+
+def _validate_drive_url(raw: str) -> str:
+    """Validate + normalize a Drive-folder-style URL. Empty string is allowed (clears the link).
+    Rejects non-http(s) schemes and clearly invalid URLs (e.g. bare 'https://')."""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    if not raw:
+        return ""
+    from urllib.parse import urlparse
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="drive_folder_url must be a valid http(s) URL")
+    return raw
 
 
 @api_router.put("/materials/{material_id}/drive-link")
@@ -1682,9 +1697,7 @@ async def update_material_drive_link(material_id: str, request: Request, user: d
                 raise HTTPException(status_code=403, detail="Access denied")
     
     data = await request.json()
-    raw = (data.get("drive_folder_url") or "").strip()
-    if raw and not (raw.startswith("http://") or raw.startswith("https://")):
-        raise HTTPException(status_code=400, detail="drive_folder_url must be a valid http(s) URL")
+    raw = _validate_drive_url(data.get("drive_folder_url") or "")
     
     await db.materials.update_one(
         {"material_id": material_id},
@@ -1900,7 +1913,7 @@ async def upload_library_material(
         "video_url": video_url if material_type == "video" and is_url_video else "",
         "transcript": "",
         "transcription_status": "pending" if material_type == "video" and not is_url_video else "n/a",
-        "drive_folder_url": (drive_folder_url or "").strip() if material_type == "homework" else "",
+        "drive_folder_url": _validate_drive_url(drive_folder_url) if material_type == "homework" else "",
         "uploaded_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
