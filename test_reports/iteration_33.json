@@ -1,0 +1,38 @@
+{
+  "summary": "Backend testing of the new Google Drive folder URL metadata layer on homework materials. 15/15 tests PASS. Verified: (a) POST /api/cohorts/{cohort_id}/materials persists drive_folder_url when material_type=homework, silently drops (stores '') when workbook; (b) POST /api/library/materials persists the URL for homework only; (c) POST cohort material without the field defaults to empty string (regression); (d) PUT /api/materials/{material_id}/drive-link: valid https URL updates + returns 200, empty clears, javascript: and ftp:// return 400, non-homework material returns 400 with 'homework' in detail, outsider instructor returns 403 while cohort manager returns 200; (e) Library homework ACL: instructor managing an assigned cohort -> 200, instructor managing none of the assigned cohorts -> 403; (f) GET /api/submit-link/{material_id} exposes drive_folder_url; (g) GET /api/student/dashboard weeks[].homeworks[0].drive_folder_url present + matches, legacy week.homework.drive_folder_url present + shape preserved; (h) Regression: POST /api/materials/{id}/submit still succeeds after drive metadata is attached. All TEST_DRIVE_* seed data confirmed removed from users, user_sessions, cohorts, materials, submissions post-run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_drive_link.py",
+    "/app/test_reports/pytest/drive_link.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1686-1687 URL validation only requires the value to start with 'http://' or 'https://'. Strings like 'https://' or 'http://x' pass. Consider stricter validation (urllib.parse.urlparse + require netloc, or a Google Drive host-allowlist like drive.google.com/docs.google.com) to reduce admin-side phishing risk. Also, the same validation is NOT applied on POST /api/cohorts/{id}/materials or POST /api/library/materials — a homework upload accepts ANY string as drive_folder_url (including 'javascript:...'). Recommend extracting a _validate_drive_url() helper and calling it from all three code paths.",
+    "server.py:1647 & 1903 The 'silent drop' semantics for non-homework material types are surprising — a caller passing drive_folder_url='...' on a workbook gets 200 with the value discarded, no error. Consider either (a) returning 400 with 'drive_folder_url only supported on homework materials' to match the PUT endpoint's behavior, or (b) documenting the drop in the response.",
+    "server.py:1657 The PUT endpoint accepts request bodies via request.json() without a Pydantic model. Missing or malformed JSON will raise a 500 (or a raw JSONDecodeError) instead of a clean 400. Recommend a small Pydantic body model DriveLinkUpdate(drive_folder_url: str = '').",
+    "server.py:1657-1693 The route currently uses require_instructor for auth. This means an unauthenticated request returns 401 (via get_current_user chain) but the endpoint spec in the review request implies super_admin OR cohort manager. Current implementation ALSO grants access to super_admin globally which is correct. Just flagging that the ACL depends on downstream is_cohort_manager which itself accepts either instructor_ids or legacy instructor_id — good.",
+    "server.py:2334 & 2369 Both new homeworks[] entries and the legacy week.homework object include drive_folder_url with a safe default of ''. Good back-compat. However legacy consumers reading week.homework only ever see the FIRST homework's drive URL; if multiple homeworks per week each have distinct Drive folders, only homeworks[0] is exposed via the legacy shape. This is expected but worth documenting for existing frontend consumers.",
+    "Missing test coverage for: (1) super_admin using PUT /drive-link on a cohort or library material (currently only instructor cohort_manager path is exercised on the happy path — I verified super_admin bypass IS in code at server.py:1667 but not asserted in tests). (2) GET /api/submit-link on a library homework material with drive_folder_url populated (I only tested cohort material submit-link)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_drive_link.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15)",
+    "frontend": "not tested (scope: backend only per request)"
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org referenced from /app/memory/test_credentials.md but not used for API auth; tests seed ephemeral TEST_DRIVE_* users (super_admin, cohort manager I1, outsider I2, library manager I3, student S1) and session tokens directly into user_sessions and pass them via Authorization: Bearer.",
+  "seed_data_creation": "Per-module fixture creates: 1 super_admin, 3 instructors (I1 managing C1, I2 outsider, I3 managing C2), 1 student in C1. 2 cohorts (C1 with released_weeks=[3] and student; C2 empty). Homework materials are created ad-hoc by each test via the real POST endpoints (no direct DB inserts) so upload flow itself is exercised. All docs prefixed TEST_DRIVE_ (users by user_id, sessions by session_token, cohorts by cohort_id, materials by title, submissions retagged submission_id on teardown). Teardown removes all TEST_DRIVE_* prefixed docs — confirmed empty post-run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Drive link feature is green (15/15). To rerun: `export $(grep -v '^#' /app/backend/.env | xargs) && export $(grep -v '^#' /app/frontend/.env | xargs) && pytest /app/backend/tests/test_drive_link.py -v`. Follow-ups worth testing when features expand: (a) apply URL scheme validation to POST upload paths (currently only PUT validates), (b) super_admin happy-path assertion on PUT /drive-link, (c) submit-link on library homework material with drive URL, (d) frontend end-to-end: homework details modal renders the Google Drive link as an external <a target=_blank> for students, and Set/Update Drive Link button appears for cohort managers only.",
+  "rca of the issue": "Not applicable — all specified endpoint contracts, ACL rules, URL validation, persistence, back-compat, and student dashboard shape assertions pass on first run."
+}

@@ -580,6 +580,7 @@ class Material(BaseModel):
     file_name: str
     uploaded_by: str
     due_date: Optional[str] = None  # ISO date string for homework assignments
+    drive_folder_url: Optional[str] = ""  # Google Drive folder URL for homework submissions
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Submission(BaseModel):
@@ -1608,6 +1609,7 @@ async def upload_material(
     file: UploadFile = File(...),
     description: str = "",
     due_date: str = "",
+    drive_folder_url: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload course material (workbook, case study, or homework assignment)"""
@@ -1641,7 +1643,8 @@ async def upload_material(
         gridfs_id=gridfs_id,
         file_name=filename,
         uploaded_by=user["user_id"],
-        due_date=due_date if due_date else None
+        due_date=due_date if due_date else None,
+        drive_folder_url=(drive_folder_url or "").strip() if material_type == "homework" else ""
     )
     
     doc = material.model_dump()
@@ -1649,6 +1652,46 @@ async def upload_material(
     await db.materials.insert_one(doc)
     
     return {"material_id": material_id, "message": "Material uploaded"}
+
+
+@api_router.put("/materials/{material_id}/drive-link")
+async def update_material_drive_link(material_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Attach or clear a Google Drive folder URL for a homework material."""
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if material.get("material_type") != "homework":
+        raise HTTPException(status_code=400, detail="Drive folder URLs are only supported on homework materials")
+    
+    # Access control: cohort managers OR super admin
+    if user.get("role") != "super_admin":
+        cohort_id = material.get("cohort_id")
+        if material.get("is_library"):
+            # library material: any instructor who manages ANY assigned cohort may edit
+            allowed = False
+            for cid in material.get("cohort_ids", []):
+                c = await db.cohorts.find_one({"cohort_id": cid}, {"_id": 0})
+                if c and is_cohort_manager(user, c):
+                    allowed = True
+                    break
+            if not allowed:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif cohort_id:
+            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+            if not cohort or not is_cohort_manager(user, cohort):
+                raise HTTPException(status_code=403, detail="Access denied")
+    
+    data = await request.json()
+    raw = (data.get("drive_folder_url") or "").strip()
+    if raw and not (raw.startswith("http://") or raw.startswith("https://")):
+        raise HTTPException(status_code=400, detail="drive_folder_url must be a valid http(s) URL")
+    
+    await db.materials.update_one(
+        {"material_id": material_id},
+        {"$set": {"drive_folder_url": raw}}
+    )
+    return {"material_id": material_id, "drive_folder_url": raw, "message": "Drive link updated"}
+
 
 @api_router.get("/cohorts/{cohort_id}/materials")
 async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(get_current_user)):
@@ -1717,6 +1760,8 @@ async def get_submit_link_info(material_id: str):
         "title": material.get("title", ""),
         "week_number": material.get("week_number"),
         "file_name": material.get("file_name"),
+        "description": material.get("description", ""),
+        "drive_folder_url": material.get("drive_folder_url", ""),
         "cohorts": cohorts
     }
 
@@ -1798,6 +1843,7 @@ async def upload_library_material(
     description: str = "",
     is_global: bool = False,
     video_url: str = "",
+    drive_folder_url: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload a material to the central library (workbooks, case studies, homework, and videos).
@@ -1854,6 +1900,7 @@ async def upload_library_material(
         "video_url": video_url if material_type == "video" and is_url_video else "",
         "transcript": "",
         "transcription_status": "pending" if material_type == "video" and not is_url_video else "n/a",
+        "drive_folder_url": (drive_folder_url or "").strip() if material_type == "homework" else "",
         "uploaded_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -2284,6 +2331,7 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                     "description": hw.get("description", ""),
                     "due_date": hw.get("due_date"),
                     "file_name": hw.get("file_name", ""),
+                    "drive_folder_url": hw.get("drive_folder_url", ""),
                     "submission": None,
                     "status": "waiting_on_submission",
                     "feedback": None,
@@ -2318,6 +2366,7 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                     "description": first["description"],
                     "due_date": first["due_date"],
                     "file_name": first["file_name"],
+                    "drive_folder_url": first.get("drive_folder_url", ""),
                 }
                 week_data["submission"] = first["submission"]
                 week_data["status"] = worst_status

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, File, Download, Upload, MessageSquare, MessageCircle, ChevronUp, ChevronDown, CheckCircle } from 'lucide-react';
+import { Calendar, File, Download, Upload, MessageSquare, MessageCircle, ChevronUp, ChevronDown, CheckCircle, FolderOpen } from 'lucide-react';
 import { Button } from '../ui/button';
 import { downloadFile } from '../../utils/download';
 import { StatusBadge } from './StatusBadge';
@@ -64,6 +64,22 @@ export function HomeworkTrackRow({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        {hw.drive_folder_url && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(hw.drive_folder_url, '_blank', 'noopener,noreferrer');
+            }}
+            className="rounded-lg text-xs border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]"
+            data-testid={`drive-folder-${weekNumber}-${hw.material_id}`}
+            title="Open the Google Drive folder for this assignment"
+          >
+            <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
+            Drive
+          </Button>
+        )}
         {canSubmit && (
           <Button
             size="sm"

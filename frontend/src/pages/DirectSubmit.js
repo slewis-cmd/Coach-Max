@@ -6,7 +6,7 @@ import { Card, CardContent } from '../components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '../components/ui/select';
-import { Upload, CheckCircle, FileText, ArrowLeft, LogIn } from 'lucide-react';
+import { Upload, CheckCircle, FileText, ArrowLeft, LogIn, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -141,6 +141,32 @@ export default function DirectSubmit() {
               <p className="text-sm text-[#666]">
                 Hi <strong>{user?.name}</strong>! Upload your completed homework below.
               </p>
+
+              {info.drive_folder_url && (
+                <div className="rounded-lg border border-[#22438E] bg-[#E1F0FF] p-4" data-testid="drive-upload-hint">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FolderOpen className="w-5 h-5 text-[#22438E]" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-[#000000]">Step 1 · Upload to Google Drive</p>
+                      <p className="text-xs text-[#333333] mt-0.5">
+                        Save your homework in the shared class Drive folder, then upload the same file here so {info.title ? '' : 'the AI tutor'} can review it.
+                      </p>
+                      <a
+                        href={info.drive_folder_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-white bg-[#22438E] hover:bg-[#1A3A7A] px-3 py-1.5 rounded-md"
+                        data-testid="drive-folder-link"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        Open Drive Folder
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Cohort selector (if multiple) */}
               {info.cohorts?.length > 1 && (

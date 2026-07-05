@@ -1,11 +1,14 @@
 import React from 'react';
+import axios from 'axios';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { 
-  BookMarked, ClipboardList, Upload, Trash2, File, Download, Calendar, Eye, EyeOff, Copy 
+  BookMarked, ClipboardList, Upload, Trash2, File, Download, Calendar, Eye, EyeOff, Copy, FolderOpen
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { handleDownloadSubmission } from '../../utils/download';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const STATUS_STYLES = {
   sent: { className: 'bg-[#E1F0FF] text-[#22438E]', label: 'Reviewed' },
@@ -214,7 +217,26 @@ export function MaterialsTab({
                         toast.error('Failed to copy link');
                       });
                     }}>
-                    <Copy className="w-3.5 h-3.5 mr-1.5" />Copy Submission Link for Thinkific
+                    <Copy className="w-3.5 h-3.5 mr-1.5" />Copy Submission Link
+                  </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    className={`w-full rounded-lg mb-3 ${mat.drive_folder_url ? 'border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]' : 'border-[#B8D4E8] text-[#666666] hover:bg-[#E1F0FF]'}`}
+                    data-testid={`edit-drive-link-${mat.material_id}`}
+                    onClick={async () => {
+                      const current = mat.drive_folder_url || '';
+                      const url = window.prompt('Google Drive folder URL for this homework (leave blank to clear):', current);
+                      if (url === null) return;
+                      try {
+                        await axios.put(`${API_URL}/api/materials/${mat.material_id}/drive-link`, { drive_folder_url: url });
+                        toast.success(url ? 'Drive folder linked' : 'Drive folder unlinked');
+                        window.location.reload();
+                      } catch (err) {
+                        toast.error(err.response?.data?.detail || 'Failed to update Drive link');
+                      }
+                    }}>
+                    <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
+                    {mat.drive_folder_url ? 'Change Drive Folder' : 'Add Drive Folder'}
                   </Button>
                   {/* Student Submissions */}
                   {(() => {
