@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { 
-  BookMarked, ClipboardList, Upload, Trash2, File, Download, Calendar, Eye, EyeOff, Copy, FolderOpen
+  BookMarked, ClipboardList, Upload, Trash2, File, Download, Calendar, Eye, EyeOff, Copy, FolderOpen, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { handleDownloadSubmission } from '../../utils/download';
@@ -177,6 +177,16 @@ export function MaterialsTab({
               </div>
               <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
               <CardDescription className="text-xs uppercase tracking-wide">Homework Assignment</CardDescription>
+              {mat.feedback_template && (
+                <div
+                  className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#7C3AED] text-white px-2 py-0.5 rounded-full uppercase tracking-wide mt-2 w-fit"
+                  title={mat.feedback_template}
+                  data-testid={`custom-rubric-badge-${mat.material_id}`}
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Custom AI Rubric
+                </div>
+              )}
               {mat.due_date && (
                 <div className={`flex items-center gap-1 mt-2 text-xs ${
                   new Date(mat.due_date) < new Date() ? 'text-red-500' : 'text-[#1A75BA]'
@@ -237,6 +247,28 @@ export function MaterialsTab({
                     }}>
                     <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
                     {mat.drive_folder_url ? 'Change Drive Folder' : 'Add Drive Folder'}
+                  </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    className={`w-full rounded-lg mb-3 ${mat.feedback_template ? 'border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]' : 'border-[#B8D4E8] text-[#666666] hover:bg-[#E1F0FF]'}`}
+                    data-testid={`edit-feedback-template-${mat.material_id}`}
+                    onClick={async () => {
+                      const current = mat.feedback_template || '';
+                      const tpl = window.prompt(
+                        'Custom AI feedback instructions for this assignment (leave blank to use the default 3-well / 3-improve rubric):',
+                        current
+                      );
+                      if (tpl === null) return;
+                      try {
+                        await axios.put(`${API_URL}/api/materials/${mat.material_id}/feedback-template`, { feedback_template: tpl });
+                        toast.success(tpl.trim() ? 'AI instructions saved' : 'Restored default rubric');
+                        window.location.reload();
+                      } catch (err) {
+                        toast.error(err.response?.data?.detail || 'Failed to update AI instructions');
+                      }
+                    }}>
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                    {mat.feedback_template ? 'Edit AI Instructions' : 'Add AI Instructions'}
                   </Button>
                   {/* Student Submissions */}
                   {(() => {

@@ -98,6 +98,19 @@ export function UploadMaterialDialog({ open, onOpenChange, materialForm, setMate
                 value={materialForm.due_date} onChange={(e) => setMaterialForm({ ...materialForm, due_date: e.target.value })} className="mt-1" />
             </div>
           )}
+          {materialForm.material_type === 'homework' && (
+            <div>
+              <Label htmlFor="feedback-template">AI Feedback Instructions (optional)</Label>
+              <Textarea id="feedback-template" data-testid="feedback-template-input"
+                placeholder="Override the default rubric. e.g., 'Grade specifically on how the submission compares to the Kawasaki Model on slide 4.'"
+                value={materialForm.feedback_template || ''}
+                onChange={(e) => setMaterialForm({ ...materialForm, feedback_template: e.target.value })}
+                className="mt-1" rows={3} />
+              <p className="text-xs text-[#666666] mt-1">
+                Leave blank for the default (3 things done well / 3 areas to improve). Custom instructions replace the default rubric for this assignment only.
+              </p>
+            </div>
+          )}
           <div>
             <Label>File (PDF or Word)</Label>
             <div className="mt-1 upload-zone rounded-lg p-6 text-center cursor-pointer">

@@ -51,7 +51,7 @@ export default function CohortDetail() {
   const [invitingAll, setInvitingAll] = useState(false);
   
   const [materialForm, setMaterialForm] = useState({
-    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: ''
+    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '', feedback_template: ''
   });
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
   
@@ -177,12 +177,13 @@ export default function CohortDetail() {
       formData.append('file', materialForm.file);
       const params = new URLSearchParams({
         week_number: materialForm.week_number, material_type: materialForm.material_type,
-        title: materialForm.title, description: materialForm.description, due_date: materialForm.due_date || ''
+        title: materialForm.title, description: materialForm.description, due_date: materialForm.due_date || '',
+        feedback_template: materialForm.material_type === 'homework' ? (materialForm.feedback_template || '') : ''
       });
       await axios.post(`${API_URL}/api/cohorts/${cohortId}/materials?${params}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast.success('Material uploaded');
       setShowUploadMaterial(false);
-      setMaterialForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '' });
+      setMaterialForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '', feedback_template: '' });
       fetchCohort();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload material');

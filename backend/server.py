@@ -581,6 +581,7 @@ class Material(BaseModel):
     uploaded_by: str
     due_date: Optional[str] = None  # ISO date string for homework assignments
     drive_folder_url: Optional[str] = ""  # Google Drive folder URL for homework submissions
+    feedback_template: Optional[str] = ""  # Custom AI feedback instructions — overrides the default structure
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Submission(BaseModel):
@@ -1610,6 +1611,7 @@ async def upload_material(
     description: str = "",
     due_date: str = "",
     drive_folder_url: str = "",
+    feedback_template: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload course material (workbook, case study, or homework assignment)"""
@@ -1644,7 +1646,8 @@ async def upload_material(
         file_name=filename,
         uploaded_by=user["user_id"],
         due_date=due_date if due_date else None,
-        drive_folder_url=_validate_drive_url(drive_folder_url) if material_type == "homework" else ""
+        drive_folder_url=_validate_drive_url(drive_folder_url) if material_type == "homework" else "",
+        feedback_template=(feedback_template or "").strip() if material_type == "homework" else ""
     )
     
     doc = material.model_dump()
@@ -1704,6 +1707,44 @@ async def update_material_drive_link(material_id: str, request: Request, user: d
         {"$set": {"drive_folder_url": raw}}
     )
     return {"material_id": material_id, "drive_folder_url": raw, "message": "Drive link updated"}
+
+
+@api_router.put("/materials/{material_id}/feedback-template")
+async def update_material_feedback_template(material_id: str, request: Request, user: dict = Depends(require_instructor)):
+    """Attach or clear custom AI feedback instructions for a homework material.
+    An empty string restores the default rubric ("3 things you did well / 3 areas to improve")."""
+    material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if material.get("material_type") != "homework":
+        raise HTTPException(status_code=400, detail="Custom AI feedback instructions are only supported on homework materials")
+
+    # Access control: cohort managers OR super admin (same rules as drive-link)
+    if user.get("role") != "super_admin":
+        cohort_id = material.get("cohort_id")
+        if material.get("is_library"):
+            allowed = False
+            for cid in material.get("cohort_ids", []):
+                c = await db.cohorts.find_one({"cohort_id": cid}, {"_id": 0})
+                if c and is_cohort_manager(user, c):
+                    allowed = True
+                    break
+            # Library material not yet assigned — allow any instructor who owns it OR admin
+            if not allowed and material.get("uploaded_by") != user["user_id"]:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif cohort_id:
+            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+            if not cohort or not is_cohort_manager(user, cohort):
+                raise HTTPException(status_code=403, detail="Access denied")
+
+    data = await request.json()
+    tpl = (data.get("feedback_template") or "").strip()
+
+    await db.materials.update_one(
+        {"material_id": material_id},
+        {"$set": {"feedback_template": tpl}}
+    )
+    return {"material_id": material_id, "feedback_template": tpl, "message": "AI feedback instructions updated"}
 
 
 @api_router.get("/cohorts/{cohort_id}/materials")
@@ -1857,6 +1898,7 @@ async def upload_library_material(
     is_global: bool = False,
     video_url: str = "",
     drive_folder_url: str = "",
+    feedback_template: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload a material to the central library (workbooks, case studies, homework, and videos).
@@ -1914,6 +1956,7 @@ async def upload_library_material(
         "transcript": "",
         "transcription_status": "pending" if material_type == "video" and not is_url_video else "n/a",
         "drive_folder_url": _validate_drive_url(drive_folder_url) if material_type == "homework" else "",
+        "feedback_template": (feedback_template or "").strip() if material_type == "homework" else "",
         "uploaded_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -2806,10 +2849,32 @@ async def submit_on_behalf(
                 student_id, submission_cohort_id, material.get("week_number", 1)
             )
             
-            chat = LlmChat(
-                api_key=api_key,
-                session_id=f"review_{submission_id}",
-                system_message=f"""You are a supportive and encouraging AI tutor helping students learn.
+            auto_custom_tpl = (material.get("feedback_template") or "").strip()
+            if auto_custom_tpl:
+                try:
+                    _auto_rendered = auto_custom_tpl.format(
+                        week_number=material.get("week_number", "?"),
+                        title=material.get("title", ""),
+                        persona="",
+                    )
+                except (KeyError, IndexError, ValueError):
+                    _auto_rendered = auto_custom_tpl
+                _auto_system = f"""You are a supportive and encouraging AI tutor helping students learn.
+Your role is to provide qualitative, structured feedback on this specific homework submission.
+
+Guidelines:
+- Be warm, supportive, and encouraging
+- Use specific examples from the student's work
+- Reference prior weeks' concepts when relevant
+- Do NOT give grades or scores
+- Write in a mentoring tone
+
+For THIS assignment, follow these custom instructions from the instructor:
+
+{_auto_rendered}
+{auto_lang_instr}"""
+            else:
+                _auto_system = f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
 
 Guidelines:
@@ -2836,6 +2901,10 @@ A brief encouraging opening sentence acknowledging their effort.
 - [constructive suggestion framed positively with guidance]
 
 A brief closing sentence with encouragement and motivation to keep going.{auto_lang_instr}"""
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"review_{submission_id}",
+                system_message=_auto_system
             ).with_model("openai", "gpt-5.2")
             
             prompt = f"""Please review this student's homework submission and provide structured feedback.
@@ -3352,11 +3421,33 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     )
     
     feedback = ""
-    try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"review_{submission_id}",
-            system_message=f"""You are a supportive and encouraging AI tutor helping students learn.
+    custom_template = (material.get("feedback_template") or "").strip()
+    if custom_template:
+        # Substitute placeholders
+        try:
+            _rendered = custom_template.format(
+                week_number=material.get("week_number", "?"),
+                title=material.get("title", ""),
+                persona="",
+            )
+        except (KeyError, IndexError, ValueError):
+            _rendered = custom_template  # ignore bad placeholders; use raw
+        system_msg = f"""You are a supportive and encouraging AI tutor helping students learn.
+Your role is to provide qualitative, structured feedback on this specific homework submission.
+
+Guidelines:
+- Be warm, supportive, and encouraging
+- Use specific examples from the student's work
+- Reference prior weeks' concepts when relevant
+- Do NOT give grades or scores
+- Write in a mentoring tone
+
+For THIS assignment, follow these custom instructions from the instructor:
+
+{_rendered}
+{lang_instr}"""
+    else:
+        system_msg = f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
 
 Guidelines:
@@ -3383,6 +3474,11 @@ A brief encouraging opening sentence acknowledging their effort.
 - [constructive suggestion framed positively with guidance]
 
 A brief closing sentence with encouragement and motivation to keep going.{lang_instr}"""
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"review_{submission_id}",
+            system_message=system_msg
         ).with_model("openai", "gpt-5.2")
         
         prompt = f"""Please review this student's homework submission and provide structured feedback.

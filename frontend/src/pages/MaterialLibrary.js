@@ -14,7 +14,7 @@ import {
 } from '../components/ui/select';
 import { 
   ArrowLeft, Upload, BookMarked, ClipboardList, Trash2, Download, 
-  Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw, Video, Play
+  Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw, Video, Play, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -49,7 +49,7 @@ export default function MaterialLibrary() {
   const [showAssign, setShowAssign] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: ''
+    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '', feedback_template: ''
   });
   // Filter: show all | week-based | course-wide only
   const [filter, setFilter] = useState('all');
@@ -106,14 +106,15 @@ export default function MaterialLibrary() {
         week_number: form.week_number,
         material_type: form.material_type,
         is_global: form.is_global ? 'true' : 'false',
-        video_url: usingUrl ? form.video_url.trim() : ''
+        video_url: usingUrl ? form.video_url.trim() : '',
+        feedback_template: form.material_type === 'homework' ? (form.feedback_template || '') : ''
       });
       await axios.post(`${API_URL}/api/library/materials?${params.toString()}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success(isVideo && !usingUrl ? 'Video uploaded — transcription in progress' : 'Material added to library!');
       setShowUpload(false);
-      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '' });
+      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '', feedback_template: '' });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Upload failed');
@@ -130,6 +131,22 @@ export default function MaterialLibrary() {
       fetchData();
     } catch (error) {
       toast.error('Failed to delete');
+    }
+  };
+
+  const handleEditFeedbackTemplate = async (mat) => {
+    const current = mat.feedback_template || '';
+    const tpl = window.prompt(
+      'Custom AI feedback instructions for this assignment (leave blank to use the default 3-well / 3-improve rubric):',
+      current
+    );
+    if (tpl === null) return;
+    try {
+      await axios.put(`${API_URL}/api/materials/${mat.material_id}/feedback-template`, { feedback_template: tpl });
+      toast.success(tpl.trim() ? 'AI instructions saved' : 'Restored default rubric');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update AI instructions');
     }
   };
 
@@ -332,6 +349,16 @@ export default function MaterialLibrary() {
                                 Transcription failed
                               </span>
                             )}
+                            {mat.material_type === 'homework' && mat.feedback_template && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#7C3AED] text-white px-2 py-0.5 rounded-full uppercase tracking-wide"
+                                title={mat.feedback_template}
+                                data-testid={`custom-rubric-badge-${mat.material_id}`}
+                              >
+                                <Sparkles className="w-2.5 h-2.5" />
+                                Custom Rubric
+                              </span>
+                            )}
                           </h3>
                           <p className="text-xs text-[#666666]">
                             {mat.is_global ? 'All weeks' : `Week ${mat.week_number}`} · {typeLabel(mat.material_type)} · {mat.material_type === 'video' && mat.video_url ? mat.video_url : mat.file_name}
@@ -369,6 +396,16 @@ export default function MaterialLibrary() {
                           >
                             <Copy className="w-4 h-4 text-[#22438E]" />
                           </Button>
+                          {mat.material_type === 'homework' && (
+                            <Button
+                              variant="ghost" size="icon"
+                              onClick={() => handleEditFeedbackTemplate(mat)}
+                              title={mat.feedback_template ? 'Edit AI feedback instructions' : 'Add custom AI feedback instructions'}
+                              data-testid={`edit-feedback-template-lib-${mat.material_id}`}
+                            >
+                              <Sparkles className={`w-4 h-4 ${mat.feedback_template ? 'text-[#22438E]' : 'text-[#666666]'}`} />
+                            </Button>
+                          )}
                           <Button 
                             variant="ghost" size="icon"
                             onClick={() => handleDelete(mat.material_id)}
@@ -468,6 +505,23 @@ export default function MaterialLibrary() {
                 </Select>
               </div>
             </div>
+            {form.material_type === 'homework' && (
+              <div>
+                <Label htmlFor="lib-feedback-template">AI Feedback Instructions (optional)</Label>
+                <Textarea
+                  id="lib-feedback-template"
+                  data-testid="lib-feedback-template-input"
+                  placeholder="Override the default rubric. e.g., 'Grade specifically on how the submission compares to the Kawasaki Model on slide 4.'"
+                  value={form.feedback_template}
+                  onChange={(e) => setForm({ ...form, feedback_template: e.target.value })}
+                  className="mt-1"
+                  rows={3}
+                />
+                <p className="text-xs text-[#666666] mt-1">
+                  Leave blank for the default (3 things done well / 3 areas to improve). Custom instructions replace the default rubric for this assignment only.
+                </p>
+              </div>
+            )}
             <label className="flex items-start gap-3 p-3 border border-[#B8D4E8] rounded-lg cursor-pointer hover:bg-[#E1F0FF] transition-colors" data-testid="lib-is-global-toggle">
               <input
                 type="checkbox"
