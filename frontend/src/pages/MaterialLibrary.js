@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -58,13 +58,7 @@ export default function MaterialLibrary() {
   const [previewText, setPreviewText] = useState('');     // DOCX extracted text
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && isInstructor) {
-      fetchData();
-    }
-  }, [authLoading, isInstructor]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [matRes, cohortRes] = await Promise.all([
         axios.get(`${API_URL}/api/library/materials`),
@@ -77,7 +71,13 @@ export default function MaterialLibrary() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && isInstructor) {
+      fetchData();
+    }
+  }, [authLoading, isInstructor, fetchData]);
 
   const handleUpload = async () => {
     if (!form.title.trim()) {
@@ -210,6 +210,16 @@ export default function MaterialLibrary() {
     }
   };
 
+  // Memoize filtered materials to avoid re-filtering on every render
+  const filteredMaterials = useMemo(() => {
+    return materials.filter((m) => {
+      if (filter === 'all') return true;
+      if (filter === 'global') return !!m.is_global;
+      if (filter === 'video') return m.material_type === 'video';
+      return !m.is_global;
+    });
+  }, [materials, filter]);
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
@@ -301,14 +311,7 @@ export default function MaterialLibrary() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {materials
-              .filter((m) => {
-                if (filter === 'all') return true;
-                if (filter === 'global') return !!m.is_global;
-                if (filter === 'video') return m.material_type === 'video';
-                return !m.is_global;
-              })
-              .map((mat) => (
+            {filteredMaterials.map((mat) => (
               <Card key={mat.material_id} className="bg-white border-[#B8D4E8]" data-testid={`library-material-${mat.material_id}`}>
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">

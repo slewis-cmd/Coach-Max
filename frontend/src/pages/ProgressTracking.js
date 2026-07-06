@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -202,6 +202,12 @@ export default function ProgressTracking() {
     setExpandedStudents(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
+  // Memoize weekly progress sort (avoids re-sorting + prevents in-place mutation of analytics state)
+  const sortedWeeklyProgress = useMemo(() => {
+    if (!analytics?.weekly_progress) return [];
+    return [...analytics.weekly_progress].sort((a, b) => a.week - b.week);
+  }, [analytics?.weekly_progress]);
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
@@ -309,7 +315,7 @@ export default function ProgressTracking() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {analytics.weekly_progress.sort((a, b) => a.week - b.week).map((week) => {
+                    {sortedWeeklyProgress.map((week) => {
                       const completionRate = week.assignments > 0 && analytics.cohort.total_students > 0
                         ? Math.round((week.submitted / (week.assignments * analytics.cohort.total_students)) * 100)
                         : 0;

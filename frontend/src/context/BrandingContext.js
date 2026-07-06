@@ -25,8 +25,9 @@ export function BrandingProvider({ children }) {
       if (res.data && typeof res.data === 'object') {
         setBranding({ ...DEFAULT_BRANDING, ...res.data });
       }
-    } catch {
-      // fall back to defaults silently — public endpoint, network issue only
+    } catch (err) {
+      // Public endpoint — fall back to defaults but log for observability
+      console.warn('Failed to load branding, using defaults:', err?.message || err);
     }
   }, []);
 

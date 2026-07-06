@@ -72,8 +72,9 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await axios.post(`${API_URL}/api/auth/logout`, {});
-    } catch (_err) {
-      // Logout API failure is non-critical
+    } catch (err) {
+      // Logout API failure is non-critical; local session still cleared below
+      console.warn('Logout API call failed (non-critical):', err?.message || err);
     }
     setUser(null);
     clearToken();
@@ -88,7 +89,8 @@ export const AuthProvider = ({ children }) => {
       await axios.post(`${API_URL}/api/auth/set-role`, { role });
       setUser(prev => ({ ...prev, role }));
       return true;
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to set role:', err?.response?.data?.detail || err?.message || err);
       return false;
     }
   };

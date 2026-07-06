@@ -25,8 +25,11 @@ export function CoachMaxChat({ submissionId, weekNumber, onClose }) {
           { role: 'coach', text: c.response }
         ])).flat();
         setMessages(history);
-      } catch (_e) {
-        // First load — no chat history yet
+      } catch (err) {
+        // 404 = no history yet (first load); anything else worth logging
+        if (err?.response?.status !== 404) {
+          console.warn('Failed to load chat history:', err?.message || err);
+        }
       } finally {
         setLoadingHistory(false);
       }

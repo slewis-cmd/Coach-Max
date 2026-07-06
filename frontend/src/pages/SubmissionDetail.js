@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -100,14 +100,7 @@ export default function SubmissionDetail() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const audioRef = React.useRef(null);
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      fetchSubmission();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, submissionId]);
-
-  const fetchSubmission = async () => {
+  const fetchSubmission = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/submissions/${submissionId}`);
       setSubmission(res.data);
@@ -119,7 +112,13 @@ export default function SubmissionDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [submissionId, navigate]);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      fetchSubmission();
+    }
+  }, [authLoading, user, fetchSubmission]);
 
   const handleReview = async () => {
     setReviewing(true);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -48,11 +48,7 @@ export default function InstructorDashboard() {
     }
   }, [loading, isAuthenticated, isInstructor, navigate]);
 
-  useEffect(() => {
-    if (isInstructor) fetchData();
-  }, [isInstructor]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [cohortsRes, submissionsRes, analyticsRes] = await Promise.all([
         axios.get(`${API_URL}/api/cohorts`),
@@ -67,7 +63,11 @@ export default function InstructorDashboard() {
     } finally {
       setLoadingData(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isInstructor) fetchData();
+  }, [isInstructor, fetchData]);
 
   const handleCreateCohort = async () => {
     if (!newCohort.name.trim()) { toast.error('Please enter a cohort name'); return; }

@@ -228,10 +228,10 @@ class TestUploadIsGlobal:
         )
         doc = mongo.materials.find_one({"material_id": mid})
         assert doc is not None
-        assert doc.get("is_global") is True, f"Expected is_global=True, got {doc.get('is_global')}"
+        assert doc.get("is_global") == True, f"Expected is_global=True, got {doc.get('is_global')}"
         assert doc.get("week_number") == 0, \
             f"Expected week_number=0 for global, got {doc.get('week_number')}"
-        assert doc.get("is_library") is True
+        assert doc.get("is_library") == True
 
     def test_upload_is_global_false_preserves_week(self, admin_headers, mongo):
         """is_global=false → is_global=False and week_number preserved."""
@@ -244,7 +244,7 @@ class TestUploadIsGlobal:
         )
         doc = mongo.materials.find_one({"material_id": mid})
         assert doc is not None
-        assert doc.get("is_global") is False
+        assert doc.get("is_global") == False
         assert doc.get("week_number") == 4
 
     def test_upload_is_global_omitted_defaults_false(self, admin_headers, mongo):
@@ -258,7 +258,7 @@ class TestUploadIsGlobal:
         )
         doc = mongo.materials.find_one({"material_id": mid})
         assert doc is not None
-        assert doc.get("is_global") is False
+        assert doc.get("is_global") == False
         assert doc.get("week_number") == 5
 
 
@@ -287,8 +287,8 @@ class TestGetLibraryReturnsIsGlobal:
         by_id = {m["material_id"]: m for m in materials}
         assert mid_global in by_id, "Global material must appear in library listing"
         assert mid_regular in by_id, "Regular material must appear in library listing"
-        assert by_id[mid_global].get("is_global") is True
-        assert by_id[mid_regular].get("is_global") is False
+        assert by_id[mid_global].get("is_global") == True
+        assert by_id[mid_regular].get("is_global") == False
 
 
 class TestAssignGlobalMaterial:
@@ -522,7 +522,7 @@ class TestDuplicatePreservesIsGlobal:
 
         dup_doc = mongo.materials.find_one({"material_id": new_mid})
         assert dup_doc is not None
-        assert dup_doc.get("is_global") is True, \
+        assert dup_doc.get("is_global") == True, \
             f"Duplicated global material must preserve is_global=True, got {dup_doc.get('is_global')}"
         assert dup_doc.get("week_number") == 0, \
             f"Duplicated global material should have week_number=0, got {dup_doc.get('week_number')}"

@@ -246,7 +246,7 @@ class TestLibraryDuplicate:
         src_doc = mongo.materials.find_one({"material_id": library_material["material_id"]})
 
         # Flag checks
-        assert new_doc["is_library"] is True
+        assert new_doc["is_library"] == True
         assert new_doc.get("cohort_ids", []) == []
         assert new_doc.get("duplicated_from") == library_material["material_id"]
         assert new_doc["title"].endswith(" (Copy)")

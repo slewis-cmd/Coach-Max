@@ -238,7 +238,7 @@ class TestUploadVideoFile:
         assert doc["gridfs_id"], "gridfs_id must be set for uploaded video"
         assert doc.get("video_url", "") == "", "video_url must be empty for file upload"
         assert doc.get("transcription_status") == "pending"
-        assert doc.get("is_library") is True
+        assert doc.get("is_library") == True
 
     def test_upload_video_file_wav_accepted(self, admin_headers, mongo):
         r = _upload_video_file(
