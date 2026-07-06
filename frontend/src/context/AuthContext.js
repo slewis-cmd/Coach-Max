@@ -51,7 +51,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.get(`${API_URL}/api/auth/me`);
       setUser(response.data);
-    } catch (error) {
+    } catch (err) {
+      // 401 is expected (stale/invalid token); log anything else for observability
+      if (err?.response?.status !== 401) {
+        console.warn('Auth check failed:', err?.message || err);
+      }
       setUser(null);
       clearToken();
     } finally {

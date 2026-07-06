@@ -311,6 +311,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Code Quality — Safe Refactor Pass (Completed - July 6, 2026)
+- [x] Empty error handlers replaced with `console.warn`/`console.error` (AuthContext logout/setRole/checkAuth, BrandingContext, CoachMaxPage chat + TTS, CoachMaxChat) — 404-silent branch preserved for expected empty-history cases
+- [x] `useCallback` normalized across fetchers + reordered before their `useEffect` (InstructorDashboard, MaterialLibrary, SubmissionDetail, ProgressTracking) — no more stale closures
+- [x] `useMemo` added: `filteredMaterials` in MaterialLibrary, `sortedWeeklyProgress` in ProgressTracking (also fixed state-mutating `.sort()` via `[...arr].sort()`)
+- [x] `eslint-disable react-hooks/exhaustive-deps` comment removed from SubmissionDetail (deps now correct)
+- [x] pytest antipattern: `is True` / `is False` → `== True` / `== False` across 12 assertions in 6 test files
+- [x] Regression tested: 51/51 in-scope pytest + 10/10 frontend Playwright PASS (iteration_35.json). Custom AI Feedback Instructions feature still works E2E.
+- **Skipped (explicit user decision):** localStorage → httpOnly cookies migration (preview-proxy risk), oversized-component splits (`MaterialLibrary`/`SubmissionDetail`/`CohortDetail`/`StudentDashboard`), Python function complexity refactor (`build_cumulative_context`, `upload_library_material`, `transcribe_video_material`, `bulk_import_students`).
+
 ### Custom AI Feedback Instructions (Completed - July 6, 2026)
 - [x] `feedback_template` field on Material (homework only) — overrides the default "3 done well / 3 to improve" rubric
 - [x] `POST /api/cohorts/{id}/materials` and `POST /api/library/materials` accept optional `feedback_template` query param (persisted only for homework)

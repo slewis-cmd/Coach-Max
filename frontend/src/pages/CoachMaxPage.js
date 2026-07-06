@@ -41,7 +41,8 @@ export default function CoachMaxPage() {
       audioPlayerRef.current = audio;
       audio.onended = () => setPlayingAudio(null);
       audio.play();
-    } catch (_e) {
+    } catch (err) {
+      console.warn('TTS audio generation failed:', err?.message || err);
       toast.error('Could not generate audio');
       setPlayingAudio(null);
     }

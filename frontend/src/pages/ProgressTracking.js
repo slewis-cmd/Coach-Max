@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -163,19 +163,7 @@ export default function ProgressTracking() {
     }
   }, [authLoading, isInstructor, navigate]);
 
-  useEffect(() => {
-    if (isInstructor) {
-      fetchCohorts();
-    }
-  }, [isInstructor]);
-
-  useEffect(() => {
-    if (selectedCohort) {
-      fetchCohortAnalytics(selectedCohort);
-    }
-  }, [selectedCohort]);
-
-  const fetchCohorts = async () => {
+  const fetchCohorts = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/cohorts`);
       setCohorts(res.data);
@@ -187,16 +175,28 @@ export default function ProgressTracking() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchCohortAnalytics = async (cohortId) => {
+  const fetchCohortAnalytics = useCallback(async (cohortId) => {
     try {
       const res = await axios.get(`${API_URL}/api/analytics/cohort/${cohortId}`);
       setAnalytics(res.data);
     } catch (error) {
       toast.error('Failed to load analytics');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isInstructor) {
+      fetchCohorts();
+    }
+  }, [isInstructor, fetchCohorts]);
+
+  useEffect(() => {
+    if (selectedCohort) {
+      fetchCohortAnalytics(selectedCohort);
+    }
+  }, [selectedCohort, fetchCohortAnalytics]);
 
   const toggleStudent = (userId) => {
     setExpandedStudents(prev => ({ ...prev, [userId]: !prev[userId] }));
