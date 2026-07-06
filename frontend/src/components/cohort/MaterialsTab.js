@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { handleDownloadSubmission } from '../../utils/download';
+import { SUBMISSION_TYPE_BY_ID } from '../../config/submissionTypes';
 import { EditFeedbackTemplateDialog } from '../rubric/FeedbackTemplateField';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -182,7 +183,9 @@ export function MaterialsTab({
                 </div>
               </div>
               <CardTitle className="text-base font-medium mt-2">{mat.title}</CardTitle>
-              <CardDescription className="text-xs uppercase tracking-wide">Homework Assignment</CardDescription>
+              <CardDescription className="text-xs uppercase tracking-wide">
+                {SUBMISSION_TYPE_BY_ID[mat.submission_type]?.label || 'Homework Assignment'}
+              </CardDescription>
               {mat.feedback_template && (
                 <div
                   className="inline-flex items-center gap-1 text-[10px] font-medium bg-[#7C3AED] text-white px-2 py-0.5 rounded-full uppercase tracking-wide mt-2 w-fit"
@@ -235,6 +238,23 @@ export function MaterialsTab({
                     }}>
                     <Copy className="w-3.5 h-3.5 mr-1.5" />Copy Submission Link
                   </Button>
+                  {mat.submission_type && (
+                    <Button
+                      variant="outline" size="sm"
+                      className="w-full border-[#7C3AED] text-[#7C3AED] hover:bg-[#F5EBFF] rounded-lg mb-3"
+                      data-testid={`copy-stable-link-${mat.material_id}`}
+                      title="Thinkific-stable per-week link. Safe to embed once — always resolves to the current assignment for this week + type."
+                      onClick={() => {
+                        const link = `${window.location.origin}/submit/w/${mat.week_number}/${mat.submission_type}?cohort=${cohort.cohort_id}`;
+                        navigator.clipboard.writeText(link).then(() => {
+                          toast.success('Thinkific-stable link copied!');
+                        }).catch(() => {
+                          toast.error('Failed to copy link');
+                        });
+                      }}>
+                      <Copy className="w-3.5 h-3.5 mr-1.5" />Copy Thinkific Link
+                    </Button>
+                  )}
                   <Button
                     variant="outline" size="sm"
                     className={`w-full rounded-lg mb-3 ${mat.drive_folder_url ? 'border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]' : 'border-[#B8D4E8] text-[#666666] hover:bg-[#E1F0FF]'}`}

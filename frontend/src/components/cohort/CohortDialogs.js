@@ -9,6 +9,7 @@ import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { QRCodeSVG } from 'qrcode.react';
 import { FeedbackTemplateField } from '../rubric/FeedbackTemplateField';
+import { SubmissionTypeFields } from '../material/SubmissionTypeFields';
 import { 
   Upload, File, FileUp, Download, CheckCircle, AlertCircle, Copy, Check, UserCog 
 } from 'lucide-react';
@@ -98,6 +99,15 @@ export function UploadMaterialDialog({ open, onOpenChange, materialForm, setMate
               <Input id="due-date" type="date" data-testid="due-date-input"
                 value={materialForm.due_date} onChange={(e) => setMaterialForm({ ...materialForm, due_date: e.target.value })} className="mt-1" />
             </div>
+          )}
+          {materialForm.material_type === 'homework' && (
+            <SubmissionTypeFields
+              submissionType={materialForm.submission_type || ''}
+              onSubmissionTypeChange={(v) => setMaterialForm({ ...materialForm, submission_type: v })}
+              questionnaireFields={materialForm.questionnaire_fields || []}
+              onQuestionnaireFieldsChange={(v) => setMaterialForm({ ...materialForm, questionnaire_fields: v })}
+              idPrefix="cohort-submission-type"
+            />
           )}
           {materialForm.material_type === 'homework' && (
             <FeedbackTemplateField

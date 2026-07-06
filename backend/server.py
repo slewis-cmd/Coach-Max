@@ -8,7 +8,8 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+import json
 import uuid
 from datetime import datetime, timezone, timedelta
 import aiofiles
@@ -187,6 +188,19 @@ async def read_file_text(doc_or_path, file_name: str = None) -> str:
     try:
         if isinstance(doc_or_path, dict):
             doc = doc_or_path
+            # Questionnaire submissions: synthesize Q&A text from stored answers
+            if doc.get("submission_type") == "business_questionnaire" and doc.get("questionnaire_answers") is not None:
+                # Resolve labels via parent material
+                mat = await db.materials.find_one({"material_id": doc.get("material_id")}, {"_id": 0, "questionnaire_fields": 1}) if doc.get("material_id") else None
+                fields = (mat or {}).get("questionnaire_fields") or []
+                answers = doc.get("questionnaire_answers") or {}
+                if fields:
+                    return "\n\n".join(
+                        f"Q: {f.get('label')}\nA: {answers.get(f.get('id'), '') or '(no answer)'}"
+                        for f in fields
+                    )
+                # Fallback: dump raw answers
+                return "\n\n".join(f"Q: {k}\nA: {v}" for k, v in answers.items())
             # Video materials: return stored transcript
             if doc.get("material_type") == "video":
                 transcript = (doc.get("transcript") or "").strip()
@@ -572,7 +586,7 @@ class Material(BaseModel):
     material_id: str = Field(default_factory=lambda: f"mat_{uuid.uuid4().hex[:12]}")
     cohort_id: str
     week_number: int
-    material_type: str  # "workbook", "case_study", "homework"
+    material_type: str  # "workbook", "case_study", "homework", "video"
     title: str
     description: Optional[str] = None
     file_path: Optional[str] = ""
@@ -582,7 +596,67 @@ class Material(BaseModel):
     due_date: Optional[str] = None  # ISO date string for homework assignments
     drive_folder_url: Optional[str] = ""  # Google Drive folder URL for homework submissions
     feedback_template: Optional[str] = ""  # Custom AI feedback instructions — overrides the default structure
+    submission_type: Optional[str] = None  # One of SUBMISSION_TYPE_IDS or None for generic homework
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None  # For submission_type == 'business_questionnaire'
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# --- Named homework submission types (mirror /app/frontend/src/config/submissionTypes.js) ---
+SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
+    "60_second_pitch":         {"label": "60 Second Pitch",        "extensions": ["mp4", "mov", "m4v", "mp3", "m4a", "wav"], "input_kind": "file"},
+    "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx"],                    "input_kind": "file"},
+    "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt"],             "input_kind": "file"},
+    "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                        "input_kind": "form"},
+}
+SUBMISSION_TYPE_IDS = list(SUBMISSION_TYPE_CONFIG.keys())
+DEFAULT_HOMEWORK_EXTENSIONS = ["pdf", "docx", "doc"]
+
+
+def _parse_questionnaire_fields(raw: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """Parse and lightly validate a JSON string of questionnaire fields.
+    Accepted per field: {id, label, type in ('text','longtext'), required?}"""
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=400, detail="questionnaire_fields must be valid JSON")
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=400, detail="questionnaire_fields must be a list")
+    if len(parsed) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 questionnaire fields allowed")
+    cleaned: List[Dict[str, Any]] = []
+    seen_ids: set = set()
+    for i, f in enumerate(parsed):
+        if not isinstance(f, dict):
+            raise HTTPException(status_code=400, detail=f"Field {i} must be an object")
+        fid = str(f.get("id") or f"q_{i+1}").strip()
+        label = str(f.get("label") or "").strip()
+        ftype = str(f.get("type") or "text").strip().lower()
+        required = bool(f.get("required"))
+        if not label:
+            raise HTTPException(status_code=400, detail=f"Field {i+1} label is required")
+        if len(label) > 300:
+            raise HTTPException(status_code=400, detail=f"Field {i+1} label must be 300 characters or less")
+        if ftype not in ("text", "longtext"):
+            raise HTTPException(status_code=400, detail=f"Field {i+1} type must be 'text' or 'longtext'")
+        if fid in seen_ids:
+            fid = f"{fid}_{i+1}"
+        seen_ids.add(fid)
+        cleaned.append({"id": fid, "label": label, "type": ftype, "required": required})
+    return cleaned
+
+
+def _validate_submission_type(submission_type: Optional[str]) -> Optional[str]:
+    """Normalize + validate a submission_type value; returns None if empty."""
+    if not submission_type:
+        return None
+    st = submission_type.strip()
+    if st == "":
+        return None
+    if st not in SUBMISSION_TYPE_IDS:
+        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
+    return st
 
 class Submission(BaseModel):
     submission_id: str = Field(default_factory=lambda: f"sub_{uuid.uuid4().hex[:12]}")
@@ -592,6 +666,8 @@ class Submission(BaseModel):
     file_path: Optional[str] = ""
     gridfs_id: Optional[str] = None
     file_name: str
+    submission_type: Optional[str] = None  # snapshot of material.submission_type at submit time
+    questionnaire_answers: Optional[Dict[str, str]] = None  # For business_questionnaire submissions
     status: str = "pending"  # "pending", "draft", "reviewed", "sent"
     ai_feedback: Optional[str] = None
     instructor_feedback: Optional[str] = None  # Human-in-the-loop: instructor's edited/added feedback
@@ -1630,6 +1706,8 @@ async def upload_material(
     due_date: str = "",
     drive_folder_url: str = "",
     feedback_template: str = "",
+    submission_type: str = "",
+    questionnaire_fields: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload course material (workbook, case study, or homework assignment)"""
@@ -1665,7 +1743,9 @@ async def upload_material(
         uploaded_by=user["user_id"],
         due_date=due_date if due_date else None,
         drive_folder_url=_validate_drive_url(drive_folder_url) if material_type == "homework" else "",
-        feedback_template=(feedback_template or "").strip() if material_type == "homework" else ""
+        feedback_template=(feedback_template or "").strip() if material_type == "homework" else "",
+        submission_type=_validate_submission_type(submission_type) if material_type == "homework" else None,
+        questionnaire_fields=_parse_questionnaire_fields(questionnaire_fields) if (material_type == "homework" and _validate_submission_type(submission_type) == "business_questionnaire") else None,
     )
     
     doc = material.model_dump()
@@ -1918,8 +1998,40 @@ async def get_submit_link_info(material_id: str):
         "file_name": material.get("file_name"),
         "description": material.get("description", ""),
         "drive_folder_url": material.get("drive_folder_url", ""),
+        "submission_type": material.get("submission_type"),
+        "questionnaire_fields": material.get("questionnaire_fields") or [],
         "cohorts": cohorts
     }
+
+
+@api_router.get("/submit-link/w/{week_number}/{submission_type}")
+async def resolve_stable_submit_link(week_number: int, submission_type: str, cohort_id: str = None):
+    """Public endpoint: resolve a stable per-week-per-type link (Thinkific-embeddable) to a material.
+    URL pattern: /submit/w/{week}/{submission_type}?cohort={cohort_id}"""
+    if submission_type not in SUBMISSION_TYPE_IDS:
+        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
+
+    query: Dict[str, Any] = {
+        "material_type": "homework",
+        "week_number": week_number,
+        "submission_type": submission_type,
+    }
+    if cohort_id:
+        # Match either the cohort's directly-uploaded material or a library material linked to it
+        query = {
+            "material_type": "homework",
+            "week_number": week_number,
+            "submission_type": submission_type,
+            "$or": [
+                {"cohort_id": cohort_id},
+                {"is_library": True, "cohort_ids": cohort_id},
+            ],
+        }
+
+    material = await db.materials.find_one(query, {"_id": 0}, sort=[("created_at", -1)])
+    if not material:
+        raise HTTPException(status_code=404, detail="No assignment matches this week + submission type yet")
+    return {"material_id": material["material_id"]}
 
 
 
@@ -2001,6 +2113,8 @@ async def upload_library_material(
     video_url: str = "",
     drive_folder_url: str = "",
     feedback_template: str = "",
+    submission_type: str = "",
+    questionnaire_fields: str = "",
     user: dict = Depends(require_instructor)
 ):
     """Upload a material to the central library (workbooks, case studies, homework, and videos).
@@ -2059,6 +2173,8 @@ async def upload_library_material(
         "transcription_status": "pending" if material_type == "video" and not is_url_video else "n/a",
         "drive_folder_url": _validate_drive_url(drive_folder_url) if material_type == "homework" else "",
         "feedback_template": (feedback_template or "").strip() if material_type == "homework" else "",
+        "submission_type": _validate_submission_type(submission_type) if material_type == "homework" else None,
+        "questionnaire_fields": _parse_questionnaire_fields(questionnaire_fields) if (material_type == "homework" and _validate_submission_type(submission_type) == "business_questionnaire") else None,
         "uploaded_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -2681,11 +2797,12 @@ async def get_chat_history(submission_id: str, user: dict = Depends(get_current_
 @api_router.post("/materials/{material_id}/submit")
 async def submit_homework(
     material_id: str,
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
     cohort_id: str = None,
+    questionnaire_answers: str = Form(default=""),
     user: dict = Depends(get_current_user)
 ):
-    """Submit homework for review"""
+    """Submit homework for review. Accepts either a file OR (for questionnaire types) JSON answers."""
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can submit homework")
     
@@ -2706,17 +2823,58 @@ async def submit_homework(
     if existing:
         # Delete old file (GridFS + legacy disk)
         await delete_file_from_doc(existing)
-    
-    # Validate file
-    filename = file.filename or "unnamed"
-    ext = filename.lower().split(".")[-1]
-    if ext not in ["pdf", "docx"]:
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
-    
-    # Save file to GridFS (persistent across redeploys)
-    submission_id = f"sub_{uuid.uuid4().hex[:12]}"
-    content = await file.read()
-    gridfs_id = await save_bytes_to_gridfs(content, f"{submission_id}_{filename}")
+
+    submission_type = material.get("submission_type")
+    is_questionnaire = submission_type == "business_questionnaire"
+
+    if is_questionnaire:
+        # Parse + validate answers against material's questionnaire_fields
+        try:
+            answers_raw = json.loads(questionnaire_answers or "{}")
+        except Exception:
+            raise HTTPException(status_code=400, detail="questionnaire_answers must be valid JSON")
+        if not isinstance(answers_raw, dict):
+            raise HTTPException(status_code=400, detail="questionnaire_answers must be an object")
+
+        fields = material.get("questionnaire_fields") or []
+        answers: Dict[str, str] = {}
+        for f in fields:
+            fid = f.get("id")
+            ans = answers_raw.get(fid, "")
+            if not isinstance(ans, str):
+                ans = str(ans)
+            ans = ans.strip()
+            if f.get("required") and not ans:
+                raise HTTPException(status_code=400, detail=f"'{f.get('label')}' is required")
+            if len(ans) > 5000:
+                raise HTTPException(status_code=400, detail=f"'{f.get('label')}' must be 5000 characters or less")
+            answers[fid] = ans
+
+        filename = f"questionnaire_{material_id}.json"
+        gridfs_id = None  # No binary file for questionnaire
+        content = b""  # Placeholder for closure captured by auto_review
+    else:
+        # File-based submission (existing behavior, with per-type extension validation)
+        if file is None or not file.filename:
+            raise HTTPException(status_code=400, detail="A file is required for this assignment")
+        filename = file.filename or "unnamed"
+        ext = filename.lower().split(".")[-1]
+        allowed_exts = (
+            SUBMISSION_TYPE_CONFIG[submission_type]["extensions"]
+            if submission_type in SUBMISSION_TYPE_CONFIG and SUBMISSION_TYPE_CONFIG[submission_type]["input_kind"] == "file"
+            else DEFAULT_HOMEWORK_EXTENSIONS
+        )
+        if ext not in allowed_exts:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Allowed file types for this assignment: {', '.join('.' + e for e in allowed_exts)}"
+            )
+
+        # Save file to GridFS (persistent across redeploys)
+        submission_id_placeholder = f"sub_{uuid.uuid4().hex[:12]}"
+        content = await file.read()
+        gridfs_id = await save_bytes_to_gridfs(content, f"{submission_id_placeholder}_{filename}")
+        answers = None
     
     # Create or update submission
     if existing:
@@ -2728,6 +2886,8 @@ async def submit_homework(
                 "file_path": "",
                 "gridfs_id": gridfs_id,
                 "file_name": filename,
+                "submission_type": submission_type,
+                "questionnaire_answers": answers,
                 "status": "pending",
                 "ai_feedback": None,
                 "instructor_feedback": None,
@@ -2743,14 +2903,16 @@ async def submit_homework(
     else:
         # Create new submission
         submission = Submission(
-            submission_id=submission_id,
             material_id=material_id,
             cohort_id=submission_cohort_id,
             student_id=user["user_id"],
             file_path="",
             gridfs_id=gridfs_id,
-            file_name=filename
+            file_name=filename,
+            submission_type=submission_type,
+            questionnaire_answers=answers,
         )
+        submission_id = submission.submission_id
         
         doc = submission.model_dump()
         doc["submitted_at"] = doc["submitted_at"].isoformat()
@@ -2919,8 +3081,19 @@ async def submit_on_behalf(
             }, {"_id": 0}).to_list(20)
             context_materials = list(global_materials) + list(context_materials)
             
-            # Extract text from submission (read from GridFS — in-memory content is also available)
-            submission_text = extract_text_from_file(content, filename)
+            # Extract text from submission — file bytes OR questionnaire answers.
+            # submit_on_behalf writes/edits a file, so is_questionnaire defaults False;
+            # if the material IS a questionnaire, fall back to reading stored answers.
+            sub_is_questionnaire = material.get("submission_type") == "business_questionnaire"
+            if sub_is_questionnaire:
+                stored = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0, "questionnaire_answers": 1})
+                stored_answers = (stored or {}).get("questionnaire_answers") or {}
+                submission_text = "\n\n".join(
+                    f"Q: {f.get('label')}\nA: {stored_answers.get(f.get('id'), '') or '(no answer)'}"
+                    for f in (material.get("questionnaire_fields") or [])
+                )
+            else:
+                submission_text = extract_text_from_file(content, filename)
             
             if not submission_text.strip():
                 logger.error(f"Auto review: empty submission text for {submission_id}")
@@ -3374,7 +3547,28 @@ async def download_submission(submission_id: str, inline: int = 0, user: dict = 
         if not cohort or not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
     # super_admin can download any submission
-    
+
+    # Questionnaire submissions have no binary file; serve the Q&A as JSON
+    if submission.get("submission_type") == "business_questionnaire":
+        mat = await db.materials.find_one({"material_id": submission.get("material_id")}, {"_id": 0, "questionnaire_fields": 1, "title": 1})
+        fields = (mat or {}).get("questionnaire_fields") or []
+        answers = submission.get("questionnaire_answers") or {}
+        payload = {
+            "title": (mat or {}).get("title", ""),
+            "answers": [
+                {"id": f.get("id"), "label": f.get("label"), "answer": answers.get(f.get("id"), "")}
+                for f in fields
+            ],
+        }
+        body = json.dumps(payload, indent=2).encode("utf-8")
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'{"inline" if inline else "attachment"}; filename="questionnaire.json"'
+            }
+        )
+
     file_bytes = await read_bytes_from_doc(submission)
     filename = submission.get("file_name", "submission")
     return binary_file_response(file_bytes, filename, inline=bool(inline))
@@ -3393,7 +3587,18 @@ async def preview_submission_text(submission_id: str, user: dict = Depends(get_c
         cohort = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
         if not cohort or not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
+    # Questionnaire submissions: return Q&A as text
+    if submission.get("submission_type") == "business_questionnaire":
+        mat = await db.materials.find_one({"material_id": submission.get("material_id")}, {"_id": 0, "questionnaire_fields": 1})
+        fields = (mat or {}).get("questionnaire_fields") or []
+        answers = submission.get("questionnaire_answers") or {}
+        text = "\n\n".join(
+            f"Q: {f.get('label')}\nA: {answers.get(f.get('id'), '') or '(no answer)'}"
+            for f in fields
+        ) or "(no answers submitted)"
+        return {"text": text, "file_name": "questionnaire"}
+
     file_bytes = await read_bytes_from_doc(submission)
     text = extract_text_from_file(file_bytes, submission.get("file_name", ""))
     return {"text": text, "file_name": submission.get("file_name", "")}
@@ -3484,10 +3689,9 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     }, {"_id": 0}).to_list(20)
     context_materials = list(global_materials) + list(context_materials)
     
-    # Extract text from submission
+    # Extract text from submission (read_file_text handles questionnaire fallback + video transcripts)
     try:
-        file_bytes = await read_bytes_from_doc(submission)
-        submission_text = extract_text_from_file(file_bytes, submission["file_name"])
+        submission_text = await read_file_text(submission)
     except HTTPException:
         raise
     except Exception as e:

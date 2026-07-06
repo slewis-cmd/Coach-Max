@@ -51,7 +51,7 @@ export default function CohortDetail() {
   const [invitingAll, setInvitingAll] = useState(false);
   
   const [materialForm, setMaterialForm] = useState({
-    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '', feedback_template: ''
+    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '', feedback_template: '', submission_type: '', questionnaire_fields: []
   });
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
   
@@ -178,12 +178,16 @@ export default function CohortDetail() {
       const params = new URLSearchParams({
         week_number: materialForm.week_number, material_type: materialForm.material_type,
         title: materialForm.title, description: materialForm.description, due_date: materialForm.due_date || '',
-        feedback_template: materialForm.material_type === 'homework' ? (materialForm.feedback_template || '') : ''
+        feedback_template: materialForm.material_type === 'homework' ? (materialForm.feedback_template || '') : '',
+        submission_type: materialForm.material_type === 'homework' ? (materialForm.submission_type || '') : '',
+        questionnaire_fields: (materialForm.material_type === 'homework' && materialForm.submission_type === 'business_questionnaire')
+          ? JSON.stringify(materialForm.questionnaire_fields || [])
+          : ''
       });
       await axios.post(`${API_URL}/api/cohorts/${cohortId}/materials?${params}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast.success('Material uploaded');
       setShowUploadMaterial(false);
-      setMaterialForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '', feedback_template: '' });
+      setMaterialForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, due_date: '', feedback_template: '', submission_type: '', questionnaire_fields: [] });
       fetchCohort();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload material');

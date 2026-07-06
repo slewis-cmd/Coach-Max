@@ -19,7 +19,7 @@ import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
 import BrandingSettings from "./pages/BrandingSettings";
 import InvitePage from "./pages/InvitePage";
-import DirectSubmit from "./pages/DirectSubmit";
+import DirectSubmit, { DirectSubmitStable } from "./pages/DirectSubmit";
 import CoachMaxPage from "./pages/CoachMaxPage";
 import CoachMaxInsightsPage from "./pages/CoachMaxInsightsPage";
 import RubricLibrary from "./pages/RubricLibrary";
@@ -160,6 +160,7 @@ const AppRouter = () => {
       } />
       <Route path="/invite/:code" element={<InvitePage />} />
       <Route path="/submit/:materialId" element={<DirectSubmit />} />
+      <Route path="/submit/w/:week/:submissionType" element={<DirectSubmitStable />} />
       <Route path="/coach-max/:submissionId" element={
         <ProtectedRoute>
           <CoachMaxPage />

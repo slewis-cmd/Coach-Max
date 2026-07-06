@@ -17,6 +17,8 @@ import {
   Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw, Video, Play, Sparkles
 } from 'lucide-react';
 import { FeedbackTemplateField, EditFeedbackTemplateDialog } from '../components/rubric/FeedbackTemplateField';
+import { SubmissionTypeFields } from '../components/material/SubmissionTypeFields';
+import { SUBMISSION_TYPE_BY_ID } from '../config/submissionTypes';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -50,7 +52,7 @@ export default function MaterialLibrary() {
   const [showAssign, setShowAssign] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '', feedback_template: ''
+    title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '', feedback_template: '', submission_type: '', questionnaire_fields: []
   });
   // Filter: show all | week-based | course-wide only
   const [filter, setFilter] = useState('all');
@@ -108,14 +110,18 @@ export default function MaterialLibrary() {
         material_type: form.material_type,
         is_global: form.is_global ? 'true' : 'false',
         video_url: usingUrl ? form.video_url.trim() : '',
-        feedback_template: form.material_type === 'homework' ? (form.feedback_template || '') : ''
+        feedback_template: form.material_type === 'homework' ? (form.feedback_template || '') : '',
+        submission_type: form.material_type === 'homework' ? (form.submission_type || '') : '',
+        questionnaire_fields: (form.material_type === 'homework' && form.submission_type === 'business_questionnaire')
+          ? JSON.stringify(form.questionnaire_fields || [])
+          : ''
       });
       await axios.post(`${API_URL}/api/library/materials?${params.toString()}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success(isVideo && !usingUrl ? 'Video uploaded — transcription in progress' : 'Material added to library!');
       setShowUpload(false);
-      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '', feedback_template: '' });
+      setForm({ title: '', description: '', week_number: 1, material_type: 'workbook', file: null, is_global: false, video_url: '', feedback_template: '', submission_type: '', questionnaire_fields: [] });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Upload failed');
@@ -499,6 +505,15 @@ export default function MaterialLibrary() {
                 </Select>
               </div>
             </div>
+            {form.material_type === 'homework' && (
+              <SubmissionTypeFields
+                submissionType={form.submission_type || ''}
+                onSubmissionTypeChange={(v) => setForm({ ...form, submission_type: v })}
+                questionnaireFields={form.questionnaire_fields || []}
+                onQuestionnaireFieldsChange={(v) => setForm({ ...form, questionnaire_fields: v })}
+                idPrefix="lib-submission-type"
+              />
+            )}
             {form.material_type === 'homework' && (
               <FeedbackTemplateField
                 value={form.feedback_template}
