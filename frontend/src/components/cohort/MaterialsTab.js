@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { handleDownloadSubmission } from '../../utils/download';
+import { EditFeedbackTemplateDialog } from '../rubric/FeedbackTemplateField';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -29,6 +30,7 @@ export function MaterialsTab({
   materials, cohort, isInstructor, cohortSubmissions,
   onDownloadMaterial, onDeleteMaterial, onSelectHomework, onToggleWeek, onUploadMaterial
 }) {
+  const [editingRubricMaterial, setEditingRubricMaterial] = useState(null);
 
   if (materials.length === 0) {
     return (
@@ -49,7 +51,11 @@ export function MaterialsTab({
     );
   }
 
-  return materials.sort((a, b) => a.week_number - b.week_number).map((week) => (
+  const sortedWeeks = [...materials].sort((a, b) => a.week_number - b.week_number);
+
+  return (
+    <>
+      {sortedWeeks.map((week) => (
     <div key={week.week_number} className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-[#000000] text-white rounded-full flex items-center justify-center font-medium">
@@ -252,21 +258,7 @@ export function MaterialsTab({
                     variant="outline" size="sm"
                     className={`w-full rounded-lg mb-3 ${mat.feedback_template ? 'border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF]' : 'border-[#B8D4E8] text-[#666666] hover:bg-[#E1F0FF]'}`}
                     data-testid={`edit-feedback-template-${mat.material_id}`}
-                    onClick={async () => {
-                      const current = mat.feedback_template || '';
-                      const tpl = window.prompt(
-                        'Custom AI feedback instructions for this assignment (leave blank to use the default 3-well / 3-improve rubric):',
-                        current
-                      );
-                      if (tpl === null) return;
-                      try {
-                        await axios.put(`${API_URL}/api/materials/${mat.material_id}/feedback-template`, { feedback_template: tpl });
-                        toast.success(tpl.trim() ? 'AI instructions saved' : 'Restored default rubric');
-                        window.location.reload();
-                      } catch (err) {
-                        toast.error(err.response?.data?.detail || 'Failed to update AI instructions');
-                      }
-                    }}>
+                    onClick={() => setEditingRubricMaterial(mat)}>
                     <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                     {mat.feedback_template ? 'Edit AI Instructions' : 'Add AI Instructions'}
                   </Button>
@@ -307,5 +299,13 @@ export function MaterialsTab({
         ))}
       </div>
     </div>
-  ));
+      ))}
+      <EditFeedbackTemplateDialog
+        open={!!editingRubricMaterial}
+        onOpenChange={(open) => !open && setEditingRubricMaterial(null)}
+        material={editingRubricMaterial}
+        onSaved={() => { setEditingRubricMaterial(null); window.location.reload(); }}
+      />
+    </>
+  );
 }

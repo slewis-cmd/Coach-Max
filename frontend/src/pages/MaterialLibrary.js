@@ -16,6 +16,7 @@ import {
   ArrowLeft, Upload, BookMarked, ClipboardList, Trash2, Download, 
   Plus, Link2, Unlink, File, CheckCircle, Copy, Eye, RefreshCw, Video, Play, Sparkles
 } from 'lucide-react';
+import { FeedbackTemplateField, EditFeedbackTemplateDialog } from '../components/rubric/FeedbackTemplateField';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -134,20 +135,10 @@ export default function MaterialLibrary() {
     }
   };
 
-  const handleEditFeedbackTemplate = async (mat) => {
-    const current = mat.feedback_template || '';
-    const tpl = window.prompt(
-      'Custom AI feedback instructions for this assignment (leave blank to use the default 3-well / 3-improve rubric):',
-      current
-    );
-    if (tpl === null) return;
-    try {
-      await axios.put(`${API_URL}/api/materials/${mat.material_id}/feedback-template`, { feedback_template: tpl });
-      toast.success(tpl.trim() ? 'AI instructions saved' : 'Restored default rubric');
-      fetchData();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to update AI instructions');
-    }
+  const [editingRubricMaterial, setEditingRubricMaterial] = useState(null);
+
+  const handleEditFeedbackTemplate = (mat) => {
+    setEditingRubricMaterial(mat);
   };
 
   const handleDuplicate = async (materialId) => {
@@ -509,21 +500,11 @@ export default function MaterialLibrary() {
               </div>
             </div>
             {form.material_type === 'homework' && (
-              <div>
-                <Label htmlFor="lib-feedback-template">AI Feedback Instructions (optional)</Label>
-                <Textarea
-                  id="lib-feedback-template"
-                  data-testid="lib-feedback-template-input"
-                  placeholder="Override the default rubric. e.g., 'Grade specifically on how the submission compares to the Kawasaki Model on slide 4.'"
-                  value={form.feedback_template}
-                  onChange={(e) => setForm({ ...form, feedback_template: e.target.value })}
-                  className="mt-1"
-                  rows={3}
-                />
-                <p className="text-xs text-[#666666] mt-1">
-                  Leave blank for the default (3 things done well / 3 areas to improve). Custom instructions replace the default rubric for this assignment only.
-                </p>
-              </div>
+              <FeedbackTemplateField
+                value={form.feedback_template}
+                onChange={(v) => setForm({ ...form, feedback_template: v })}
+                idPrefix="lib-feedback-template"
+              />
             )}
             <label className="flex items-start gap-3 p-3 border border-[#B8D4E8] rounded-lg cursor-pointer hover:bg-[#E1F0FF] transition-colors" data-testid="lib-is-global-toggle">
               <input
@@ -754,6 +735,13 @@ export default function MaterialLibrary() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <EditFeedbackTemplateDialog
+        open={!!editingRubricMaterial}
+        onOpenChange={(open) => !open && setEditingRubricMaterial(null)}
+        material={editingRubricMaterial}
+        onSaved={() => { setEditingRubricMaterial(null); fetchData(); }}
+      />
     </div>
   );
 }

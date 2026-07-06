@@ -22,6 +22,7 @@ import InvitePage from "./pages/InvitePage";
 import DirectSubmit from "./pages/DirectSubmit";
 import CoachMaxPage from "./pages/CoachMaxPage";
 import CoachMaxInsightsPage from "./pages/CoachMaxInsightsPage";
+import RubricLibrary from "./pages/RubricLibrary";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -135,6 +136,11 @@ const AppRouter = () => {
       <Route path="/library" element={
         <ProtectedRoute>
           <MaterialLibrary />
+        </ProtectedRoute>
+      } />
+      <Route path="/rubrics" element={
+        <ProtectedRoute>
+          <RubricLibrary />
         </ProtectedRoute>
       } />
       <Route path="/thinkific" element={

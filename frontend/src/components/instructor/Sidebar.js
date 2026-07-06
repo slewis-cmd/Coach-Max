@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { 
-  BookOpen, FileText, ClipboardList, BarChart3, Shield, LogOut, Library, Link2
+  BookOpen, FileText, ClipboardList, BarChart3, Shield, LogOut, Library, Link2, Sparkles
 } from 'lucide-react';
 
 export function InstructorSidebar({ user, isSuperAdmin, totalActionRequired, onLogout }) {
@@ -35,6 +35,11 @@ export function InstructorSidebar({ user, isSuperAdmin, totalActionRequired, onL
           className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
           data-testid="library-link">
           <Library className="w-5 h-5" />Library
+        </Link>
+        <Link to="/rubrics"
+          className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"
+          data-testid="rubrics-link">
+          <Sparkles className="w-5 h-5" />Rubrics
         </Link>
         <Link to="/thinkific"
           className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#333333] hover:bg-white hover:text-[#000000] transition-colors"

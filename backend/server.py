@@ -600,6 +600,24 @@ class Submission(BaseModel):
     reviewed_at: Optional[datetime] = None
     sent_at: Optional[datetime] = None  # When feedback was sent to student
 
+
+class Rubric(BaseModel):
+    """A saved AI feedback rubric template that can be reused across homework assignments."""
+    rubric_id: str = Field(default_factory=lambda: f"rub_{uuid.uuid4().hex[:12]}")
+    name: str
+    content: str  # The custom AI feedback instructions
+    description: Optional[str] = ""  # Optional short summary
+    created_by: str  # user_id of author
+    created_by_name: Optional[str] = ""  # display name for UI
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class RubricPayload(BaseModel):
+    name: str
+    content: str
+    description: Optional[str] = ""
+
 # ==================== AUTH HELPERS ====================
 
 async def get_current_user(request: Request) -> dict:
@@ -1745,6 +1763,83 @@ async def update_material_feedback_template(material_id: str, request: Request, 
         {"$set": {"feedback_template": tpl}}
     )
     return {"material_id": material_id, "feedback_template": tpl, "message": "AI feedback instructions updated"}
+
+
+# ==================== RUBRIC LIBRARY ====================
+
+@api_router.get("/rubrics")
+async def list_rubrics(user: dict = Depends(require_instructor)):
+    """Every instructor + super_admin sees every rubric (org-shared library)."""
+    docs = await db.rubrics.find({}, {"_id": 0}).sort("updated_at", -1).to_list(length=1000)
+    # Backfill display name where missing
+    for d in docs:
+        if not d.get("created_by_name"):
+            author = await db.users.find_one({"user_id": d.get("created_by")}, {"_id": 0, "name": 1, "email": 1})
+            d["created_by_name"] = (author or {}).get("name") or (author or {}).get("email") or "Unknown"
+        d["can_edit"] = (user.get("role") == "super_admin") or (d.get("created_by") == user["user_id"])
+    return docs
+
+
+@api_router.post("/rubrics")
+async def create_rubric(payload: RubricPayload, user: dict = Depends(require_instructor)):
+    name = (payload.name or "").strip()
+    content = (payload.content or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not content:
+        raise HTTPException(status_code=400, detail="Rubric content is required")
+
+    rubric = Rubric(
+        name=name,
+        content=content,
+        description=(payload.description or "").strip(),
+        created_by=user["user_id"],
+        created_by_name=user.get("name") or user.get("email") or "",
+    )
+    await db.rubrics.insert_one(rubric.dict())
+    out = rubric.dict()
+    out["can_edit"] = True
+    return out
+
+
+@api_router.put("/rubrics/{rubric_id}")
+async def update_rubric(rubric_id: str, payload: RubricPayload, user: dict = Depends(require_instructor)):
+    doc = await db.rubrics.find_one({"rubric_id": rubric_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Rubric not found")
+    if user.get("role") != "super_admin" and doc.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the author or a super admin can edit this rubric")
+
+    name = (payload.name or "").strip()
+    content = (payload.content or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not content:
+        raise HTTPException(status_code=400, detail="Rubric content is required")
+
+    await db.rubrics.update_one(
+        {"rubric_id": rubric_id},
+        {"$set": {
+            "name": name,
+            "content": content,
+            "description": (payload.description or "").strip(),
+            "updated_at": datetime.now(timezone.utc),
+        }}
+    )
+    updated = await db.rubrics.find_one({"rubric_id": rubric_id}, {"_id": 0})
+    updated["can_edit"] = True
+    return updated
+
+
+@api_router.delete("/rubrics/{rubric_id}")
+async def delete_rubric(rubric_id: str, user: dict = Depends(require_instructor)):
+    doc = await db.rubrics.find_one({"rubric_id": rubric_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Rubric not found")
+    if user.get("role") != "super_admin" and doc.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the author or a super admin can delete this rubric")
+    await db.rubrics.delete_one({"rubric_id": rubric_id})
+    return {"rubric_id": rubric_id, "message": "Rubric deleted"}
 
 
 @api_router.get("/cohorts/{cohort_id}/materials")

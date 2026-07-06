@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { QRCodeSVG } from 'qrcode.react';
+import { FeedbackTemplateField } from '../rubric/FeedbackTemplateField';
 import { 
   Upload, File, FileUp, Download, CheckCircle, AlertCircle, Copy, Check, UserCog 
 } from 'lucide-react';
@@ -99,17 +100,11 @@ export function UploadMaterialDialog({ open, onOpenChange, materialForm, setMate
             </div>
           )}
           {materialForm.material_type === 'homework' && (
-            <div>
-              <Label htmlFor="feedback-template">AI Feedback Instructions (optional)</Label>
-              <Textarea id="feedback-template" data-testid="feedback-template-input"
-                placeholder="Override the default rubric. e.g., 'Grade specifically on how the submission compares to the Kawasaki Model on slide 4.'"
-                value={materialForm.feedback_template || ''}
-                onChange={(e) => setMaterialForm({ ...materialForm, feedback_template: e.target.value })}
-                className="mt-1" rows={3} />
-              <p className="text-xs text-[#666666] mt-1">
-                Leave blank for the default (3 things done well / 3 areas to improve). Custom instructions replace the default rubric for this assignment only.
-              </p>
-            </div>
+            <FeedbackTemplateField
+              value={materialForm.feedback_template}
+              onChange={(v) => setMaterialForm({ ...materialForm, feedback_template: v })}
+              idPrefix="feedback-template"
+            />
           )}
           <div>
             <Label>File (PDF or Word)</Label>
