@@ -27,6 +27,7 @@ const NONE = '__none__';
  */
 export function FeedbackTemplateField({ value, onChange, idPrefix = 'feedback-template', label = 'AI Feedback Instructions (optional)' }) {
   const [rubrics, setRubrics] = useState([]);
+  const [loadError, setLoadError] = useState(false);
   const [selectedId, setSelectedId] = useState(NONE);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
@@ -37,7 +38,9 @@ export function FeedbackTemplateField({ value, onChange, idPrefix = 'feedback-te
     try {
       const res = await axios.get(`${API_URL}/api/rubrics`);
       setRubrics(res.data || []);
+      setLoadError(false);
     } catch (err) {
+      setLoadError(true);
       console.warn('Failed to load rubric library:', err?.message || err);
     }
   }, []);
@@ -132,6 +135,19 @@ export function FeedbackTemplateField({ value, onChange, idPrefix = 'feedback-te
       <p className="text-xs text-[#666666] mt-1">
         Leave blank for the default (3 things done well / 3 areas to improve). Custom instructions replace the default rubric for this assignment only.
       </p>
+      {loadError && (
+        <p className="text-xs text-red-600 mt-1 flex items-center gap-1" data-testid={`${idPrefix}-load-error`}>
+          Couldn&apos;t load the rubric library.
+          <button
+            type="button"
+            className="underline hover:no-underline"
+            onClick={fetchRubrics}
+            data-testid={`${idPrefix}-load-retry`}
+          >
+            Retry
+          </button>
+        </p>
+      )}
 
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent data-testid={`${idPrefix}-save-dialog`}>

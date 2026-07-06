@@ -72,7 +72,7 @@ export function UploadMaterialDialog({ open, onOpenChange, materialForm, setMate
               <Label>Material Type</Label>
               <Select value={materialForm.material_type}
                 onValueChange={(v) => setMaterialForm({ ...materialForm, material_type: v })}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="mt-1" data-testid="material-type-select"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="workbook">Workbook</SelectItem>
                   <SelectItem value="case_study">Case Study</SelectItem>

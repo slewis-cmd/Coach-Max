@@ -489,7 +489,7 @@ export default function MaterialLibrary() {
               <div>
                 <Label>Type</Label>
                 <Select value={form.material_type} onValueChange={(v) => setForm({...form, material_type: v})}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="mt-1" data-testid="lib-material-type-select"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="workbook">Workbook</SelectItem>
                     <SelectItem value="case_study">Case Study</SelectItem>

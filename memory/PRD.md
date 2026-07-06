@@ -311,6 +311,18 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Rubric Library (Completed - July 6, 2026)
+- [x] MongoDB `rubrics` collection: `{rubric_id, name, content, description, created_by, created_by_name, created_at, updated_at}`
+- [x] CRUD REST endpoints (`GET/POST/PUT/DELETE /api/rubrics[/{id}]`) — instructor-scoped list, shared visibility across org; edit/delete restricted to author + super_admin (403 otherwise, 404 for unknown IDs)
+- [x] Input validation: name ≤ 200 chars, content ≤ 8000 chars, description ≤ 500 chars (400 on overflow)
+- [x] Response includes `can_edit` flag per rubric (true for creator + super_admin)
+- [x] `/rubrics` management page — create, edit (own), delete (own), see all
+- [x] New sidebar link (data-testid `rubrics-link`)
+- [x] Shared `<FeedbackTemplateField/>` component: rubric picker dropdown + textarea + "Save as…" button — embedded in both Upload Material dialogs (cohort + library) when material_type = homework
+- [x] `<EditFeedbackTemplateDialog/>` — replaces `window.prompt` in both MaterialsTab and MaterialLibrary edit flows (fixes Safari 15+ compat issue from iteration_34)
+- [x] Rubric fetch failure surfaces inline retry hint (no silent failure)
+- [x] 32/32 pytest (16 new rubric + 16 feedback_template regression) PASS. 100% frontend Playwright review-item coverage (iteration_36.json)
+
 ### Code Quality — Safe Refactor Pass (Completed - July 6, 2026)
 - [x] Empty error handlers replaced with `console.warn`/`console.error` (AuthContext logout/setRole/checkAuth, BrandingContext, CoachMaxPage chat + TTS, CoachMaxChat) — 404-silent branch preserved for expected empty-history cases
 - [x] `useCallback` normalized across fetchers + reordered before their `useEffect` (InstructorDashboard, MaterialLibrary, SubmissionDetail, ProgressTracking) — no more stale closures

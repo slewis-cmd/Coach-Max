@@ -1771,28 +1771,40 @@ async def update_material_feedback_template(material_id: str, request: Request, 
 async def list_rubrics(user: dict = Depends(require_instructor)):
     """Every instructor + super_admin sees every rubric (org-shared library)."""
     docs = await db.rubrics.find({}, {"_id": 0}).sort("updated_at", -1).to_list(length=1000)
-    # Backfill display name where missing
     for d in docs:
-        if not d.get("created_by_name"):
-            author = await db.users.find_one({"user_id": d.get("created_by")}, {"_id": 0, "name": 1, "email": 1})
-            d["created_by_name"] = (author or {}).get("name") or (author or {}).get("email") or "Unknown"
         d["can_edit"] = (user.get("role") == "super_admin") or (d.get("created_by") == user["user_id"])
     return docs
 
 
-@api_router.post("/rubrics")
-async def create_rubric(payload: RubricPayload, user: dict = Depends(require_instructor)):
+RUBRIC_NAME_MAX = 200
+RUBRIC_CONTENT_MAX = 8000
+RUBRIC_DESC_MAX = 500
+
+
+def _validate_rubric_payload(payload: "RubricPayload") -> tuple[str, str, str]:
     name = (payload.name or "").strip()
     content = (payload.content or "").strip()
+    desc = (payload.description or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
     if not content:
         raise HTTPException(status_code=400, detail="Rubric content is required")
+    if len(name) > RUBRIC_NAME_MAX:
+        raise HTTPException(status_code=400, detail=f"Name must be {RUBRIC_NAME_MAX} characters or less")
+    if len(content) > RUBRIC_CONTENT_MAX:
+        raise HTTPException(status_code=400, detail=f"Content must be {RUBRIC_CONTENT_MAX} characters or less")
+    if len(desc) > RUBRIC_DESC_MAX:
+        raise HTTPException(status_code=400, detail=f"Description must be {RUBRIC_DESC_MAX} characters or less")
+    return name, content, desc
 
+
+@api_router.post("/rubrics")
+async def create_rubric(payload: RubricPayload, user: dict = Depends(require_instructor)):
+    name, content, desc = _validate_rubric_payload(payload)
     rubric = Rubric(
         name=name,
         content=content,
-        description=(payload.description or "").strip(),
+        description=desc,
         created_by=user["user_id"],
         created_by_name=user.get("name") or user.get("email") or "",
     )
@@ -1810,19 +1822,14 @@ async def update_rubric(rubric_id: str, payload: RubricPayload, user: dict = Dep
     if user.get("role") != "super_admin" and doc.get("created_by") != user["user_id"]:
         raise HTTPException(status_code=403, detail="Only the author or a super admin can edit this rubric")
 
-    name = (payload.name or "").strip()
-    content = (payload.content or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
-    if not content:
-        raise HTTPException(status_code=400, detail="Rubric content is required")
+    name, content, desc = _validate_rubric_payload(payload)
 
     await db.rubrics.update_one(
         {"rubric_id": rubric_id},
         {"$set": {
             "name": name,
             "content": content,
-            "description": (payload.description or "").strip(),
+            "description": desc,
             "updated_at": datetime.now(timezone.utc),
         }}
     )
