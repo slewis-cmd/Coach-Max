@@ -311,6 +311,23 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Named Submission Types + Thinkific-Stable Links (Completed - July 6, 2026)
+- [x] 4 named homework submission types: `60_second_pitch`, `10_slide_pitch`, `case_activity`, `business_questionnaire` — coexist alongside generic homework (opt-in per material)
+- [x] Per-type file-extension enforcement on `POST /api/materials/{id}/submit`:
+  - 60 Second Pitch: mp4/mov/m4v/mp3/m4a/wav
+  - 10 Slide Pitch Deck: pdf/ppt/pptx
+  - Case Activity: pdf/doc/docx/txt
+  - Business Questionnaire: no file — structured form
+- [x] Business Questionnaire builder — instructor defines up to 20 questions (text / longtext / required flag); students see the form on the direct-submit page; answers stored on submission doc as `questionnaire_answers: {id: value}`
+- [x] AI review synthesizes Q&A text for questionnaire submissions (via updated `read_file_text` — used by manual review + on-behalf auto-review). BUG FIX by testing agent: `review_submission` was still calling `read_bytes_from_doc`; now uses `read_file_text` which handles questionnaire fallback.
+- [x] Download + preview-text endpoints serve questionnaire submissions as JSON payload / synthesized text (no file blob 404)
+- [x] NEW `GET /api/submit-link/w/{week}/{submission_type}?cohort_id=...` resolver — 400 on bad type, 404 on no-match, 200 with `{material_id}` — enables **Thinkific-stable links** that never need updating
+- [x] Frontend `/submit/w/:week/:submissionType` route → resolves + redirects to `/submit/{material_id}` (or 'Not published yet' card if unresolved)
+- [x] "Copy Thinkific Link" button on every homework card that has a submission_type set (`data-testid=copy-stable-link-{material_id}`)
+- [x] Shared `<SubmissionTypeFields/>` component embedded in both Upload Material dialogs; dynamic questionnaire builder appears when type = business_questionnaire
+- [x] Direct-submit page real-time button disable when required questionnaire fields are empty
+- [x] Testing: 24/24 new backend tests + 67/67 regression + 100% of 22 Playwright items PASS (iteration_37.json)
+
 ### Rubric Library (Completed - July 6, 2026)
 - [x] MongoDB `rubrics` collection: `{rubric_id, name, content, description, created_by, created_by_name, created_at, updated_at}`
 - [x] CRUD REST endpoints (`GET/POST/PUT/DELETE /api/rubrics[/{id}]`) — instructor-scoped list, shared visibility across org; edit/delete restricted to author + super_admin (403 otherwise, 404 for unknown IDs)

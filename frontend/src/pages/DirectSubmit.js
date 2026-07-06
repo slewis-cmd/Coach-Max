@@ -52,6 +52,10 @@ export default function DirectSubmit() {
   const isQuestionnaire = info?.submission_type === 'business_questionnaire';
   const fields = info?.questionnaire_fields || [];
 
+  const missingRequired = isQuestionnaire && fields.some(
+    (f) => f.required && !(answers[f.id] || '').trim()
+  );
+
   const validateAnswers = () => {
     for (const f of fields) {
       if (f.required && !(answers[f.id] || '').trim()) {
@@ -247,7 +251,10 @@ export default function DirectSubmit() {
 
               <Button
                 onClick={handleSubmit}
-                disabled={submitting || (isQuestionnaire ? fields.length === 0 : !file)}
+                disabled={
+                  submitting ||
+                  (isQuestionnaire ? (fields.length === 0 || missingRequired) : !file)
+                }
                 className="bg-[#22438E] text-white hover:bg-[#1A3A7A] w-full"
                 data-testid="direct-submit-btn"
               >
