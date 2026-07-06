@@ -311,10 +311,29 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Custom AI Feedback Instructions (Completed - July 6, 2026)
+- [x] `feedback_template` field on Material (homework only) — overrides the default "3 done well / 3 to improve" rubric
+- [x] `POST /api/cohorts/{id}/materials` and `POST /api/library/materials` accept optional `feedback_template` query param (persisted only for homework)
+- [x] `PUT /api/materials/{material_id}/feedback-template` — update/clear per-material AI rubric (homework only; ACL-checked)
+- [x] Manual AI review (submit-on-behalf) and auto-review both inject the custom template into the OpenAI prompt when set
+- [x] UI: "AI Feedback Instructions" textarea in Upload Material dialogs (cohort + library), homework-only
+- [x] UI: "Add/Edit AI Instructions" button + Sparkles icon on homework cards (MaterialsTab + MaterialLibrary)
+- [x] UI: "Custom AI Rubric" badge (data-testid `custom-rubric-badge-{material_id}`) visible on any homework with a customized template
+- [x] 16/16 backend pytest + 11/11 frontend Playwright assertions PASS (iteration_34.json)
+
 ## Prioritized Backlog
 ### P1 (Next Up)
 - [ ] Discussion/comments on submissions
-- [ ] Custom feedback templates for instructors
+- [ ] Replace Thinkific roster sync with a native alternative
+
+### P2 (Future)
+- [ ] Split `server.py` (>4700 lines) into routers/controllers/models
+- [ ] Refactor complex functions (`build_cumulative_context`, `bulk_import_students`, `get_student_dashboard`)
+- [ ] Split large components (`MaterialLibrary.js`, `StudentDashboard.js`, `CohortDetail.js`)
+- [ ] Migrate auth tokens from `localStorage` to `httpOnly` cookies (deferred — proxy reliability)
+- [ ] Shared `<FeedbackTemplateField/>` component to dedupe textarea between cohort + library dialogs
+- [ ] Replace `window.prompt` edit flow with inline Dialog+Textarea (better UX, Safari 15+ compat)
+- [ ] Add Pydantic model for `PUT /materials/{id}/feedback-template` (malformed JSON → 400 instead of 500)
 
 ### P2 (Future)
 - [x] Export submissions and feedback as PDF (Completed - April 6, 2026)
