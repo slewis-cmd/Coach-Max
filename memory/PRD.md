@@ -311,6 +311,16 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Phase 2 — Student Dashboard + Milestone Submit Flow (Completed - July 7, 2026)
+- [x] NEW `GET /api/student/assignments-dashboard` — returns per-cohort {current_week, this_week[], assignments[]} with per-milestone status derived from submissions (not_started / submitted / under_review / feedback_provided). Auto-seeds the 4 default assignments if missing (idempotent).
+- [x] NEW `POST /api/milestones/{milestone_id}/submit` — student-facing endpoint that doesn't require a legacy `material_id`. Accepts file OR questionnaire_answers, enforces per-type file extensions, idempotent resubmission (same student+assignment+milestone key).
+- [x] NEW `/dashboard` for students → `StudentAssignmentsDashboard` (hybrid layout per your pick):
+  - **"This Week"** panel at top — earliest week with unsubmitted milestones, showing all 4 assignments' milestones for that week side by side, one-tap to submit each
+  - **4 assignment sections** below with progress bar (`X / N submitted`), expandable, each showing all milestones with status badges and clickable rows
+- [x] NEW `/submit/a/:assignmentId/w/:week` route — resolves the milestone via `/api/submit-link/a/...`, renders a milestone-aware submit page with correct file-format hint, questionnaire form, drive folder link, and capstone star
+- [x] Sign-in gating on the milestone submit route
+- [x] Testing: 19/19 new backend + 66/66 regression + 22/22 UI items PASS (iteration_40.json). Zero bugs, zero action items.
+
 ### Assignment Template Library — with per-milestone week remap (Completed - July 7, 2026)
 - [x] New `assignment_templates` collection: `{template_id, name, description, submission_type, feedback_template, drive_folder_url, questionnaire_fields, milestones[], created_by, ...}`
 - [x] Full CRUD REST endpoints (`GET/POST/PUT/DELETE /api/assignment-templates[/{id}]`) — shared org-wide visibility, `can_edit` flag per user, author + super_admin restrictions

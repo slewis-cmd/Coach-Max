@@ -405,17 +405,11 @@ export function AssignmentMilestoneSubmit() {
       } else {
         fd.append('file', file);
       }
-      // Bridge: the current /materials/{id}/submit endpoint requires a material_id.
-      // For assignment-milestone submissions we use a synthetic material_id path:
-      // POST /api/milestones/{milestone_id}/submit is not defined yet — but the same submit
-      // endpoint accepts assignment_id + milestone_id as query params. We reuse it by looking
-      // up an existing "shell" material or falling back to legacy material_id if present.
       const params = new URLSearchParams({
         cohort_id,
         assignment_id: assignment.assignment_id,
-        milestone_id: milestone.milestone_id,
       });
-      // Use a milestone-scoped submit endpoint that doesn't require a material_id
+      // Milestone-scoped submit endpoint (no material_id required)
       await axios.post(`${API_URL}/api/milestones/${milestone.milestone_id}/submit?${params.toString()}`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -456,7 +450,10 @@ export function AssignmentMilestoneSubmit() {
             <div>
               <h1 className="text-xl font-medium text-[#000]" data-testid="milestone-submit-title">{assignment.title}</h1>
               <p className="text-sm text-[#666]">
-                Week {milestone.week_number} · {milestone.title || `Milestone`}
+                Week {milestone.week_number}
+                {milestone.title && !/^Week \d+$/.test(milestone.title) && (
+                  <> · {milestone.title}</>
+                )}
                 {milestone.is_final_capstone && <Star className="inline w-3.5 h-3.5 ml-1 text-[#7C3AED]" />}
               </p>
             </div>
