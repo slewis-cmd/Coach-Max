@@ -311,6 +311,20 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Assignment Template Library — with per-milestone week remap (Completed - July 7, 2026)
+- [x] New `assignment_templates` collection: `{template_id, name, description, submission_type, feedback_template, drive_folder_url, questionnaire_fields, milestones[], created_by, ...}`
+- [x] Full CRUD REST endpoints (`GET/POST/PUT/DELETE /api/assignment-templates[/{id}]`) — shared org-wide visibility, `can_edit` flag per user, author + super_admin restrictions
+- [x] `POST /api/assignment-templates/from-assignment/{id}` — one-click "Save as Template" snapshot of any assignment (title, description, rubric, drive, questionnaire, all milestones)
+- [x] `POST /api/cohorts/{id}/assignments/from-template/{id}` — hydrate a template into a cohort with 3 knobs:
+  - `week_map`: per-milestone week remap (or `null` to skip)
+  - `replace_existing_by_type`: overwrite an existing assignment of the same submission_type IN PLACE (preserves `assignment_id` + all submission history)
+  - `title_override`: rename in the target cohort
+- [x] Templates management page (`/assignment-templates`) with list + full builder dialog (week presets: 14 wk / 10 wk / Kawasaki-14+capstone; per-milestone editor)
+- [x] "Apply Template" dialog inside CohortDetail → Assignments tab — per-milestone week input + Skip toggle + "Rescale to N weeks" button (proportional map to cohort.total_weeks) + "Reset to Original"
+- [x] "Save as Template" (BookmarkPlus icon) on every assignment card
+- [x] New "Templates" sidebar nav link (Layers icon)
+- [x] Testing: 24/24 new backend + 26/26 Phase 1 regression + 22/22 Playwright review items PASS (iteration_39.json). Zero bugs, zero action items.
+
 ### Phase 1 — Knowledge Base ↔ Assignments Split (Completed - July 7, 2026)
 **MAJOR REFACTOR** — separated the AI's knowledge base from student-submittable assignments.
 - [x] New `assignments` collection with embedded `milestones[]` (per-week submission slots). Kawasaki 10-Slide Deck gets a final-week `is_final_capstone` milestone (⭐)
