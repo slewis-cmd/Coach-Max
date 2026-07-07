@@ -411,11 +411,45 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
     return submission_text, context_text
 
 
-async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000) -> str:
+async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000, assignment_id: Optional[str] = None) -> str:
     """Build cumulative context from all prior weeks: materials + student submissions + feedback.
-    Always includes Course-Wide Resources (is_global=True) regardless of week."""
+    Always includes Course-Wide Resources (is_global=True) regardless of week.
+    If assignment_id is given, ALSO includes the student's prior submissions to the SAME assignment
+    (used for cumulative feedback on the Kawasaki Deck / iterative 60-Sec Pitch etc.)."""
     parts = []
     total_chars = 0
+
+    # Same-assignment progression (highest priority context)
+    if assignment_id and current_week and current_week > 1:
+        asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0, "title": 1, "milestones": 1})
+        if asgn:
+            prior_ms_ids = [
+                m.get("milestone_id") for m in (asgn.get("milestones") or [])
+                if m.get("week_number") and m["week_number"] < current_week
+            ]
+            if prior_ms_ids:
+                prior_asgn_subs = await db.submissions.find({
+                    "student_id": student_id,
+                    "assignment_id": assignment_id,
+                    "milestone_id": {"$in": prior_ms_ids},
+                }, {"_id": 0}).sort("submitted_at", 1).to_list(50)
+                if prior_asgn_subs:
+                    header = f"\n--- PRIOR SUBMISSIONS FOR THIS ASSIGNMENT ({asgn.get('title', '')}) ---\n"
+                    body = ""
+                    for s in prior_asgn_subs:
+                        ms = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == s.get("milestone_id")), None)
+                        wk = (ms or {}).get("week_number", "?")
+                        try:
+                            sub_text = await read_file_text(s)
+                            excerpt = (sub_text or "")[:600]
+                        except Exception:
+                            excerpt = ""
+                        fb = (s.get("instructor_feedback") or s.get("ai_feedback") or "")[:400]
+                        body += f"\nWeek {wk} submission:\n{excerpt}\nFeedback given: {fb}\n"
+                    section = header + body
+                    if total_chars + len(section) <= max_chars:
+                        parts.append(section)
+                        total_chars += len(section)
 
     # Course-Wide Resources: always included, regardless of current week
     global_materials = await db.materials.find({
@@ -572,6 +606,8 @@ class Cohort(BaseModel):
     instructor_ids: List[str] = []
     student_ids: List[str] = []
     invite_code: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
+    total_weeks: int = 14
+    auto_send_feedback: bool = False  # Self-paced mode: AI feedback goes straight to student, bypassing instructor review
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CohortCreate(BaseModel):
@@ -581,6 +617,77 @@ class CohortCreate(BaseModel):
 class CohortUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    auto_send_feedback: Optional[bool] = None
+    total_weeks: Optional[int] = None
+
+
+# ==================== ASSIGNMENTS (Student-Submittable) ====================
+# Assignments are the 4 fixed submittable exercises per cohort (60-Sec Pitch,
+# Kawasaki Deck, ShiftSure Case, Business Questionnaire) plus any custom ones.
+# Each Assignment has weekly Milestones — one submission slot per week.
+
+class Assignment(BaseModel):
+    assignment_id: str = Field(default_factory=lambda: f"asgn_{uuid.uuid4().hex[:12]}")
+    cohort_id: str
+    # Well-known keys: "60_second_pitch", "10_slide_pitch", "case_activity", "business_questionnaire", "custom"
+    assignment_key: str
+    title: str
+    description: Optional[str] = ""
+    submission_type: str  # Same 4 IDs as SUBMISSION_TYPE_CONFIG (file-format profile)
+    order: int = 0  # display sort order
+    is_active: bool = True
+    feedback_template: Optional[str] = ""  # Default rubric across all milestones (milestone override wins)
+    drive_folder_url: Optional[str] = ""  # Default drive folder (milestone override wins)
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None  # for submission_type == 'business_questionnaire'
+    milestones: List[Dict[str, Any]] = []  # Embedded — see AssignmentMilestone shape below
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# Embedded milestone shape (kept as dict for flexibility):
+# {
+#   "milestone_id": "ms_<hex>",
+#   "week_number": 3,
+#   "title": "Week 3 - Problem Statement",
+#   "description": "",
+#   "feedback_template_override": "",     # if set, replaces assignment.feedback_template for this milestone
+#   "drive_folder_url_override": "",       # if set, replaces assignment.drive_folder_url for this milestone
+#   "is_final_capstone": False,           # True for the "combined deck at end" milestone
+#   "due_date": None,
+# }
+
+
+class AssignmentCreate(BaseModel):
+    title: str
+    submission_type: str
+    description: Optional[str] = ""
+    assignment_key: Optional[str] = "custom"
+    feedback_template: Optional[str] = ""
+    drive_folder_url: Optional[str] = ""
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None
+
+
+class AssignmentUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    feedback_template: Optional[str] = None
+    drive_folder_url: Optional[str] = None
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None
+    order: Optional[int] = None
+
+
+class MilestonePayload(BaseModel):
+    week_number: int
+    title: Optional[str] = ""
+    description: Optional[str] = ""
+    feedback_template_override: Optional[str] = ""
+    drive_folder_url_override: Optional[str] = ""
+    is_final_capstone: Optional[bool] = False
+    due_date: Optional[str] = None
+
+
+# ==================== END ASSIGNMENTS ====================
 
 class Material(BaseModel):
     material_id: str = Field(default_factory=lambda: f"mat_{uuid.uuid4().hex[:12]}")
@@ -668,6 +775,8 @@ class Submission(BaseModel):
     file_name: str
     submission_type: Optional[str] = None  # snapshot of material.submission_type at submit time
     questionnaire_answers: Optional[Dict[str, str]] = None  # For business_questionnaire submissions
+    assignment_id: Optional[str] = None  # New model: link to assignment
+    milestone_id: Optional[str] = None  # New model: link to specific milestone (week)
     status: str = "pending"  # "pending", "draft", "reviewed", "sent"
     ai_feedback: Optional[str] = None
     instructor_feedback: Optional[str] = None  # Human-in-the-loop: instructor's edited/added feedback
@@ -1163,7 +1272,13 @@ async def create_cohort(cohort_data: CohortCreate, user: dict = Depends(require_
     doc = cohort.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.cohorts.insert_one(doc)
-    
+
+    # Auto-seed the 4 default assignments for the new cohort
+    try:
+        await _seed_default_assignments_for_cohort(cohort.cohort_id, cohort.total_weeks)
+    except Exception as seed_err:
+        logger.warning(f"Auto-seed assignments failed for {cohort.cohort_id}: {seed_err}")
+
     return {"cohort_id": cohort.cohort_id, "message": "Cohort created"}
 
 @api_router.get("/cohorts")
@@ -1252,6 +1367,7 @@ async def delete_cohort(cohort_id: str, user: dict = Depends(require_instructor)
     await db.cohorts.delete_one({"cohort_id": cohort_id})
     await db.materials.delete_many({"cohort_id": cohort_id, "is_library": {"$ne": True}})
     await db.submissions.delete_many({"cohort_id": cohort_id})
+    await db.assignments.delete_many({"cohort_id": cohort_id})
     # Unlink library materials from this cohort
     await db.materials.update_many(
         {"is_library": True, "cohort_ids": cohort_id},
@@ -1927,6 +2043,283 @@ async def delete_rubric(rubric_id: str, user: dict = Depends(require_instructor)
         raise HTTPException(status_code=403, detail="Only the author or a super admin can delete this rubric")
     await db.rubrics.delete_one({"rubric_id": rubric_id})
     return {"rubric_id": rubric_id, "message": "Rubric deleted"}
+
+
+# ==================== ASSIGNMENTS (Per-Cohort Submittable Exercises) ====================
+
+DEFAULT_ASSIGNMENT_SEEDS: List[Dict[str, Any]] = [
+    {
+        "assignment_key": "60_second_pitch",
+        "title": "60-Second Elevator Pitch",
+        "submission_type": "60_second_pitch",
+        "description": "Weekly refinement of your elevator pitch. Upload a short (30-90s) video or audio clip.",
+        "order": 0,
+    },
+    {
+        "assignment_key": "10_slide_pitch",
+        "title": "Kawasaki 10-Slide Pitch Deck",
+        "submission_type": "10_slide_pitch",
+        "description": "1-2 slides per week following the Kawasaki 10-slide framework, with a final consolidated deck at the end.",
+        "order": 1,
+    },
+    {
+        "assignment_key": "case_activity",
+        "title": "The ShiftSure Case Activity",
+        "submission_type": "case_activity",
+        "description": "Weekly written response applying the ShiftSure case framework.",
+        "order": 2,
+    },
+    {
+        "assignment_key": "business_questionnaire",
+        "title": "Your Business Questionnaire",
+        "submission_type": "business_questionnaire",
+        "description": "Weekly structured questions about your business.",
+        "order": 3,
+    },
+]
+
+
+def _make_milestone(week_number: int, title_prefix: str = "Week", is_capstone: bool = False) -> Dict[str, Any]:
+    return {
+        "milestone_id": f"ms_{uuid.uuid4().hex[:12]}",
+        "week_number": week_number,
+        "title": f"{title_prefix} {week_number}" + (" — Final Deck" if is_capstone else ""),
+        "description": "",
+        "feedback_template_override": "",
+        "drive_folder_url_override": "",
+        "is_final_capstone": bool(is_capstone),
+        "due_date": None,
+    }
+
+
+def _build_default_milestones(assignment_key: str, total_weeks: int) -> List[Dict[str, Any]]:
+    weeks = max(1, min(52, total_weeks or 14))
+    milestones = [_make_milestone(w) for w in range(1, weeks + 1)]
+    # Kawasaki gets an extra capstone slot on the final week (consolidated whole deck)
+    if assignment_key == "10_slide_pitch":
+        milestones[-1] = _make_milestone(weeks, is_capstone=True)
+    return milestones
+
+
+async def _seed_default_assignments_for_cohort(cohort_id: str, total_weeks: int = 14) -> int:
+    """Idempotent: seed the 4 default assignments if this cohort has none yet."""
+    existing = await db.assignments.count_documents({"cohort_id": cohort_id})
+    if existing > 0:
+        return 0
+    docs = []
+    for seed in DEFAULT_ASSIGNMENT_SEEDS:
+        asgn = Assignment(
+            cohort_id=cohort_id,
+            assignment_key=seed["assignment_key"],
+            title=seed["title"],
+            description=seed["description"],
+            submission_type=seed["submission_type"],
+            order=seed["order"],
+            milestones=_build_default_milestones(seed["assignment_key"], total_weeks),
+        )
+        docs.append(asgn.dict())
+    if docs:
+        await db.assignments.insert_many(docs)
+    return len(docs)
+
+
+@api_router.get("/cohorts/{cohort_id}/assignments")
+async def list_assignments(cohort_id: str, user: dict = Depends(get_current_user)):
+    """List assignments for a cohort. Auto-seeds the 4 defaults if none exist yet."""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    # Access control: super_admin, cohort manager, or enrolled student
+    if user.get("role") != "super_admin":
+        is_manager = is_cohort_manager(user, cohort)
+        is_enrolled = user["user_id"] in (cohort.get("student_ids") or [])
+        if not (is_manager or is_enrolled):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    if user.get("role") in ("super_admin", "instructor"):
+        await _seed_default_assignments_for_cohort(cohort_id, cohort.get("total_weeks", 14))
+
+    docs = await db.assignments.find({"cohort_id": cohort_id}, {"_id": 0}).sort("order", 1).to_list(length=100)
+    return docs
+
+
+@api_router.post("/cohorts/{cohort_id}/assignments")
+async def create_custom_assignment(cohort_id: str, payload: AssignmentCreate, user: dict = Depends(require_instructor)):
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if payload.submission_type not in SUBMISSION_TYPE_IDS:
+        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
+
+    max_order = await db.assignments.count_documents({"cohort_id": cohort_id})
+    asgn = Assignment(
+        cohort_id=cohort_id,
+        assignment_key=payload.assignment_key or "custom",
+        title=payload.title.strip(),
+        description=(payload.description or "").strip(),
+        submission_type=payload.submission_type,
+        order=max_order,
+        feedback_template=(payload.feedback_template or "").strip(),
+        drive_folder_url=_validate_drive_url(payload.drive_folder_url or ""),
+        questionnaire_fields=payload.questionnaire_fields if payload.submission_type == "business_questionnaire" else None,
+        milestones=_build_default_milestones(payload.assignment_key or "custom", cohort.get("total_weeks", 14)),
+    )
+    await db.assignments.insert_one(asgn.dict())
+    return asgn.dict()
+
+
+@api_router.put("/assignments/{assignment_id}")
+async def update_assignment(assignment_id: str, payload: AssignmentUpdate, user: dict = Depends(require_instructor)):
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    cohort = await db.cohorts.find_one({"cohort_id": asgn["cohort_id"]}, {"_id": 0})
+    if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    updates: Dict[str, Any] = {}
+    for field in ("title", "description", "is_active", "feedback_template", "questionnaire_fields", "order"):
+        val = getattr(payload, field)
+        if val is not None:
+            updates[field] = val
+    if payload.drive_folder_url is not None:
+        updates["drive_folder_url"] = _validate_drive_url(payload.drive_folder_url)
+    if updates:
+        updates["updated_at"] = datetime.now(timezone.utc)
+        await db.assignments.update_one({"assignment_id": assignment_id}, {"$set": updates})
+    updated = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/assignments/{assignment_id}")
+async def delete_assignment(assignment_id: str, user: dict = Depends(require_instructor)):
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    cohort = await db.cohorts.find_one({"cohort_id": asgn["cohort_id"]}, {"_id": 0})
+    if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+    # Soft-delete: mark inactive rather than destroy submission history
+    await db.assignments.update_one(
+        {"assignment_id": assignment_id},
+        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc)}}
+    )
+    return {"assignment_id": assignment_id, "message": "Assignment deactivated"}
+
+
+@api_router.put("/assignments/{assignment_id}/milestones/{milestone_id}")
+async def update_milestone(assignment_id: str, milestone_id: str, payload: MilestonePayload, user: dict = Depends(require_instructor)):
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    cohort = await db.cohorts.find_one({"cohort_id": asgn["cohort_id"]}, {"_id": 0})
+    if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    milestones = list(asgn.get("milestones") or [])
+    idx = next((i for i, m in enumerate(milestones) if m.get("milestone_id") == milestone_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    milestones[idx] = {
+        **milestones[idx],
+        "week_number": payload.week_number,
+        "title": (payload.title or milestones[idx].get("title", "")).strip(),
+        "description": (payload.description or "").strip(),
+        "feedback_template_override": (payload.feedback_template_override or "").strip(),
+        "drive_folder_url_override": _validate_drive_url(payload.drive_folder_url_override or ""),
+        "is_final_capstone": bool(payload.is_final_capstone),
+        "due_date": payload.due_date,
+    }
+    await db.assignments.update_one(
+        {"assignment_id": assignment_id},
+        {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}}
+    )
+    return {"assignment_id": assignment_id, "milestone_id": milestone_id, "message": "Milestone updated"}
+
+
+@api_router.get("/submit-link/a/{assignment_id}/w/{week_number}")
+async def resolve_assignment_submit_link(assignment_id: str, week_number: int, cohort_id: str = None):
+    """Stable Thinkific link resolver — returns the milestone for a given assignment + week."""
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn or not asgn.get("is_active", True):
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    milestone = next((m for m in (asgn.get("milestones") or []) if m.get("week_number") == week_number), None)
+    if not milestone:
+        raise HTTPException(status_code=404, detail=f"No milestone for week {week_number} on this assignment")
+    return {
+        "assignment_id": assignment_id,
+        "milestone_id": milestone["milestone_id"],
+        "cohort_id": asgn["cohort_id"],
+    }
+
+
+@api_router.post("/admin/migrate-to-assignments")
+async def migrate_to_assignments(user: dict = Depends(require_super_admin)):
+    """One-time migration: seed 4 default assignments in every cohort, move existing
+    homework materials + submissions under 'Your Business Questionnaire'. Idempotent."""
+    stats = {"cohorts_seeded": 0, "milestones_created": 0, "submissions_linked": 0, "materials_archived": 0}
+
+    cohorts = await db.cohorts.find({}, {"_id": 0}).to_list(length=1000)
+    for c in cohorts:
+        seeded = await _seed_default_assignments_for_cohort(c["cohort_id"], c.get("total_weeks", 14))
+        if seeded:
+            stats["cohorts_seeded"] += 1
+
+        # Move existing homework materials → questionnaire assignment milestones
+        qn = await db.assignments.find_one({"cohort_id": c["cohort_id"], "assignment_key": "business_questionnaire"}, {"_id": 0})
+        if not qn:
+            continue
+
+        existing_homework = await db.materials.find({
+            "cohort_id": c["cohort_id"],
+            "material_type": "homework",
+            "$or": [{"migrated_to_assignment": {"$exists": False}}, {"migrated_to_assignment": False}],
+        }, {"_id": 0}).to_list(length=500)
+
+        milestones = list(qn.get("milestones") or [])
+        for mat in existing_homework:
+            wk = mat.get("week_number") or 1
+            # Ensure a milestone exists for this week; if it does, reuse; else append
+            ms = next((m for m in milestones if m.get("week_number") == wk), None)
+            if not ms:
+                ms = _make_milestone(wk)
+                ms["title"] = mat.get("title") or ms["title"]
+                milestones.append(ms)
+                stats["milestones_created"] += 1
+            elif mat.get("title") and (not ms.get("title") or ms.get("title", "").startswith("Week ")):
+                ms["title"] = mat["title"]
+            # Reassign submissions to this milestone
+            reassigned = await db.submissions.update_many(
+                {"material_id": mat["material_id"]},
+                {"$set": {
+                    "assignment_id": qn["assignment_id"],
+                    "milestone_id": ms["milestone_id"],
+                    "submission_type": "business_questionnaire",
+                }}
+            )
+            stats["submissions_linked"] += reassigned.modified_count
+            # Archive the material
+            await db.materials.update_one(
+                {"material_id": mat["material_id"]},
+                {"$set": {"migrated_to_assignment": True, "migrated_at": datetime.now(timezone.utc)}}
+            )
+            stats["materials_archived"] += 1
+
+        # Persist updated milestones (sorted by week)
+        milestones.sort(key=lambda m: (m.get("week_number") or 0, 1 if m.get("is_final_capstone") else 0))
+        await db.assignments.update_one(
+            {"assignment_id": qn["assignment_id"]},
+            {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}}
+        )
+
+    return {"message": "Migration complete", **stats}
+
+
+# ==================== END ASSIGNMENTS ====================
 
 
 @api_router.get("/cohorts/{cohort_id}/materials")
@@ -2799,6 +3192,8 @@ async def submit_homework(
     material_id: str,
     file: UploadFile = File(None),
     cohort_id: str = None,
+    assignment_id: str = None,
+    milestone_id: str = None,
     questionnaire_answers: str = Form(default=""),
     user: dict = Depends(get_current_user)
 ):
@@ -2888,6 +3283,8 @@ async def submit_homework(
                 "file_name": filename,
                 "submission_type": submission_type,
                 "questionnaire_answers": answers,
+                "assignment_id": assignment_id or existing.get("assignment_id"),
+                "milestone_id": milestone_id or existing.get("milestone_id"),
                 "status": "pending",
                 "ai_feedback": None,
                 "instructor_feedback": None,
@@ -2911,6 +3308,8 @@ async def submit_homework(
             file_name=filename,
             submission_type=submission_type,
             questionnaire_answers=answers,
+            assignment_id=assignment_id,
+            milestone_id=milestone_id,
         )
         submission_id = submission.submission_id
         
@@ -3721,9 +4120,10 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     lang = student.get("language_preference", "en") if student else "en"
     lang_instr = get_language_instruction(lang)
     
-    # Build cumulative context from prior weeks
+    # Build cumulative context from prior weeks + prior submissions for the SAME assignment
     cumulative_ctx = await build_cumulative_context(
-        submission["student_id"], submission.get("cohort_id", ""), material.get("week_number", 1)
+        submission["student_id"], submission.get("cohort_id", ""), material.get("week_number", 1),
+        assignment_id=submission.get("assignment_id"),
     )
     
     feedback = ""
@@ -3819,7 +4219,18 @@ Provide feedback with exactly 3 bullet points under "What You Did Well:" and exa
             "reviewed_at": datetime.now(timezone.utc).isoformat()
         }}
     )
-    
+
+    # Self-paced mode: if the cohort has auto_send_feedback enabled, skip the review
+    # step and deliver the AI feedback directly to the student.
+    cohort_for_autosend = await db.cohorts.find_one({"cohort_id": submission["cohort_id"]}, {"_id": 0})
+    if cohort_for_autosend and cohort_for_autosend.get("auto_send_feedback"):
+        try:
+            await send_feedback_to_student(submission_id, user)
+            return {"feedback": feedback, "message": "AI feedback generated and auto-sent to student (self-paced mode).", "status": "sent"}
+        except Exception as e:
+            logger.error(f"auto_send after review failed for {submission_id}: {e}")
+            # Fall through — feedback saved as draft, instructor can manually send
+
     return {"feedback": feedback, "message": "AI feedback generated. Review and edit before sending to student.", "status": "draft"}
 
 @api_router.put("/submissions/{submission_id}/feedback")

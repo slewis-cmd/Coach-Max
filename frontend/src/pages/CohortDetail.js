@@ -4,12 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { 
-  BookOpen, Users, FileText, ArrowLeft, Upload, UserPlus, FileUp, QrCode, UserCog, MessageCircle
+  BookOpen, Users, FileText, ArrowLeft, Upload, UserPlus, FileUp, QrCode, UserCog, MessageCircle, Star, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
 import { MaterialsTab } from '../components/cohort/MaterialsTab';
+import { AssignmentsTab, CohortSettingsDialog } from '../components/cohort/AssignmentsTab';
 import { StudentsTab } from '../components/cohort/StudentsTab';
 import FeedbackTab from '../components/cohort/FeedbackTab';
 import { CoachMaxInsightsTab } from '../components/cohort/CoachMaxInsightsTab';
@@ -40,6 +41,7 @@ export default function CohortDetail() {
   const [copied, setCopied] = useState(false);
   const [showAssignInstructor, setShowAssignInstructor] = useState(false);
   const [showSubmitOnBehalf, setShowSubmitOnBehalf] = useState(false);
+  const [showCohortSettings, setShowCohortSettings] = useState(false);
   const [submittingOnBehalf, setSubmittingOnBehalf] = useState(false);
   const [instructorsList, setInstructorsList] = useState([]);
   const [assigningInstructor, setAssigningInstructor] = useState(false);
@@ -348,6 +350,10 @@ export default function CohortDetail() {
                 className="border-[#B8D4E8] rounded-lg" data-testid="add-student-btn">
                 <UserPlus className="w-4 h-4 mr-2" />Add Student
               </Button>
+              <Button variant="outline" onClick={() => setShowCohortSettings(true)}
+                className="border-[#B8D4E8] rounded-lg" data-testid="cohort-settings-btn">
+                <Settings className="w-4 h-4 mr-2" />Settings
+              </Button>
               <Button onClick={() => setShowUploadMaterial(true)}
                 className="bg-[#22438E] text-white hover:bg-[#1A3A7A] rounded-lg" data-testid="upload-material-btn">
                 <Upload className="w-4 h-4 mr-2" />Upload Material
@@ -366,7 +372,10 @@ export default function CohortDetail() {
         <Tabs defaultValue="materials" className="space-y-6">
           <TabsList className="bg-[#D0E6F9]">
             <TabsTrigger value="materials" className="data-[state=active]:bg-white">
-              <FileText className="w-4 h-4 mr-2" />Materials
+              <FileText className="w-4 h-4 mr-2" />Knowledge Base
+            </TabsTrigger>
+            <TabsTrigger value="assignments" className="data-[state=active]:bg-white" data-testid="assignments-tab-trigger">
+              <Star className="w-4 h-4 mr-2" />Assignments
             </TabsTrigger>
             {isInstructor && (
               <TabsTrigger value="students" className="data-[state=active]:bg-white">
@@ -395,6 +404,10 @@ export default function CohortDetail() {
               onToggleWeek={handleToggleWeek}
               onUploadMaterial={() => setShowUploadMaterial(true)}
             />
+          </TabsContent>
+
+          <TabsContent value="assignments" className="space-y-6">
+            <AssignmentsTab cohortId={cohortId} cohort={cohort} isInstructor={isInstructor} />
           </TabsContent>
 
           {isInstructor && (
@@ -454,6 +467,13 @@ export default function CohortDetail() {
       <SubmitOnBehalfDialog open={showSubmitOnBehalf} onOpenChange={setShowSubmitOnBehalf}
         cohort={cohort} submitting={submittingOnBehalf} onSubmit={handleSubmitOnBehalf}
         homeworkList={materials.flatMap(week => week.homework || [])} />
+      <CohortSettingsDialog
+        open={showCohortSettings}
+        onOpenChange={setShowCohortSettings}
+        cohort={cohort}
+        onSaved={() => { setShowCohortSettings(false); fetchCohort(); }}
+        isSuperAdmin={user?.role === 'super_admin'}
+      />
     </div>
   );
 }
