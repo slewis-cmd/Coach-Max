@@ -451,9 +451,13 @@ export function AssignmentMilestoneSubmit() {
               <h1 className="text-xl font-medium text-[#000]" data-testid="milestone-submit-title">{assignment.title}</h1>
               <p className="text-sm text-[#666]">
                 Week {milestone.week_number}
-                {milestone.title && !/^Week \d+$/.test(milestone.title) && (
-                  <> · {milestone.title}</>
-                )}
+                {(() => {
+                  const t = (milestone.title || '').trim();
+                  if (!t) return null;
+                  // Strip a leading "Week N —" (or "Week N -") since we already show the week
+                  const stripped = t.replace(/^Week\s+\d+\s*[—\-]\s*/, '').trim();
+                  return stripped ? <> · {stripped}</> : null;
+                })()}
                 {milestone.is_final_capstone && <Star className="inline w-3.5 h-3.5 ml-1 text-[#7C3AED]" />}
               </p>
             </div>

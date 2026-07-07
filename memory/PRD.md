@@ -311,6 +311,18 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Curriculum-Aware Milestone Titles (Completed - July 7, 2026)
+- [x] `MILESTONE_TITLE_MAP` + `_default_milestone_title` helper: each of the 4 default assignments now generates meaningful weekly titles instead of literal "Week N":
+  - **60-Second Elevator Pitch**: "Week 1 — First Draft: The Hook", "Week 2 — Sharpen the Problem", "Week 3 — Nail the Solution", ... "Week 14 — Final Pitch"
+  - **Kawasaki 10-Slide Pitch Deck**: "Week 1 — Slide 1: Title & Vision", "Week 2 — Slide 2: Problem", "Week 3 — Slide 3: Value Proposition", ... "Week 10 — Slide 10: Status & Timeline", "Week 11-13 — Iterate/Polish", "Week 14 — Final Consolidated Deck" (capstone)
+  - **The ShiftSure Case Activity**: "Week 1 — Case Introduction", "Week 2 — Situation Analysis", "Week 3 — Root Cause Diagnosis", ... "Week 14 — Final Case Write-up"
+  - **Your Business Questionnaire**: "Week 1 — Business Foundations", "Week 2 — Market & Customer", ... "Week 14 — Investor-Ready Summary"
+- [x] New cohorts auto-seed with the new titles
+- [x] `POST /api/admin/regenerate-milestone-titles` — idempotent back-fill endpoint; only renames stale `Week N` (and legacy `Week N — Final Deck`) titles across existing cohorts, preserves any instructor-customized titles
+- [x] "Regenerate Milestone Titles" button in super-admin section of Cohort Settings dialog (data-testid `regenerate-titles-btn`)
+- [x] Cosmetic polish: milestone submit page no longer shows "Week 1 · Week 1 — …" redundancy — strips the leading `Week N —` from the subtitle
+- [x] Testing: 14/14 new backend + 105/105 regression + all UI items PASS (iteration_41.json). Zero bugs, zero action items. Prod-verified across 692 real assignments — no false renames.
+
 ### Phase 2 — Student Dashboard + Milestone Submit Flow (Completed - July 7, 2026)
 - [x] NEW `GET /api/student/assignments-dashboard` — returns per-cohort {current_week, this_week[], assignments[]} with per-milestone status derived from submissions (not_started / submitted / under_review / feedback_provided). Auto-seeds the 4 default assignments if missing (idempotent).
 - [x] NEW `POST /api/milestones/{milestone_id}/submit` — student-facing endpoint that doesn't require a legacy `material_id`. Accepts file OR questionnaire_answers, enforces per-type file extensions, idempotent resubmission (same student+assignment+milestone key).
