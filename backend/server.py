@@ -2079,11 +2079,96 @@ DEFAULT_ASSIGNMENT_SEEDS: List[Dict[str, Any]] = [
 ]
 
 
-def _make_milestone(week_number: int, title_prefix: str = "Week", is_capstone: bool = False) -> Dict[str, Any]:
+# Meaningful, curriculum-aware milestone titles for the 4 default assignments.
+# Indexed by 1-based week number; weeks beyond the mapped range fall back to "Week N".
+MILESTONE_TITLE_MAP: Dict[str, Dict[int, str]] = {
+    "60_second_pitch": {
+        1:  "Week 1 — First Draft: The Hook",
+        2:  "Week 2 — Sharpen the Problem",
+        3:  "Week 3 — Nail the Solution",
+        4:  "Week 4 — Who is it for? (Target Audience)",
+        5:  "Week 5 — Why now? (Timing & Urgency)",
+        6:  "Week 6 — Traction & Proof",
+        7:  "Week 7 — The Ask",
+        8:  "Week 8 — Delivery & Confidence",
+        9:  "Week 9 — Live Practice",
+        10: "Week 10 — Investor-Ready Pitch",
+        11: "Week 11 — Refinement",
+        12: "Week 12 — Peer Feedback Round",
+        13: "Week 13 — Polish Pass",
+        14: "Week 14 — Final Pitch",
+    },
+    "10_slide_pitch": {
+        1:  "Week 1 — Slide 1: Title & Vision",
+        2:  "Week 2 — Slide 2: Problem",
+        3:  "Week 3 — Slide 3: Value Proposition",
+        4:  "Week 4 — Slide 4: Underlying Magic",
+        5:  "Week 5 — Slide 5: Business Model",
+        6:  "Week 6 — Slide 6: Go-to-Market",
+        7:  "Week 7 — Slide 7: Competitive Analysis",
+        8:  "Week 8 — Slide 8: Team",
+        9:  "Week 9 — Slide 9: Financial Projections",
+        10: "Week 10 — Slide 10: Status & Timeline",
+        11: "Week 11 — Iterate on Slides 1-5",
+        12: "Week 12 — Iterate on Slides 6-10",
+        13: "Week 13 — Design & Polish Pass",
+        14: "Week 14 — Final Consolidated Deck",
+    },
+    "case_activity": {
+        1:  "Week 1 — Case Introduction",
+        2:  "Week 2 — Situation Analysis",
+        3:  "Week 3 — Root Cause Diagnosis",
+        4:  "Week 4 — Stakeholder Map",
+        5:  "Week 5 — Options & Trade-offs",
+        6:  "Week 6 — Recommendation",
+        7:  "Week 7 — Implementation Plan",
+        8:  "Week 8 — Risks & Mitigations",
+        9:  "Week 9 — Success Metrics",
+        10: "Week 10 — Communication Plan",
+        11: "Week 11 — Peer Case Review",
+        12: "Week 12 — Refinement",
+        13: "Week 13 — Executive Summary",
+        14: "Week 14 — Final Case Write-up",
+    },
+    "business_questionnaire": {
+        1:  "Week 1 — Business Foundations",
+        2:  "Week 2 — Market & Customer",
+        3:  "Week 3 — Value Proposition",
+        4:  "Week 4 — Revenue Model",
+        5:  "Week 5 — Cost Structure",
+        6:  "Week 6 — Sales & Distribution",
+        7:  "Week 7 — Operations & Delivery",
+        8:  "Week 8 — Team & Roles",
+        9:  "Week 9 — Financial Projections",
+        10: "Week 10 — Metrics & KPIs",
+        11: "Week 11 — Risks & Assumptions",
+        12: "Week 12 — Growth Strategy",
+        13: "Week 13 — Reflection & Iteration",
+        14: "Week 14 — Investor-Ready Summary",
+    },
+}
+
+
+def _default_milestone_title(assignment_key: str, week_number: int, is_capstone: bool = False) -> str:
+    if is_capstone:
+        capstone_titles = {
+            "10_slide_pitch": f"Week {week_number} — Final Consolidated Deck",
+            "60_second_pitch": f"Week {week_number} — Final Pitch",
+            "case_activity": f"Week {week_number} — Final Case Write-up",
+            "business_questionnaire": f"Week {week_number} — Investor-Ready Summary",
+        }
+        if assignment_key in capstone_titles:
+            return capstone_titles[assignment_key]
+    mapping = MILESTONE_TITLE_MAP.get(assignment_key, {})
+    return mapping.get(week_number) or f"Week {week_number}"
+
+
+def _make_milestone(week_number: int, assignment_key: str = "", is_capstone: bool = False) -> Dict[str, Any]:
+    title = _default_milestone_title(assignment_key, week_number, is_capstone)
     return {
         "milestone_id": f"ms_{uuid.uuid4().hex[:12]}",
         "week_number": week_number,
-        "title": f"{title_prefix} {week_number}" + (" — Final Deck" if is_capstone else ""),
+        "title": title,
         "description": "",
         "feedback_template_override": "",
         "drive_folder_url_override": "",
@@ -2094,10 +2179,9 @@ def _make_milestone(week_number: int, title_prefix: str = "Week", is_capstone: b
 
 def _build_default_milestones(assignment_key: str, total_weeks: int) -> List[Dict[str, Any]]:
     weeks = max(1, min(52, total_weeks or 14))
-    milestones = [_make_milestone(w) for w in range(1, weeks + 1)]
-    # Kawasaki gets an extra capstone slot on the final week (consolidated whole deck)
+    milestones = [_make_milestone(w, assignment_key=assignment_key) for w in range(1, weeks + 1)]
     if assignment_key == "10_slide_pitch":
-        milestones[-1] = _make_milestone(weeks, is_capstone=True)
+        milestones[-1] = _make_milestone(weeks, assignment_key=assignment_key, is_capstone=True)
     return milestones
 
 
@@ -2286,7 +2370,7 @@ async def migrate_to_assignments(user: dict = Depends(require_super_admin)):
             # Ensure a milestone exists for this week; if it does, reuse; else append
             ms = next((m for m in milestones if m.get("week_number") == wk), None)
             if not ms:
-                ms = _make_milestone(wk)
+                ms = _make_milestone(wk, assignment_key="business_questionnaire")
                 ms["title"] = mat.get("title") or ms["title"]
                 milestones.append(ms)
                 stats["milestones_created"] += 1
@@ -2317,6 +2401,39 @@ async def migrate_to_assignments(user: dict = Depends(require_super_admin)):
         )
 
     return {"message": "Migration complete", **stats}
+
+
+@api_router.post("/admin/regenerate-milestone-titles")
+async def regenerate_milestone_titles(user: dict = Depends(require_super_admin)):
+    """Idempotent back-fill: replace milestone titles that match the literal pattern
+    'Week N' or 'Week N — Final Deck' with the curriculum-aware default title for that
+    assignment_key + week. Titles that have been customized by an instructor are left alone."""
+    import re
+    week_re = re.compile(r"^\s*Week\s+\d+(?:\s+—\s+Final Deck)?\s*$")
+    stats = {"assignments_scanned": 0, "milestones_renamed": 0}
+    assignments = await db.assignments.find({}, {"_id": 0}).to_list(length=5000)
+    for a in assignments:
+        stats["assignments_scanned"] += 1
+        milestones = list(a.get("milestones") or [])
+        changed = False
+        for m in milestones:
+            current = (m.get("title") or "").strip()
+            if not current or week_re.match(current):
+                new_title = _default_milestone_title(
+                    a.get("assignment_key", ""),
+                    m.get("week_number") or 1,
+                    bool(m.get("is_final_capstone")),
+                )
+                if new_title != current:
+                    m["title"] = new_title
+                    changed = True
+                    stats["milestones_renamed"] += 1
+        if changed:
+            await db.assignments.update_one(
+                {"assignment_id": a["assignment_id"]},
+                {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}}
+            )
+    return {"message": "Milestone titles regenerated", **stats}
 
 
 # ==================== END ASSIGNMENTS ====================

@@ -604,6 +604,27 @@ export function CohortSettingsDialog({ open, onOpenChange, cohort, onSaved, isSu
               >
                 {migrating ? 'Migrating…' : 'Run Migration'}
               </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!window.confirm('Regenerate milestone titles across ALL assignments? Only stale "Week N" titles are updated — custom titles are preserved. Idempotent.')) return;
+                  setMigrating(true);
+                  try {
+                    const res = await axios.post(`${API_URL}/api/admin/regenerate-milestone-titles`);
+                    const s = res.data;
+                    toast.success(`Titles refreshed — ${s.milestones_renamed} milestones renamed across ${s.assignments_scanned} assignments`);
+                  } catch (err) {
+                    toast.error(err?.response?.data?.detail || 'Failed to regenerate titles');
+                  } finally {
+                    setMigrating(false);
+                  }
+                }}
+                disabled={migrating}
+                className="border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF] ml-2"
+                data-testid="regenerate-titles-btn"
+              >
+                {migrating ? 'Working…' : 'Regenerate Milestone Titles'}
+              </Button>
             </div>
           )}
         </div>
