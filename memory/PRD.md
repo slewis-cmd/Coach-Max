@@ -311,6 +311,29 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Phase 1 — Knowledge Base ↔ Assignments Split (Completed - July 7, 2026)
+**MAJOR REFACTOR** — separated the AI's knowledge base from student-submittable assignments.
+- [x] New `assignments` collection with embedded `milestones[]` (per-week submission slots). Kawasaki 10-Slide Deck gets a final-week `is_final_capstone` milestone (⭐)
+- [x] Cohort model extended: `total_weeks` (1-52, default 14) + `auto_send_feedback` (self-paced mode toggle — bypasses instructor review, sends AI feedback directly to student)
+- [x] Submission model extended with `assignment_id` + `milestone_id`
+- [x] Auto-seed 4 default assignments on new cohort creation (60_second_pitch, 10_slide_pitch, case_activity, business_questionnaire). Idempotent — will re-seed missing entries on any instructor GET.
+- [x] Custom assignments — instructors can add/rename/deactivate assignments; pick from the 4 file-format profiles
+- [x] Full assignment CRUD: `GET/POST /api/cohorts/{id}/assignments`, `PUT/DELETE /api/assignments/{id}`, `PUT /api/assignments/{id}/milestones/{milestone_id}`
+- [x] NEW stable resolver `GET /api/submit-link/a/{assignment_id}/w/{week}` — Thinkific-embeddable per-milestone links
+- [x] **Cumulative feedback**: `build_cumulative_context` now accepts `assignment_id` and injects the student's prior submissions to the SAME assignment (used for Kawasaki incremental review + iterative pitch refinement)
+- [x] `auto_send_feedback=true` → `/api/submissions/{id}/review` immediately sends feedback to student (status='sent', feedback_sent=true, sent_at set) — no instructor review step
+- [x] NEW `POST /api/admin/migrate-to-assignments` (super_admin) — idempotent one-click migration: seeds defaults in every cohort + reassigns existing homework submissions to the questionnaire assignment
+- [x] Cohort delete cascades to assignments collection
+- [x] Instructor UI: new **Assignments** tab in CohortDetail (with **Knowledge Base** as the renamed Materials tab), expandable assignment cards showing all milestones, per-milestone "Copy Thinkific Link" + "Edit" buttons, custom assignment creator, milestone editor
+- [x] Cohort **Settings** button + dialog — total weeks + auto-send toggle + super_admin migration button
+- [x] Testing: 26/26 new backend tests + 91/91 regression + 22/22 UI items PASS (iteration_38.json). Zero action items.
+
+### Phase 2 — Student Dashboard + Full DirectSubmit Assignment Flow (NOT YET STARTED)
+Follow-up work needed to complete the vision:
+- Student Dashboard rendering by assignment (4 assignment sections instead of weekly homework list)
+- `/submit/a/{assignment_id}/w/{week}` route resolves + navigates to a milestone-aware submit page
+- Per-milestone submission tracking on the student dashboard
+
 ### Named Submission Types + Thinkific-Stable Links (Completed - July 6, 2026)
 - [x] 4 named homework submission types: `60_second_pitch`, `10_slide_pitch`, `case_activity`, `business_questionnaire` — coexist alongside generic homework (opt-in per material)
 - [x] Per-type file-extension enforcement on `POST /api/materials/{id}/submit`:
