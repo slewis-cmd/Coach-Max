@@ -23,6 +23,7 @@ import DirectSubmit, { DirectSubmitStable } from "./pages/DirectSubmit";
 import CoachMaxPage from "./pages/CoachMaxPage";
 import CoachMaxInsightsPage from "./pages/CoachMaxInsightsPage";
 import RubricLibrary from "./pages/RubricLibrary";
+import AssignmentTemplatesPage from "./pages/AssignmentTemplatesPage";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -141,6 +142,11 @@ const AppRouter = () => {
       <Route path="/rubrics" element={
         <ProtectedRoute>
           <RubricLibrary />
+        </ProtectedRoute>
+      } />
+      <Route path="/assignment-templates" element={
+        <ProtectedRoute>
+          <AssignmentTemplatesPage />
         </ProtectedRoute>
       } />
       <Route path="/thinkific" element={

@@ -18,6 +18,8 @@ import {
 import { SUBMISSION_TYPES, SUBMISSION_TYPE_BY_ID } from '../../config/submissionTypes';
 import { FeedbackTemplateField } from '../rubric/FeedbackTemplateField';
 import { SubmissionTypeFields } from '../material/SubmissionTypeFields';
+import { ApplyTemplateDialog } from './ApplyTemplateDialog';
+import { Layers, BookmarkPlus } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 const ICONS = { Mic, Presentation, FileText, ListChecks };
@@ -29,6 +31,7 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [milestoneEditing, setMilestoneEditing] = useState(null); // {assignment, milestone}
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   const fetchAssignments = useCallback(async () => {
     try {
@@ -83,13 +86,23 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
             <h2 className="text-lg font-medium text-[#000]">Student Assignments</h2>
             <p className="text-sm text-[#666]">The 4 named exercises + any custom ones. Each has weekly milestones.</p>
           </div>
-          <Button
-            onClick={() => setCreating(true)}
-            className="bg-[#22438E] hover:bg-[#1A3A7A] rounded-full"
-            data-testid="new-assignment-btn"
-          >
-            <Plus className="w-4 h-4 mr-1.5" /> New Assignment
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setApplyingTemplate(true)}
+              variant="outline"
+              className="border-[#7C3AED] text-[#7C3AED] hover:bg-[#F5EBFF] rounded-full"
+              data-testid="apply-template-btn"
+            >
+              <Layers className="w-4 h-4 mr-1.5" /> Apply Template
+            </Button>
+            <Button
+              onClick={() => setCreating(true)}
+              className="bg-[#22438E] hover:bg-[#1A3A7A] rounded-full"
+              data-testid="new-assignment-btn"
+            >
+              <Plus className="w-4 h-4 mr-1.5" /> New Assignment
+            </Button>
+          </div>
         </div>
       )}
 
@@ -134,6 +147,21 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
                 </button>
                 {isInstructor && (
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <Button
+                      variant="ghost" size="icon"
+                      onClick={async () => {
+                        try {
+                          const res = await axios.post(`${API_URL}/api/assignment-templates/from-assignment/${asgn.assignment_id}`);
+                          toast.success(`Saved as template — "${res.data.name}"`);
+                        } catch (err) {
+                          toast.error(err?.response?.data?.detail || 'Failed to save as template');
+                        }
+                      }}
+                      title="Save this assignment as a reusable template"
+                      data-testid={`save-as-template-${asgn.assignment_id}`}
+                    >
+                      <BookmarkPlus className="w-4 h-4 text-[#7C3AED]" />
+                    </Button>
                     <Button
                       variant="ghost" size="icon"
                       onClick={() => setEditing(asgn)}
@@ -221,6 +249,13 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
         milestoneEditing={milestoneEditing}
         onOpenChange={(open) => { if (!open) setMilestoneEditing(null); }}
         onSaved={() => { setMilestoneEditing(null); fetchAssignments(); }}
+      />
+      <ApplyTemplateDialog
+        open={applyingTemplate}
+        onOpenChange={setApplyingTemplate}
+        cohortId={cohortId}
+        cohort={cohort}
+        onApplied={() => { setApplyingTemplate(false); fetchAssignments(); }}
       />
     </div>
   );

@@ -2322,6 +2322,255 @@ async def migrate_to_assignments(user: dict = Depends(require_super_admin)):
 # ==================== END ASSIGNMENTS ====================
 
 
+# ==================== ASSIGNMENT TEMPLATES ====================
+# Reusable snapshots of an assignment (title, description, rubric, drive link,
+# questionnaire, and all milestones with their overrides) that instructors can
+# hydrate into new cohorts. Milestone weeks can be REMAPPED at apply time so a
+# 14-week template can be reshaped into an 8-week cohort etc.
+
+class AssignmentTemplate(BaseModel):
+    template_id: str = Field(default_factory=lambda: f"tpl_{uuid.uuid4().hex[:12]}")
+    name: str
+    description: Optional[str] = ""
+    submission_type: str
+    feedback_template: Optional[str] = ""
+    drive_folder_url: Optional[str] = ""
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None
+    milestones: List[Dict[str, Any]] = []
+    created_by: str
+    created_by_name: Optional[str] = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AssignmentTemplatePayload(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    submission_type: Optional[str] = None
+    feedback_template: Optional[str] = None
+    drive_folder_url: Optional[str] = None
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None
+    milestones: Optional[List[Dict[str, Any]]] = None
+
+
+class ApplyTemplatePayload(BaseModel):
+    week_map: Optional[Dict[str, Optional[int]]] = None  # {template_milestone_id: target_week | null (skip)}
+    replace_existing_by_type: Optional[bool] = False
+    title_override: Optional[str] = None
+
+
+def _normalize_milestone_shape(m: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "milestone_id": m.get("milestone_id") or f"ms_{uuid.uuid4().hex[:12]}",
+        "week_number": int(m.get("week_number", 1)),
+        "title": m.get("title", "") or "",
+        "description": m.get("description", "") or "",
+        "feedback_template_override": m.get("feedback_template_override", "") or "",
+        "drive_folder_url_override": m.get("drive_folder_url_override", "") or "",
+        "is_final_capstone": bool(m.get("is_final_capstone")),
+        "due_date": m.get("due_date"),
+    }
+
+
+def _clone_milestones_from_template(
+    tpl_milestones: List[Dict[str, Any]],
+    week_map: Optional[Dict[str, Optional[int]]] = None,
+) -> List[Dict[str, Any]]:
+    """Clone milestones; apply week remap; generate fresh milestone_ids."""
+    week_map = week_map or {}
+    out: List[Dict[str, Any]] = []
+    for m in (tpl_milestones or []):
+        tpl_ms_id = m.get("milestone_id")
+        if tpl_ms_id in week_map:
+            target_week = week_map[tpl_ms_id]
+        else:
+            target_week = m.get("week_number")
+        if target_week is None:
+            continue
+        try:
+            wk = int(target_week)
+        except Exception:
+            continue
+        cloned = _normalize_milestone_shape({**m, "week_number": wk})
+        cloned["milestone_id"] = f"ms_{uuid.uuid4().hex[:12]}"
+        out.append(cloned)
+    out.sort(key=lambda x: (x.get("week_number") or 0, 1 if x.get("is_final_capstone") else 0))
+    return out
+
+
+@api_router.get("/assignment-templates")
+async def list_assignment_templates(user: dict = Depends(require_instructor)):
+    docs = await db.assignment_templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(length=500)
+    for d in docs:
+        d["can_edit"] = (user.get("role") == "super_admin") or (d.get("created_by") == user["user_id"])
+    return docs
+
+
+@api_router.post("/assignment-templates")
+async def create_assignment_template(payload: AssignmentTemplatePayload, user: dict = Depends(require_instructor)):
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not payload.submission_type or payload.submission_type not in SUBMISSION_TYPE_IDS:
+        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
+    tpl = AssignmentTemplate(
+        name=name,
+        description=(payload.description or "").strip(),
+        submission_type=payload.submission_type,
+        feedback_template=(payload.feedback_template or "").strip(),
+        drive_folder_url=_validate_drive_url(payload.drive_folder_url or ""),
+        questionnaire_fields=payload.questionnaire_fields if payload.submission_type == "business_questionnaire" else None,
+        milestones=[_normalize_milestone_shape(m) for m in (payload.milestones or [])],
+        created_by=user["user_id"],
+        created_by_name=user.get("name") or user.get("email") or "",
+    )
+    await db.assignment_templates.insert_one(tpl.dict())
+    out = tpl.dict()
+    out["can_edit"] = True
+    return out
+
+
+@api_router.post("/assignment-templates/from-assignment/{assignment_id}")
+async def save_assignment_as_template(assignment_id: str, user: dict = Depends(require_instructor)):
+    """Snapshot the given assignment into a new template."""
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    cohort = await db.cohorts.find_one({"cohort_id": asgn["cohort_id"]}, {"_id": 0})
+    if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    tpl = AssignmentTemplate(
+        name=asgn.get("title", "Untitled Template"),
+        description=asgn.get("description", ""),
+        submission_type=asgn["submission_type"],
+        feedback_template=asgn.get("feedback_template", ""),
+        drive_folder_url=asgn.get("drive_folder_url", ""),
+        questionnaire_fields=asgn.get("questionnaire_fields"),
+        milestones=[_normalize_milestone_shape(m) for m in (asgn.get("milestones") or [])],
+        created_by=user["user_id"],
+        created_by_name=user.get("name") or user.get("email") or "",
+    )
+    await db.assignment_templates.insert_one(tpl.dict())
+    out = tpl.dict()
+    out["can_edit"] = True
+    return out
+
+
+@api_router.put("/assignment-templates/{template_id}")
+async def update_assignment_template(template_id: str, payload: AssignmentTemplatePayload, user: dict = Depends(require_instructor)):
+    tpl = await db.assignment_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if user.get("role") != "super_admin" and tpl.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the author or a super admin can edit this template")
+
+    updates: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
+    if payload.name is not None:
+        updates["name"] = payload.name.strip()
+    if payload.description is not None:
+        updates["description"] = (payload.description or "").strip()
+    if payload.feedback_template is not None:
+        updates["feedback_template"] = (payload.feedback_template or "").strip()
+    if payload.drive_folder_url is not None:
+        updates["drive_folder_url"] = _validate_drive_url(payload.drive_folder_url or "")
+    if payload.questionnaire_fields is not None:
+        updates["questionnaire_fields"] = payload.questionnaire_fields
+    if payload.milestones is not None:
+        updates["milestones"] = [_normalize_milestone_shape(m) for m in payload.milestones]
+
+    await db.assignment_templates.update_one({"template_id": template_id}, {"$set": updates})
+    updated = await db.assignment_templates.find_one({"template_id": template_id}, {"_id": 0})
+    updated["can_edit"] = True
+    return updated
+
+
+@api_router.delete("/assignment-templates/{template_id}")
+async def delete_assignment_template(template_id: str, user: dict = Depends(require_instructor)):
+    tpl = await db.assignment_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if user.get("role") != "super_admin" and tpl.get("created_by") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the author or a super admin can delete this template")
+    await db.assignment_templates.delete_one({"template_id": template_id})
+    return {"template_id": template_id, "message": "Template deleted"}
+
+
+@api_router.post("/cohorts/{cohort_id}/assignments/from-template/{template_id}")
+async def apply_template_to_cohort(
+    cohort_id: str,
+    template_id: str,
+    payload: ApplyTemplatePayload,
+    user: dict = Depends(require_instructor)
+):
+    """Hydrate a template into a cohort. `week_map` remaps individual milestone weeks
+    (send `null` to skip a milestone). If `replace_existing_by_type=True` and the cohort
+    has an assignment with the same submission_type, its milestones + rubric are
+    OVERWRITTEN in place (preserving assignment_id + submission history)."""
+    cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    tpl = await db.assignment_templates.find_one({"template_id": template_id}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    milestones = _clone_milestones_from_template(tpl.get("milestones") or [], payload.week_map)
+    title = (payload.title_override or "").strip() or tpl["name"]
+
+    if payload.replace_existing_by_type:
+        existing = await db.assignments.find_one({
+            "cohort_id": cohort_id,
+            "submission_type": tpl["submission_type"],
+            "is_active": True,
+        }, {"_id": 0})
+        if existing:
+            await db.assignments.update_one(
+                {"assignment_id": existing["assignment_id"]},
+                {"$set": {
+                    "title": title,
+                    "description": tpl.get("description", ""),
+                    "feedback_template": tpl.get("feedback_template", ""),
+                    "drive_folder_url": tpl.get("drive_folder_url", ""),
+                    "questionnaire_fields": tpl.get("questionnaire_fields"),
+                    "milestones": milestones,
+                    "updated_at": datetime.now(timezone.utc),
+                }}
+            )
+            return {
+                "assignment_id": existing["assignment_id"],
+                "message": f"Template applied — {len(milestones)} milestones (existing assignment updated)",
+                "milestones_count": len(milestones),
+                "replaced": True,
+            }
+
+    max_order = await db.assignments.count_documents({"cohort_id": cohort_id})
+    asgn = Assignment(
+        cohort_id=cohort_id,
+        assignment_key="custom",
+        title=title,
+        description=tpl.get("description", ""),
+        submission_type=tpl["submission_type"],
+        order=max_order,
+        feedback_template=tpl.get("feedback_template", ""),
+        drive_folder_url=tpl.get("drive_folder_url", ""),
+        questionnaire_fields=tpl.get("questionnaire_fields"),
+        milestones=milestones,
+    )
+    await db.assignments.insert_one(asgn.dict())
+    return {
+        "assignment_id": asgn.assignment_id,
+        "message": f"Template applied — {len(milestones)} milestones (new assignment created)",
+        "milestones_count": len(milestones),
+        "replaced": False,
+    }
+
+
+# ==================== END ASSIGNMENT TEMPLATES ====================
+
+
 @api_router.get("/cohorts/{cohort_id}/materials")
 async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(get_current_user)):
     """Get materials for a cohort"""
