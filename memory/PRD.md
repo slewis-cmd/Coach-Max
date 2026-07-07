@@ -311,6 +311,39 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Code Quality Pass 5 — Complexity Reduction + Component Splits (Completed - July 7, 2026)
+**BACKEND — server.py function extractions (no behavior change):**
+- [x] `read_file_text()` split into `_questionnaire_text_from_doc()` + `_video_transcript_text()` helpers; main function now branches cleanly (None = not applicable, "" = branch matched but no content). Semantics verified by 3 unit tests.
+- [x] `build_cumulative_context()` (was 124 lines, complexity 41) split into 3 phase helpers: `_cumulative_same_assignment_section()`, `_cumulative_global_resources_sections()`, `_cumulative_prior_weeks_sections()`. Main function is now a 30-line orchestrator with a `_try_append()` closure for the char-budget check.
+- [x] `bulk_import_students()` split into `_build_bulk_invite_email_html()`, `_resolve_or_create_bulk_student()`, `_process_bulk_import_row()` (returns `(bucket, payload, refreshed_cohort)` tuple). Route handler is now focused on IO (CSV parse + result aggregation).
+- [x] REGRESSION CAUGHT + FIXED by testing agent: the `@api_router.post("/cohorts/{id}/students/bulk")` decorator was misplaced onto the extracted `_build_bulk_invite_email_html` helper (which came between the decorator and the original function during refactor). Bulk import was 100% broken. Fix: single-line reorder to place decorator on `bulk_import_students`. Verified live via curl (now 401 without auth, was 422-with-html-helper-signature).
+
+**FRONTEND — MaterialLibrary.js split:**
+- [x] Reduced from 762 → 505 lines (-33%) via extraction of 3 subcomponents into `/app/frontend/src/components/material/`:
+  - `LibraryMaterialCard.js` (170 lines) — full material row with all badges + action buttons
+  - `AssignCohortDialog.js` (63 lines) — assign-to-cohort dialog
+  - `LibraryPreviewDialog.js` (113 lines) — PDF/DOCX/video preview modal
+- [x] All data-testids preserved verbatim (verified by testing agent): `library-material-{id}`, `view-lib-{id}`, `download-lib-{id}`, `duplicate-lib-{id}`, `edit-feedback-template-lib-{id}`, `delete-lib-{id}`, `assign-btn-{id}`, `unassign-{mid}-{cid}`, `assign-cohort-{cid}`, `library-preview-{pdf|docx|youtube|vimeo|video}`, `library-preview-dialog`, `preview-download-btn`, `custom-rubric-badge-{id}`, `global-badge-{id}`.
+- [x] Unused icon imports pruned.
+
+**FRONTEND — Lint cleanup:**
+- [x] Removed 2 unused `eslint-disable react-hooks/exhaustive-deps` directives (InvitePage, Submissions)
+- [x] Fixed 3 unescaped-entities lint errors (InvitePage x2, RoleSelection)
+- [x] Removed 3 f-string-without-placeholders (test_assign_instructor, test_coach_max_url, test_export_pdf) + 1 in server.py
+
+**BACKEND — Test file normalization:**
+- [x] Normalized 36 boolean assertions across 12 test files: `is True`/`is False` and `== True`/`== False` → bare `assert result` / `assert not result` (the Pythonic and lint-clean form; `== True/False` triggers ruff E712). Files: test_assignment_templates.py, test_assignments_phase1.py, test_assignments_phase2.py, test_audio_tts.py, test_drive_link.py, test_duplicate_endpoints.py, test_feedback_template.py, test_global_materials.py, test_milestone_titles.py, test_rubric_library.py, test_submission_types.py, test_video_materials.py.
+
+**Testing (iteration_42.json):**
+- 154/154 backend tests pass (143 regression + 11 new refactor tests in `test_refactor_iter42.py`)
+- 100% frontend UI (MaterialLibrary cards, filter tabs, preview + assign + upload dialogs)
+- Zero blocking action items after the decorator fix.
+
+**Explicit non-goals (deferred):**
+- localStorage → httpOnly cookies migration (proxy reliability risk, defer per prior sessions)
+- Splitting StudentDashboard.js (447 lines) and CohortDetail.js (479 lines) — manageable size, no user pain, skip for now
+- P2: production console.warn/error removal, Python type hints in server.py
+
 ### Curriculum-Aware Milestone Titles (Completed - July 7, 2026)
 - [x] `MILESTONE_TITLE_MAP` + `_default_milestone_title` helper: each of the 4 default assignments now generates meaningful weekly titles instead of literal "Week N":
   - **60-Second Elevator Pitch**: "Week 1 — First Draft: The Hook", "Week 2 — Sharpen the Problem", "Week 3 — Nail the Solution", ... "Week 14 — Final Pitch"
