@@ -9,7 +9,6 @@ import Landing from "./pages/Landing";
 import AuthCallback from "./pages/AuthCallback";
 import RoleSelection from "./pages/RoleSelection";
 import InstructorDashboard from "./pages/InstructorDashboard";
-import StudentDashboard from "./pages/StudentDashboard";
 import CohortDetail from "./pages/CohortDetail";
 import Submissions from "./pages/Submissions";
 import SubmissionDetail from "./pages/SubmissionDetail";
@@ -19,7 +18,8 @@ import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
 import BrandingSettings from "./pages/BrandingSettings";
 import InvitePage from "./pages/InvitePage";
-import DirectSubmit, { DirectSubmitStable } from "./pages/DirectSubmit";
+import DirectSubmit, { DirectSubmitStable, AssignmentMilestoneSubmit } from "./pages/DirectSubmit";
+import StudentAssignmentsDashboard from "./pages/StudentAssignmentsDashboard";
 import CoachMaxPage from "./pages/CoachMaxPage";
 import CoachMaxInsightsPage from "./pages/CoachMaxInsightsPage";
 import RubricLibrary from "./pages/RubricLibrary";
@@ -83,7 +83,7 @@ const DashboardRouter = () => {
     return <InstructorDashboard />;
   }
 
-  return <StudentDashboard />;
+  return <StudentAssignmentsDashboard />;
 };
 
 // App Router with session_id detection
@@ -167,6 +167,7 @@ const AppRouter = () => {
       <Route path="/invite/:code" element={<InvitePage />} />
       <Route path="/submit/:materialId" element={<DirectSubmit />} />
       <Route path="/submit/w/:week/:submissionType" element={<DirectSubmitStable />} />
+      <Route path="/submit/a/:assignmentId/w/:week" element={<AssignmentMilestoneSubmit />} />
       <Route path="/coach-max/:submissionId" element={
         <ProtectedRoute>
           <CoachMaxPage />

@@ -2571,6 +2571,127 @@ async def apply_template_to_cohort(
 # ==================== END ASSIGNMENT TEMPLATES ====================
 
 
+@api_router.post("/milestones/{milestone_id}/submit")
+async def submit_milestone(
+    milestone_id: str,
+    file: UploadFile = File(None),
+    cohort_id: str = None,
+    assignment_id: str = None,
+    questionnaire_answers: str = Form(default=""),
+    user: dict = Depends(get_current_user)
+):
+    """Submit a student's work against an assignment milestone (Phase 2 flow)."""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can submit")
+    if not assignment_id:
+        raise HTTPException(status_code=400, detail="assignment_id is required")
+
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id, "is_active": True}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found or inactive")
+    milestone = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == milestone_id), None)
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    resolved_cohort_id = cohort_id or asgn["cohort_id"]
+    cohort = await db.cohorts.find_one({"cohort_id": resolved_cohort_id}, {"_id": 0})
+    if not cohort or user["user_id"] not in (cohort.get("student_ids") or []):
+        raise HTTPException(status_code=403, detail="Not enrolled in this cohort")
+
+    # Idempotency: one submission per (student, milestone, cohort). Resubmit replaces the old file.
+    existing = await db.submissions.find_one({
+        "student_id": user["user_id"],
+        "assignment_id": assignment_id,
+        "milestone_id": milestone_id,
+        "cohort_id": resolved_cohort_id,
+    }, {"_id": 0})
+    if existing:
+        await delete_file_from_doc(existing)
+
+    submission_type = asgn.get("submission_type")
+    is_questionnaire = submission_type == "business_questionnaire"
+
+    if is_questionnaire:
+        try:
+            answers_raw = json.loads(questionnaire_answers or "{}")
+        except Exception:
+            raise HTTPException(status_code=400, detail="questionnaire_answers must be valid JSON")
+        if not isinstance(answers_raw, dict):
+            raise HTTPException(status_code=400, detail="questionnaire_answers must be an object")
+        fields = asgn.get("questionnaire_fields") or []
+        answers: Dict[str, str] = {}
+        for f in fields:
+            fid = f.get("id")
+            ans = str(answers_raw.get(fid, "") or "").strip()
+            if f.get("required") and not ans:
+                raise HTTPException(status_code=400, detail=f"'{f.get('label')}' is required")
+            if len(ans) > 5000:
+                raise HTTPException(status_code=400, detail=f"'{f.get('label')}' must be 5000 characters or less")
+            answers[fid] = ans
+        filename = f"questionnaire_a_{assignment_id}_m_{milestone_id}.json"
+        gridfs_id = None
+    else:
+        if file is None or not file.filename:
+            raise HTTPException(status_code=400, detail="A file is required for this assignment")
+        filename = file.filename or "unnamed"
+        ext = filename.lower().split(".")[-1]
+        allowed_exts = (
+            SUBMISSION_TYPE_CONFIG[submission_type]["extensions"]
+            if submission_type in SUBMISSION_TYPE_CONFIG and SUBMISSION_TYPE_CONFIG[submission_type]["input_kind"] == "file"
+            else DEFAULT_HOMEWORK_EXTENSIONS
+        )
+        if ext not in allowed_exts:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Allowed file types for this assignment: {', '.join('.' + e for e in allowed_exts)}"
+            )
+        content = await file.read()
+        placeholder = f"sub_{uuid.uuid4().hex[:12]}"
+        gridfs_id = await save_bytes_to_gridfs(content, f"{placeholder}_{filename}")
+        answers = None
+
+    now = datetime.now(timezone.utc).isoformat()
+    if existing:
+        await db.submissions.update_one(
+            {"submission_id": existing["submission_id"]},
+            {"$set": {
+                "file_path": "",
+                "gridfs_id": gridfs_id,
+                "file_name": filename,
+                "submission_type": submission_type,
+                "questionnaire_answers": answers,
+                "status": "pending",
+                "ai_feedback": None,
+                "instructor_feedback": None,
+                "feedback_sent": False,
+                "resubmission_allowed": False,
+                "submitted_at": now,
+                "reviewed_at": None,
+                "sent_at": None,
+                "resubmission_count": existing.get("resubmission_count", 0) + 1,
+            }}
+        )
+        return {"submission_id": existing["submission_id"], "message": "Milestone resubmitted", "is_resubmission": True}
+
+    sub = Submission(
+        material_id=asgn.get("material_id") or "",  # optional legacy reference
+        cohort_id=resolved_cohort_id,
+        student_id=user["user_id"],
+        file_path="",
+        gridfs_id=gridfs_id,
+        file_name=filename,
+        submission_type=submission_type,
+        questionnaire_answers=answers,
+        assignment_id=assignment_id,
+        milestone_id=milestone_id,
+    )
+    doc = sub.model_dump()
+    doc["submitted_at"] = doc["submitted_at"].isoformat()
+    doc["resubmission_count"] = 0
+    await db.submissions.insert_one(doc)
+    return {"submission_id": sub.submission_id, "message": "Milestone submitted", "is_resubmission": False}
+
+
 @api_router.get("/cohorts/{cohort_id}/materials")
 async def get_materials(cohort_id: str, week: int = None, user: dict = Depends(get_current_user)):
     """Get materials for a cohort"""
@@ -3155,6 +3276,109 @@ async def preview_material_text(material_id: str, user: dict = Depends(get_curre
 
 
 # ==================== STUDENT DASHBOARD ENDPOINT ====================
+
+@api_router.get("/student/assignments-dashboard")
+async def get_student_assignments_dashboard(user: dict = Depends(get_current_user)):
+    """Assignment-first student dashboard (Phase 2 model). Returns per-cohort data with
+    'This Week' summary + 4 (or more) assignment sections showing milestone progress."""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Students only")
+
+    cohorts = await db.cohorts.find({"student_ids": user["user_id"]}, {"_id": 0}).to_list(10)
+    result = []
+    for cohort in cohorts:
+        # Auto-seed if needed (idempotent — same helper used by the instructor GET)
+        try:
+            await _seed_default_assignments_for_cohort(cohort["cohort_id"], cohort.get("total_weeks", 14))
+        except Exception:
+            pass
+
+        assignments = await db.assignments.find(
+            {"cohort_id": cohort["cohort_id"], "is_active": True},
+            {"_id": 0}
+        ).sort("order", 1).to_list(50)
+
+        subs = await db.submissions.find(
+            {"student_id": user["user_id"], "cohort_id": cohort["cohort_id"]},
+            {"_id": 0}
+        ).to_list(500)
+        subs_by_ms = {s.get("milestone_id"): s for s in subs if s.get("milestone_id")}
+
+        assignments_out = []
+        earliest_unsubmitted_week = None
+        for a in assignments:
+            ms_out = []
+            for m in (a.get("milestones") or []):
+                ms_id = m.get("milestone_id")
+                sub = subs_by_ms.get(ms_id)
+                if sub:
+                    raw = sub.get("status") or "pending"
+                    status = {"pending": "submitted", "draft": "under_review", "sent": "feedback_provided", "reviewed": "under_review"}.get(raw, raw)
+                    submission_summary = {
+                        "submission_id": sub["submission_id"],
+                        "status": status,
+                        "submitted_at": sub.get("submitted_at", ""),
+                        "feedback_sent": sub.get("feedback_sent", False),
+                        "ai_feedback": sub.get("instructor_feedback") or sub.get("ai_feedback") if status == "feedback_provided" else None,
+                    }
+                else:
+                    status = "not_started"
+                    submission_summary = None
+                    wk = m.get("week_number")
+                    if wk is not None and (earliest_unsubmitted_week is None or wk < earliest_unsubmitted_week):
+                        earliest_unsubmitted_week = wk
+
+                ms_out.append({
+                    "milestone_id": ms_id,
+                    "week_number": m.get("week_number"),
+                    "title": m.get("title", ""),
+                    "description": m.get("description", ""),
+                    "drive_folder_url": m.get("drive_folder_url_override") or a.get("drive_folder_url") or "",
+                    "is_final_capstone": bool(m.get("is_final_capstone")),
+                    "due_date": m.get("due_date"),
+                    "status": status,
+                    "submission": submission_summary,
+                })
+
+            assignments_out.append({
+                "assignment_id": a["assignment_id"],
+                "assignment_key": a.get("assignment_key", "custom"),
+                "title": a.get("title", ""),
+                "description": a.get("description", ""),
+                "submission_type": a.get("submission_type"),
+                "drive_folder_url": a.get("drive_folder_url", ""),
+                "questionnaire_fields": a.get("questionnaire_fields"),
+                "milestones": sorted(ms_out, key=lambda x: (x.get("week_number") or 0, 1 if x.get("is_final_capstone") else 0)),
+            })
+
+        # "This Week" = milestones at earliest_unsubmitted_week across all assignments
+        this_week = []
+        if earliest_unsubmitted_week is not None:
+            for a in assignments_out:
+                for m in a["milestones"]:
+                    if m["week_number"] == earliest_unsubmitted_week and m["status"] == "not_started":
+                        this_week.append({
+                            "assignment_id": a["assignment_id"],
+                            "assignment_title": a["title"],
+                            "submission_type": a["submission_type"],
+                            "milestone_id": m["milestone_id"],
+                            "milestone_title": m["title"],
+                            "week_number": m["week_number"],
+                            "drive_folder_url": m["drive_folder_url"],
+                            "is_final_capstone": m["is_final_capstone"],
+                        })
+
+        result.append({
+            "cohort_id": cohort["cohort_id"],
+            "cohort_name": cohort.get("name", ""),
+            "total_weeks": cohort.get("total_weeks", 14),
+            "current_week": earliest_unsubmitted_week,  # None if everything is done
+            "this_week": this_week,
+            "assignments": assignments_out,
+        })
+
+    return result
+
 
 @api_router.get("/student/dashboard")
 async def get_student_dashboard(user: dict = Depends(get_current_user)):
