@@ -346,7 +346,7 @@ class TestInstructorAccessAfterAssignment(TestSetup):
         assert data.get("cohort_id") == TestSetup.cohort_id, "Should return correct cohort"
         assert "students" in data, "Instructor should see students list"
         
-        print(f"SUCCESS: Assigned instructor can access cohort detail")
+        print("SUCCESS: Assigned instructor can access cohort detail")
     
     def test_assigned_instructor_can_see_submissions(self, setup_test_data):
         """Assigned instructor should be able to see submissions for the cohort"""

@@ -132,7 +132,7 @@ class TestRubricCreate:
         assert data["name"] == payload["name"]
         assert data["content"] == payload["content"]
         assert data["description"] == payload["description"]
-        assert data["can_edit"] is True
+        assert data["can_edit"]
         assert data["created_by"] == seed["ids"]["inst_creator"]
 
         # Verify persistence via GET
@@ -141,7 +141,7 @@ class TestRubricCreate:
         assert list_r.status_code == 200
         found = [x for x in list_r.json() if x["rubric_id"] == data["rubric_id"]]
         assert len(found) == 1
-        assert found[0]["can_edit"] is True
+        assert found[0]["can_edit"]
 
     def test_create_missing_name(self, seed):
         payload = {"name": "", "content": "some content"}
@@ -195,7 +195,7 @@ class TestRubricUpdate:
         assert updated["name"] == new_payload["name"]
         assert updated["content"] == new_payload["content"]
         assert updated["description"] == new_payload["description"]
-        assert updated["can_edit"] is True
+        assert updated["can_edit"]
         # updated_at must move forward
         assert updated["updated_at"] > original_updated_at, \
             f"updated_at did not advance: {original_updated_at} -> {updated['updated_at']}"
@@ -286,19 +286,19 @@ class TestRubricCanEditFlag:
         lst_creator = requests.get(f"{BASE_URL}/api/rubrics",
                                    headers=_auth(seed["tokens"]["inst_creator"]), timeout=15).json()
         item = next(x for x in lst_creator if x["rubric_id"] == rub_id)
-        assert item["can_edit"] is True
+        assert item["can_edit"]
 
         # Other instructor sees can_edit=false
         lst_other = requests.get(f"{BASE_URL}/api/rubrics",
                                  headers=_auth(seed["tokens"]["inst_other"]), timeout=15).json()
         item = next(x for x in lst_other if x["rubric_id"] == rub_id)
-        assert item["can_edit"] is False
+        assert not (item["can_edit"])
 
         # Super admin sees can_edit=true
         lst_admin = requests.get(f"{BASE_URL}/api/rubrics",
                                  headers=_auth(seed["tokens"]["super_admin"]), timeout=15).json()
         item = next(x for x in lst_admin if x["rubric_id"] == rub_id)
-        assert item["can_edit"] is True
+        assert item["can_edit"]
 
 
 # ================================================================

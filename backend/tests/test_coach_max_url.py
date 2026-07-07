@@ -76,7 +76,7 @@ class TestCoachMaxURL:
             assert response.content[:4] == b"%PDF"
             print("PASS: export-pdf endpoint returns valid PDF")
         else:
-            print(f"INFO: export-pdf returned 400 - may need feedback first")
+            print("INFO: export-pdf returned 400 - may need feedback first")
     
     def test_send_feedback_requires_auth(self):
         """Test send-feedback requires authentication"""

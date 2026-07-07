@@ -30,7 +30,6 @@ export default function Submissions() {
     if (!authLoading && user) {
       fetchSubmissions();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
 
   const fetchSubmissions = async () => {

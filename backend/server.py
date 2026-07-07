@@ -8,7 +8,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -182,34 +182,51 @@ async def delete_file_from_doc(doc: dict) -> None:
             pass
 
 
+async def _questionnaire_text_from_doc(doc: dict) -> Optional[str]:
+    """Synthesize Q&A text from a questionnaire submission doc, or return None if not applicable."""
+    if doc.get("submission_type") != "business_questionnaire" or doc.get("questionnaire_answers") is None:
+        return None
+    mat = None
+    if doc.get("material_id"):
+        mat = await db.materials.find_one(
+            {"material_id": doc.get("material_id")},
+            {"_id": 0, "questionnaire_fields": 1},
+        )
+    fields = (mat or {}).get("questionnaire_fields") or []
+    answers = doc.get("questionnaire_answers") or {}
+    if fields:
+        return "\n\n".join(
+            f"Q: {f.get('label')}\nA: {answers.get(f.get('id'), '') or '(no answer)'}"
+            for f in fields
+        )
+    return "\n\n".join(f"Q: {k}\nA: {v}" for k, v in answers.items())
+
+
+def _video_transcript_text(doc: dict) -> Optional[str]:
+    """Return labeled transcript text for a video material, or None if not applicable."""
+    if doc.get("material_type") != "video":
+        return None
+    transcript = (doc.get("transcript") or "").strip()
+    if not transcript:
+        return ""
+    label = "VIDEO TRANSCRIPT"
+    if doc.get("video_url"):
+        label += f" ({doc.get('video_url')})"
+    return f"[{label}]\n{transcript}"
+
+
 async def read_file_text(doc_or_path, file_name: str = None) -> str:
     """Read file and extract text. Accepts either a doc dict (preferred) or a legacy (file_path, file_name) pair.
     For video materials, returns the stored Whisper transcript."""
     try:
         if isinstance(doc_or_path, dict):
             doc = doc_or_path
-            # Questionnaire submissions: synthesize Q&A text from stored answers
-            if doc.get("submission_type") == "business_questionnaire" and doc.get("questionnaire_answers") is not None:
-                # Resolve labels via parent material
-                mat = await db.materials.find_one({"material_id": doc.get("material_id")}, {"_id": 0, "questionnaire_fields": 1}) if doc.get("material_id") else None
-                fields = (mat or {}).get("questionnaire_fields") or []
-                answers = doc.get("questionnaire_answers") or {}
-                if fields:
-                    return "\n\n".join(
-                        f"Q: {f.get('label')}\nA: {answers.get(f.get('id'), '') or '(no answer)'}"
-                        for f in fields
-                    )
-                # Fallback: dump raw answers
-                return "\n\n".join(f"Q: {k}\nA: {v}" for k, v in answers.items())
-            # Video materials: return stored transcript
-            if doc.get("material_type") == "video":
-                transcript = (doc.get("transcript") or "").strip()
-                if transcript:
-                    label = "VIDEO TRANSCRIPT"
-                    if doc.get("video_url"):
-                        label += f" ({doc.get('video_url')})"
-                    return f"[{label}]\n{transcript}"
-                return ""
+            q_text = await _questionnaire_text_from_doc(doc)
+            if q_text is not None:
+                return q_text
+            v_text = _video_transcript_text(doc)
+            if v_text is not None:
+                return v_text
             file_bytes = await read_bytes_from_doc(doc)
             return extract_text_from_file(file_bytes, doc.get("file_name", ""))
         # Legacy signature: (file_path, file_name)
@@ -411,128 +428,143 @@ async def build_coach_max_context(submission: dict, material: dict) -> tuple:
     return submission_text, context_text
 
 
-async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000, assignment_id: Optional[str] = None) -> str:
-    """Build cumulative context from all prior weeks: materials + student submissions + feedback.
-    Always includes Course-Wide Resources (is_global=True) regardless of week.
-    If assignment_id is given, ALSO includes the student's prior submissions to the SAME assignment
-    (used for cumulative feedback on the Kawasaki Deck / iterative 60-Sec Pitch etc.)."""
-    parts = []
-    total_chars = 0
+async def _cumulative_same_assignment_section(student_id: str, assignment_id: str, current_week: int) -> str:
+    """Return the 'PRIOR SUBMISSIONS FOR THIS ASSIGNMENT' section text, or '' if none."""
+    if not assignment_id or not current_week or current_week <= 1:
+        return ""
+    asgn = await db.assignments.find_one(
+        {"assignment_id": assignment_id},
+        {"_id": 0, "title": 1, "milestones": 1},
+    )
+    if not asgn:
+        return ""
+    milestones = asgn.get("milestones") or []
+    prior_ms_ids = [
+        m.get("milestone_id") for m in milestones
+        if m.get("week_number") and m["week_number"] < current_week
+    ]
+    if not prior_ms_ids:
+        return ""
+    prior_asgn_subs = await db.submissions.find({
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "milestone_id": {"$in": prior_ms_ids},
+    }, {"_id": 0}).sort("submitted_at", 1).to_list(50)
+    if not prior_asgn_subs:
+        return ""
+    body = ""
+    for s in prior_asgn_subs:
+        ms = next((m for m in milestones if m.get("milestone_id") == s.get("milestone_id")), None)
+        wk = (ms or {}).get("week_number", "?")
+        try:
+            sub_text = await read_file_text(s)
+            excerpt = (sub_text or "")[:600]
+        except Exception:
+            excerpt = ""
+        fb = (s.get("instructor_feedback") or s.get("ai_feedback") or "")[:400]
+        body += f"\nWeek {wk} submission:\n{excerpt}\nFeedback given: {fb}\n"
+    header = f"\n--- PRIOR SUBMISSIONS FOR THIS ASSIGNMENT ({asgn.get('title', '')}) ---\n"
+    return header + body
 
-    # Same-assignment progression (highest priority context)
-    if assignment_id and current_week and current_week > 1:
-        asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0, "title": 1, "milestones": 1})
-        if asgn:
-            prior_ms_ids = [
-                m.get("milestone_id") for m in (asgn.get("milestones") or [])
-                if m.get("week_number") and m["week_number"] < current_week
-            ]
-            if prior_ms_ids:
-                prior_asgn_subs = await db.submissions.find({
-                    "student_id": student_id,
-                    "assignment_id": assignment_id,
-                    "milestone_id": {"$in": prior_ms_ids},
-                }, {"_id": 0}).sort("submitted_at", 1).to_list(50)
-                if prior_asgn_subs:
-                    header = f"\n--- PRIOR SUBMISSIONS FOR THIS ASSIGNMENT ({asgn.get('title', '')}) ---\n"
-                    body = ""
-                    for s in prior_asgn_subs:
-                        ms = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == s.get("milestone_id")), None)
-                        wk = (ms or {}).get("week_number", "?")
-                        try:
-                            sub_text = await read_file_text(s)
-                            excerpt = (sub_text or "")[:600]
-                        except Exception:
-                            excerpt = ""
-                        fb = (s.get("instructor_feedback") or s.get("ai_feedback") or "")[:400]
-                        body += f"\nWeek {wk} submission:\n{excerpt}\nFeedback given: {fb}\n"
-                    section = header + body
-                    if total_chars + len(section) <= max_chars:
-                        parts.append(section)
-                        total_chars += len(section)
 
-    # Course-Wide Resources: always included, regardless of current week
+async def _cumulative_global_resources_sections(cohort_id: str) -> List[str]:
+    """Return one section string per course-wide (is_global=True) material with non-empty text."""
     global_materials = await db.materials.find({
         "is_library": True,
         "is_global": True,
-        "cohort_ids": cohort_id
+        "cohort_ids": cohort_id,
     }, {"_id": 0}).to_list(20)
-
+    sections: List[str] = []
     for mat in global_materials:
         mat_text = await read_file_text(mat)
         excerpt = mat_text[:1200] if mat_text else ""
         if not excerpt:
             continue
-        section = f"\n--- COURSE-WIDE RESOURCE: {mat.get('title', '')} ---\n{excerpt}"
-        if total_chars + len(section) > max_chars:
-            break
-        parts.append(section)
-        total_chars += len(section)
+        sections.append(f"\n--- COURSE-WIDE RESOURCE: {mat.get('title', '')} ---\n{excerpt}")
+    return sections
 
-    # If it's Week 1, only global resources apply (no prior weeks)
-    if not current_week or current_week <= 1:
-        return "\n".join(parts) if parts else ""
 
-    # Get all prior materials (weeks 1 to current_week-1)
+async def _cumulative_prior_weeks_sections(student_id: str, cohort_id: str, current_week: int) -> List[str]:
+    """Return one section per prior week: material excerpt + student's feedback from that week."""
     prior_materials = await db.materials.find({
         "cohort_ids": cohort_id,
         "week_number": {"$lt": current_week, "$gt": 0},
-        "material_type": {"$in": ["workbook", "case_study", "video"]}
+        "material_type": {"$in": ["workbook", "case_study", "video"]},
     }, {"_id": 0}).sort("week_number", 1).to_list(100)
-
-    # Also check single cohort_id field for backwards compat
+    # Backwards compat: single cohort_id field
     if not prior_materials:
         prior_materials = await db.materials.find({
             "cohort_id": cohort_id,
             "week_number": {"$lt": current_week},
-            "material_type": {"$in": ["workbook", "case_study", "video"]}
+            "material_type": {"$in": ["workbook", "case_study", "video"]},
         }, {"_id": 0}).sort("week_number", 1).to_list(100)
 
-    # Get all prior homework materials to find submissions
     prior_hw = await db.materials.find({
         "$or": [{"cohort_ids": cohort_id}, {"cohort_id": cohort_id}],
         "week_number": {"$lt": current_week},
-        "material_type": "homework"
+        "material_type": "homework",
     }, {"_id": 0, "material_id": 1, "title": 1, "week_number": 1}).sort("week_number", 1).to_list(50)
 
     hw_ids = [m["material_id"] for m in prior_hw]
-    hw_map = {m["material_id"]: m for m in prior_hw}
-
-    # Get student's prior submissions + feedback
     prior_submissions = await db.submissions.find({
         "student_id": student_id,
-        "material_id": {"$in": hw_ids}
+        "material_id": {"$in": hw_ids},
     }, {"_id": 0, "material_id": 1, "ai_feedback": 1, "instructor_feedback": 1}).to_list(50)
-
     sub_by_mat = {s["material_id"]: s for s in prior_submissions}
 
-    # Build summary per prior week (most recent weeks get more detail)
+    sections: List[str] = []
     weeks_seen = set()
     for mat in prior_materials:
         wk = mat.get("week_number")
         if wk in weeks_seen:
             continue
         weeks_seen.add(wk)
-
-        # Summarize material topics (brief excerpt)
         mat_text = await read_file_text(mat)
         excerpt = mat_text[:800] if mat_text else ""
-
         section = f"\n--- Week {wk}: {mat.get('title', '')} ---\nTopics: {excerpt}"
-
-        # Add student's feedback from that week if available
-        hw_for_week = [h for h in prior_hw if h.get("week_number") == wk]
-        for hw in hw_for_week:
+        for hw in (h for h in prior_hw if h.get("week_number") == wk):
             sub = sub_by_mat.get(hw["material_id"])
-            if sub:
-                fb = sub.get("instructor_feedback") or sub.get("ai_feedback") or ""
-                if fb:
-                    section += f"\nFeedback received: {fb[:600]}"
+            fb = (sub or {}).get("instructor_feedback") or (sub or {}).get("ai_feedback") or ""
+            if fb:
+                section += f"\nFeedback received: {fb[:600]}"
+        sections.append(section)
+    return sections
 
+
+async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000, assignment_id: Optional[str] = None) -> str:
+    """Build cumulative context from all prior weeks: materials + student submissions + feedback.
+    Always includes Course-Wide Resources (is_global=True) regardless of week.
+    If assignment_id is given, ALSO includes the student's prior submissions to the SAME assignment
+    (used for cumulative feedback on the Kawasaki Deck / iterative 60-Sec Pitch etc.)."""
+    parts: List[str] = []
+    total_chars = 0
+
+    def _try_append(section: str) -> bool:
+        nonlocal total_chars
+        if not section:
+            return True
         if total_chars + len(section) > max_chars:
-            break
+            return False
         parts.append(section)
         total_chars += len(section)
+        return True
+
+    # 1) Same-assignment progression (highest priority)
+    _try_append(await _cumulative_same_assignment_section(student_id, assignment_id, current_week))
+
+    # 2) Course-Wide Resources: always included
+    for section in await _cumulative_global_resources_sections(cohort_id):
+        if not _try_append(section):
+            break
+
+    # 3) If it's Week 1, only global resources apply
+    if not current_week or current_week <= 1:
+        return "\n".join(parts) if parts else ""
+
+    # 4) Prior weeks: materials + received feedback
+    for section in await _cumulative_prior_weeks_sections(student_id, cohort_id, current_week):
+        if not _try_append(section):
+            break
 
     return "\n".join(parts) if parts else ""
 
@@ -1520,6 +1552,87 @@ async def remove_student_from_cohort(cohort_id: str, student_id: str, user: dict
     
     return {"message": "Student removed"}
 
+def _build_bulk_invite_email_html(cohort_name: str, student_name: str, email: str, app_url: str) -> str:
+    """Compose the HTML body used for bulk-import invitation emails."""
+    return f"""
+                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+                    <h2 style="color: #1A1A1A; font-weight: normal;">Welcome to {cohort_name}</h2>
+                    <p style="color: #5A5A5A; line-height: 1.6;">
+                        Hi {student_name},
+                    </p>
+                    <p style="color: #5A5A5A; line-height: 1.6;">
+                        You've been invited to join <strong>{cohort_name}</strong> on The Boost Pad.
+                        Sign in to access your course materials, submit homework, and receive personalized feedback.
+                    </p>
+                    <p style="text-align: center; margin: 32px 0;">
+                        <a href="{app_url}" style="background: #1A1A1A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; font-size: 14px;">
+                            Sign In to Get Started
+                        </a>
+                    </p>
+                    <p style="color: #888; font-size: 13px; line-height: 1.6;">
+                        Use your Google account ({email}) to sign in.
+                    </p>
+                </div>
+                """
+
+
+async def _resolve_or_create_bulk_student(email: str, row_name: str) -> Optional[dict]:
+    """Return an existing student user, or create a placeholder if a name is provided.
+    Returns None when the student does not exist and no name is provided."""
+    student = await db.users.find_one({"email": email}, {"_id": 0})
+    if student:
+        return student
+    if not row_name:
+        return None
+    student_id = f"user_{uuid.uuid4().hex[:12]}"
+    await db.users.insert_one({
+        "user_id": student_id,
+        "email": email,
+        "name": row_name,
+        "picture": None,
+        "role": "student",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"user_id": student_id, "name": row_name, "email": email}
+
+
+async def _process_bulk_import_row(row: dict, cohort_id: str, cohort: dict, app_url: str) -> Tuple[str, dict, Optional[dict]]:
+    """Process one CSV row. Returns (bucket, payload, updated_cohort_or_None) where bucket is one of
+    'added' | 'already_enrolled' | 'not_found' | 'errors' | 'skip'."""
+    email = row.get("email", "").strip().lower()
+    if not email:
+        return "skip", {}, None
+
+    try:
+        student = await _resolve_or_create_bulk_student(email, row.get("name", "").strip())
+        if not student:
+            return "not_found", {"email": email}, None
+
+        if student["user_id"] in cohort.get("student_ids", []):
+            return "already_enrolled", {"email": email}, None
+
+        await db.cohorts.update_one(
+            {"cohort_id": cohort_id},
+            {"$push": {"student_ids": student["user_id"]}},
+        )
+        refreshed = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+
+        await send_email_notification(
+            to_email=email,
+            subject=f"You've been invited to {cohort['name']}",
+            html_content=_build_bulk_invite_email_html(
+                cohort_name=cohort["name"],
+                student_name=student.get("name", "there"),
+                email=email,
+                app_url=app_url,
+            ),
+        )
+        return "added", {"email": email, "name": student.get("name", "Unknown")}, refreshed
+    except Exception as e:
+        logger.error(f"Error importing student {email}: {e}")
+        return "errors", {"email": email}, None
+
+
 @api_router.post("/cohorts/{cohort_id}/students/bulk")
 async def bulk_import_students(
     cohort_id: str,
@@ -1533,110 +1646,35 @@ async def bulk_import_students(
     cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
     if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=404, detail="Cohort not found")
-    
-    # Validate file type
+
     filename = file.filename or "unnamed"
     if not filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files allowed")
-    
-    # Read and parse CSV
+
     content = await file.read()
     try:
         text = content.decode('utf-8')
     except Exception:
         text = content.decode('latin-1')
-    
+
     reader = csv.DictReader(io.StringIO(text))
-    
-    results = {
-        "added": [],
-        "already_enrolled": [],
-        "not_found": [],
-        "errors": []
-    }
-    
+    results = {"added": [], "already_enrolled": [], "not_found": [], "errors": []}
+    origin = request.headers.get("origin", "") if request else ""
+    app_url = origin or "https://cohort-feedback-hub.preview.emergentagent.com"
+
     for row in reader:
-        email = row.get("email", "").strip().lower()
-        if not email:
+        bucket, payload, refreshed_cohort = await _process_bulk_import_row(row, cohort_id, cohort, app_url)
+        if bucket == "skip":
             continue
-        
-        try:
-            # Find student by email
-            student = await db.users.find_one({"email": email}, {"_id": 0})
-            
-            if not student:
-                # Check if name provided for creating placeholder
-                name = row.get("name", "").strip()
-                if name:
-                    # Create placeholder user (they'll complete profile on first login)
-                    student_id = f"user_{uuid.uuid4().hex[:12]}"
-                    await db.users.insert_one({
-                        "user_id": student_id,
-                        "email": email,
-                        "name": name,
-                        "picture": None,
-                        "role": "student",
-                        "created_at": datetime.now(timezone.utc).isoformat()
-                    })
-                    student = {"user_id": student_id, "name": name, "email": email}
-                else:
-                    results["not_found"].append(email)
-                    continue
-            
-            # Check if already enrolled
-            if student["user_id"] in cohort.get("student_ids", []):
-                results["already_enrolled"].append(email)
-                continue
-            
-            # Add to cohort
-            await db.cohorts.update_one(
-                {"cohort_id": cohort_id},
-                {"$push": {"student_ids": student["user_id"]}}
-            )
-            
-            # Refresh cohort data
-            cohort = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
-            
-            results["added"].append({
-                "email": email,
-                "name": student.get("name", "Unknown")
-            })
-            
-            # Send invitation email
-            origin = request.headers.get("origin", "") if request else ""
-            app_url = origin or "https://cohort-feedback-hub.preview.emergentagent.com"
-            await send_email_notification(
-                to_email=email,
-                subject=f"You've been invited to {cohort['name']}",
-                html_content=f"""
-                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                    <h2 style="color: #1A1A1A; font-weight: normal;">Welcome to {cohort['name']}</h2>
-                    <p style="color: #5A5A5A; line-height: 1.6;">
-                        Hi {student.get('name', 'there')},
-                    </p>
-                    <p style="color: #5A5A5A; line-height: 1.6;">
-                        You've been invited to join <strong>{cohort['name']}</strong> on The Boost Pad.
-                        Sign in to access your course materials, submit homework, and receive personalized feedback.
-                    </p>
-                    <p style="text-align: center; margin: 32px 0;">
-                        <a href="{app_url}" style="background: #1A1A1A; color: white; padding: 12px 32px; text-decoration: none; border-radius: 8px; font-size: 14px;">
-                            Sign In to Get Started
-                        </a>
-                    </p>
-                    <p style="color: #888; font-size: 13px; line-height: 1.6;">
-                        Use your Google account ({email}) to sign in.
-                    </p>
-                </div>
-                """
-            )
-            
-        except Exception as e:
-            logger.error(f"Error importing student {email}: {e}")
-            results["errors"].append(email)
-    
+        if bucket in results:
+            # 'added' stores dicts, others store just email strings
+            results[bucket].append(payload if bucket == "added" else payload["email"])
+        if refreshed_cohort:
+            cohort = refreshed_cohort
+
     return {
         "message": f"Import complete: {len(results['added'])} added, {len(results['already_enrolled'])} already enrolled, {len(results['not_found'])} not found",
-        "results": results
+        "results": results,
     }
 
 @api_router.get("/cohorts/{cohort_id}/students/template")
@@ -4100,7 +4138,7 @@ async def submit_on_behalf(
             
             api_key = os.environ.get("EMERGENT_LLM_KEY")
             if not api_key:
-                logger.error(f"Auto review: EMERGENT_LLM_KEY not set")
+                logger.error("Auto review: EMERGENT_LLM_KEY not set")
                 return
             
             # Look up student's language preference

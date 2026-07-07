@@ -118,7 +118,7 @@ class TestNewCohortMilestoneTitles:
     def test_10_slide_pitch_final_capstone(self, cohort_with_defaults):
         a = cohort_with_defaults["by_key"]["10_slide_pitch"]
         ms14 = next(m for m in a["milestones"] if m["week_number"] == 14)
-        assert ms14["is_final_capstone"] is True
+        assert ms14["is_final_capstone"]
         assert ms14["title"] == "Week 14 — Final Consolidated Deck"
 
     def test_case_activity_week3_title(self, cohort_with_defaults):

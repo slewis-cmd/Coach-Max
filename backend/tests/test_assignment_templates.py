@@ -125,21 +125,21 @@ class TestListTemplates:
         assert isinstance(data1, list)
         mine = next((t for t in data1 if t["template_id"] == tid), None)
         assert mine is not None
-        assert mine["can_edit"] is True
+        assert mine["can_edit"]
 
         # Other instructor sees can_edit=False
         r2 = requests.get(f"{BASE_URL}/api/assignment-templates", headers=_auth(seed["tokens"]["other_ins"]), timeout=10)
         assert r2.status_code == 200
         other = next((t for t in r2.json() if t["template_id"] == tid), None)
         assert other is not None
-        assert other["can_edit"] is False
+        assert not (other["can_edit"])
 
         # Super admin sees can_edit=True
         r3 = requests.get(f"{BASE_URL}/api/assignment-templates", headers=_auth(seed["tokens"]["sa"]), timeout=10)
         assert r3.status_code == 200
         sa_view = next((t for t in r3.json() if t["template_id"] == tid), None)
         assert sa_view is not None
-        assert sa_view["can_edit"] is True
+        assert sa_view["can_edit"]
 
 
 # ===================================================================
@@ -151,7 +151,7 @@ class TestCreateTemplate:
         assert tpl["template_id"].startswith("tpl_")
         assert tpl["submission_type"] == "10_slide_pitch"
         assert tpl["created_by"] == seed["ids"]["instructor"]
-        assert tpl["can_edit"] is True
+        assert tpl["can_edit"]
         assert len(tpl["milestones"]) == 3
         # milestone_ids should be normalized/generated
         for m in tpl["milestones"]:
@@ -159,7 +159,7 @@ class TestCreateTemplate:
             assert "week_number" in m
             assert isinstance(m["is_final_capstone"], bool)
         # last milestone (from _sample_milestones) has is_final_capstone=True
-        assert tpl["milestones"][-1]["is_final_capstone"] is True
+        assert tpl["milestones"][-1]["is_final_capstone"]
 
     def test_create_missing_name_400(self, seed):
         r = requests.post(
@@ -336,7 +336,7 @@ class TestApplyTemplate:
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["replaced"] is False
+        assert not (data["replaced"])
         assert data["milestones_count"] == 3
         assert "assignment_id" in data
 
@@ -427,7 +427,7 @@ class TestApplyTemplate:
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["replaced"] is True
+        assert data["replaced"]
         assert data["assignment_id"] == original_aid  # PRESERVED
         assert data["milestones_count"] == 2
 

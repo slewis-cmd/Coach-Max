@@ -59,7 +59,7 @@ export default function RoleSelection() {
               <div className="w-16 h-16 bg-[#E1F0FF] rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <BookOpen className="w-8 h-8 text-[#22438E]" />
               </div>
-              <CardTitle className="text-2xl font-normal">I'm a Student</CardTitle>
+              <CardTitle className="text-2xl font-normal">I&apos;m a Student</CardTitle>
               <CardDescription className="text-base">
                 Access course materials, submit homework, and receive AI feedback
               </CardDescription>

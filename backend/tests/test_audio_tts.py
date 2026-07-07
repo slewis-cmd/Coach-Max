@@ -103,7 +103,7 @@ class TestSubmissionAudioEndpoint:
         data2 = response2.json()
         
         # Second call should return cached:true
-        assert data2.get("cached") == True
+        assert data2.get("cached")
         # URLs should be the same
         assert data1["audio_url"] == data2["audio_url"]
         

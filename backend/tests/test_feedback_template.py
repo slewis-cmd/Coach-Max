@@ -244,7 +244,7 @@ class TestLibraryUploadFeedbackTemplate:
         doc = db.materials.find_one({"material_id": mid}, {"_id": 0})
         assert doc is not None
         assert doc.get("feedback_template") == tpl
-        assert doc.get("is_library") == True
+        assert doc.get("is_library")
 
     def test_library_workbook_feedback_template_dropped(self, seed):
         tpl = "Ignored for workbook."

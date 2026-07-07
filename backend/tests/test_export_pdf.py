@@ -140,7 +140,7 @@ class TestSubmissionEndpoints:
         
         if response.status_code == 200:
             data = response.json()
-            print(f"PASS: Got submission details")
+            print("PASS: Got submission details")
             print(f"  submission_id: {data.get('submission_id')}")
             print(f"  status: {data.get('status')}")
             print(f"  has_ai_feedback: {bool(data.get('ai_feedback'))}")

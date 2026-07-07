@@ -381,7 +381,7 @@ class TestFileTypeValidation:
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data.get("is_resubmission") is False
+        assert not (data.get("is_resubmission"))
         # Verify submission persisted with correct linkage
         sub = db.submissions.find_one({"submission_id": data["submission_id"]}, {"_id": 0})
         assert sub["assignment_id"] == asgn["assignment_id"]
@@ -471,7 +471,7 @@ class TestResubmission:
         )
         assert r1.status_code == 200, r1.text
         data1 = r1.json()
-        assert data1["is_resubmission"] is False
+        assert not (data1["is_resubmission"])
         sub_id_1 = data1["submission_id"]
 
         # 2nd submission — same student + assignment + milestone → resubmission
@@ -484,7 +484,7 @@ class TestResubmission:
         )
         assert r2.status_code == 200, r2.text
         data2 = r2.json()
-        assert data2["is_resubmission"] is True
+        assert data2["is_resubmission"]
         # Same submission_id (updated in place)
         assert data2["submission_id"] == sub_id_1
 

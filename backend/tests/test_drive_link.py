@@ -243,7 +243,7 @@ class TestLibraryMaterialUpload:
         doc = db.materials.find_one({"material_id": mid}, {"_id": 0})
         assert doc is not None
         assert doc["drive_folder_url"] == url
-        assert doc["is_library"] == True
+        assert doc["is_library"]
         assert doc["material_type"] == "homework"
 
 

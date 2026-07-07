@@ -105,7 +105,7 @@ class TestCohortModelExtensions:
         doc = db.cohorts.find_one({"cohort_id": cid}, {"_id": 0})
         assert doc is not None
         assert doc.get("total_weeks") == 14
-        assert doc.get("auto_send_feedback") is False
+        assert not (doc.get("auto_send_feedback"))
 
     def test_cohort_update_persists_auto_send_and_total_weeks(self, seed):
         cid, _ = _create_cohort(seed["tokens"]["instructor"], "upd")
@@ -117,7 +117,7 @@ class TestCohortModelExtensions:
         )
         assert r.status_code == 200, r.text
         doc = db.cohorts.find_one({"cohort_id": cid}, {"_id": 0})
-        assert doc["auto_send_feedback"] is True
+        assert doc["auto_send_feedback"]
         assert doc["total_weeks"] == 10
 
 
@@ -147,7 +147,7 @@ class TestAutoSeedOnCreate:
         )
         assert kaw is not None
         ms = kaw["milestones"]
-        assert ms[-1]["is_final_capstone"] is True
+        assert ms[-1]["is_final_capstone"]
         # non-final should not be capstones
         assert all(not m.get("is_final_capstone") for m in ms[:-1])
 
@@ -294,7 +294,7 @@ class TestSoftDeleteAssignment:
         assert r.status_code == 200
         doc = db.assignments.find_one({"assignment_id": aid}, {"_id": 0})
         assert doc is not None
-        assert doc["is_active"] is False
+        assert not (doc["is_active"])
 
 
 # ===================================================================
@@ -445,7 +445,7 @@ class TestMigration:
         assert sub["milestone_id"]
         # Material archived
         mat = db.materials.find_one({"material_id": mat_id}, {"_id": 0})
-        assert mat.get("migrated_to_assignment") is True
+        assert mat.get("migrated_to_assignment")
 
     def test_migration_idempotent(self, seed):
         # Second run — no more cohorts should be seeded (assumes previous test ran)
@@ -628,5 +628,5 @@ class TestAutoSendFeedback:
         data = rev.json()
         assert data.get("status") == "sent", f"expected auto-send, got {data}"
         sub = db.submissions.find_one({"submission_id": sub_id}, {"_id": 0})
-        assert sub.get("feedback_sent") is True
+        assert sub.get("feedback_sent")
         assert sub.get("sent_at") is not None

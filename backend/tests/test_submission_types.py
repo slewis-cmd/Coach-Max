@@ -258,7 +258,7 @@ class TestLibraryQuestionnaireUpload:
         got = doc.get("questionnaire_fields") or []
         assert len(got) == 2
         assert got[0]["label"] == "Problem you solve?"
-        assert got[0]["required"] is True
+        assert got[0]["required"]
         assert got[1]["type"] == "longtext"
 
     def test_invalid_json_returns_400(self, seed):
