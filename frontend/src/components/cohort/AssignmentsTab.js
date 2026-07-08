@@ -19,7 +19,8 @@ import { SUBMISSION_TYPES, SUBMISSION_TYPE_BY_ID } from '../../config/submission
 import { FeedbackTemplateField } from '../rubric/FeedbackTemplateField';
 import { SubmissionTypeFields } from '../material/SubmissionTypeFields';
 import { ApplyTemplateDialog } from './ApplyTemplateDialog';
-import { Layers, BookmarkPlus } from 'lucide-react';
+import { SubmitOnBehalfMilestoneDialog } from './SubmitOnBehalfMilestoneDialog';
+import { Layers, BookmarkPlus, Upload } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 const ICONS = { Mic, Presentation, FileText, ListChecks };
@@ -32,6 +33,7 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
   const [creating, setCreating] = useState(false);
   const [milestoneEditing, setMilestoneEditing] = useState(null); // {assignment, milestone}
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [submitOnBehalfTarget, setSubmitOnBehalfTarget] = useState(null); // {assignment, milestone}
 
   const fetchAssignments = useCallback(async () => {
     try {
@@ -218,6 +220,17 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
                           >
                             <Copy className="w-3.5 h-3.5 mr-1" /> Link
                           </Button>
+                          {asgn.submission_type !== 'business_questionnaire' && (
+                            <Button
+                              variant="ghost" size="sm"
+                              onClick={() => setSubmitOnBehalfTarget({ assignment: asgn, milestone: ms })}
+                              className="text-[#22438E] hover:bg-[#E1F0FF] h-8 text-xs"
+                              title="Submit for a student on their behalf — auto-triggers AI review"
+                              data-testid={`submit-on-behalf-milestone-${ms.milestone_id}`}
+                            >
+                              <Upload className="w-3.5 h-3.5 mr-1" /> Submit for student
+                            </Button>
+                          )}
                           <Button
                             variant="ghost" size="sm"
                             onClick={() => setMilestoneEditing({ assignment: asgn, milestone: ms })}
@@ -256,6 +269,15 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
         cohortId={cohortId}
         cohort={cohort}
         onApplied={() => { setApplyingTemplate(false); fetchAssignments(); }}
+      />
+      <SubmitOnBehalfMilestoneDialog
+        open={!!submitOnBehalfTarget}
+        onOpenChange={(open) => { if (!open) setSubmitOnBehalfTarget(null); }}
+        assignment={submitOnBehalfTarget?.assignment}
+        milestone={submitOnBehalfTarget?.milestone}
+        cohortId={cohortId}
+        students={cohort?.students || []}
+        onSubmitted={() => { setSubmitOnBehalfTarget(null); fetchAssignments(); }}
       />
     </div>
   );

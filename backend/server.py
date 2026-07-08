@@ -4010,6 +4010,342 @@ async def submit_homework(
     
     return {"submission_id": submission_id, "message": f"Homework {'resubmitted' if is_resubmission else 'submitted'}"}
 
+async def _run_auto_ai_review_for_submission(
+    submission_id: str,
+    *,
+    week_number: int,
+    title: str,
+    description: Optional[str],
+    feedback_template: Optional[str],
+    cohort_id: str,
+    student_id: str,
+    assignment_id: Optional[str] = None,
+) -> None:
+    """Background task: run AI review on a stored submission and persist feedback as a draft.
+    Reads the submission fresh from DB (so it works whether the submission is file-based
+    or questionnaire-based). Used by both `/materials/.../submit-on-behalf` (legacy) and
+    `/milestones/.../submit-on-behalf` (new)."""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+        submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
+        if not submission:
+            logger.error(f"Auto review: submission {submission_id} not found")
+            return
+
+        # Extract submission text (handles file, questionnaire, video transcript)
+        submission_text = await read_file_text(submission)
+        if not (submission_text or "").strip():
+            logger.error(f"Auto review: empty submission text for {submission_id}")
+            return
+
+        # Context: current-week workbook/case_study/video materials + course-wide globals
+        context_materials = await db.materials.find({
+            "week_number": week_number,
+            "material_type": {"$in": ["workbook", "case_study", "video"]},
+            "$or": [{"cohort_ids": cohort_id}, {"cohort_id": cohort_id}],
+        }, {"_id": 0}).to_list(10)
+        global_materials = await db.materials.find({
+            "is_library": True, "is_global": True, "cohort_ids": cohort_id,
+        }, {"_id": 0}).to_list(20)
+        context_materials = list(global_materials) + list(context_materials)
+
+        context_text = ""
+        for mat in context_materials:
+            try:
+                mat_text = await read_file_text(mat)
+                context_text += f"\n\n--- {mat.get('material_type', '').upper()}: {mat.get('title', '')} ---\n{(mat_text or '')[:5000]}"
+            except Exception:
+                pass
+
+        # Cumulative context from prior weeks + prior same-assignment submissions
+        cumulative_ctx = await build_cumulative_context(
+            student_id, cohort_id, week_number, assignment_id=assignment_id
+        )
+
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            logger.error("Auto review: EMERGENT_LLM_KEY not set")
+            return
+
+        # Language preference from the STUDENT (not the instructor triggering the submit)
+        stu = await db.users.find_one({"user_id": student_id}, {"_id": 0})
+        lang = (stu or {}).get("language_preference", "en")
+        lang_instr = get_language_instruction(lang)
+
+        custom_tpl = (feedback_template or "").strip()
+        if custom_tpl:
+            try:
+                _rendered = custom_tpl.format(week_number=week_number, title=title, persona="")
+            except (KeyError, IndexError, ValueError):
+                _rendered = custom_tpl
+            system_msg = f"""You are a supportive and encouraging AI tutor helping students learn.
+Your role is to provide qualitative, structured feedback on this specific homework submission.
+
+Guidelines:
+- Be warm, supportive, and encouraging
+- Use specific examples from the student's work
+- Reference prior weeks' concepts when relevant
+- Do NOT give grades or scores
+- Write in a mentoring tone
+
+For THIS assignment, follow these custom instructions from the instructor:
+
+{_rendered}
+{lang_instr}"""
+        else:
+            system_msg = f"""You are a supportive and encouraging AI tutor helping students learn.
+Your role is to provide qualitative, structured feedback on homework submissions.
+
+Guidelines:
+- Be warm, supportive, and encouraging
+- Use specific examples from their work to support each point
+- When relevant, reference concepts from earlier weeks to show how the student is building on prior learning
+- Note any improvements or growth patterns compared to prior feedback
+- Do NOT give grades or scores
+- Write in a mentoring, supportive tone
+- Keep each bullet point concise (1-2 sentences)
+
+You MUST structure your feedback EXACTLY as follows:
+
+A brief encouraging opening sentence acknowledging their effort.
+
+{"Lo que hiciste bien:" if lang == "es" else "What You Did Well:"}
+- [specific strength with example from their work]
+- [specific strength with example from their work]
+- [specific strength with example from their work]
+
+{"Areas de crecimiento:" if lang == "es" else "Areas for Growth:"}
+- [constructive suggestion framed positively with guidance]
+- [constructive suggestion framed positively with guidance]
+- [constructive suggestion framed positively with guidance]
+
+A brief closing sentence with encouragement and motivation to keep going.{lang_instr}"""
+
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"review_{submission_id}",
+            system_message=system_msg,
+        ).with_model("openai", "gpt-5.2")
+
+        prompt = f"""Please review this student's homework submission and provide structured feedback.
+
+ASSIGNMENT: {title}
+{f"DESCRIPTION: {description}" if description else ""}
+
+CURRENT WEEK CONTEXT (Week {week_number} materials):
+{context_text[:6000] if context_text else "No additional context available."}
+
+PRIOR WEEKS CONTEXT (earlier course materials + student's previous feedback):
+{cumulative_ctx[:5000] if cumulative_ctx else "This is the student's first submission — no prior context."}
+
+STUDENT SUBMISSION:
+{submission_text[:10000]}
+
+Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""
+
+        feedback = await chat.send_message(UserMessage(text=prompt))
+        await db.submissions.update_one(
+            {"submission_id": submission_id},
+            {"$set": {
+                "ai_feedback": feedback,
+                "status": "draft",
+                "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        logger.info(f"Auto AI review completed for {submission_id}")
+
+        # Self-paced mode: auto-send if the cohort is configured that way
+        cohort_doc = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
+        if cohort_doc and cohort_doc.get("auto_send_feedback"):
+            try:
+                # Reuse the existing send helper. Pass a synthetic 'user' dict — the helper
+                # only uses it to know who's sending; auto-send is system-initiated.
+                await send_feedback_to_student(submission_id, {"user_id": "system", "role": "super_admin", "name": "Auto-Send"})
+            except Exception as e:
+                logger.error(f"auto_send after auto-review failed for {submission_id}: {e}")
+    except Exception as e:
+        logger.error(f"Auto AI review failed for {submission_id}: {e}")
+
+
+@api_router.post("/milestones/{milestone_id}/submit-on-behalf")
+async def submit_milestone_on_behalf(
+    milestone_id: str,
+    file: UploadFile = File(None),
+    student_id: str = Form(...),
+    assignment_id: str = Form(...),
+    cohort_id: str = Form(None),
+    questionnaire_answers: str = Form(default=""),
+    user: dict = Depends(require_instructor),
+):
+    """Instructor submits homework on behalf of a student against an assignment milestone.
+    Auto-triggers AI review after saving."""
+    # 1. Resolve + validate assignment
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id, "is_active": True}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found or inactive")
+    milestone = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == milestone_id), None)
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    # 2. Verify instructor manages this cohort
+    resolved_cohort_id = cohort_id or asgn["cohort_id"]
+    cohort = await db.cohorts.find_one({"cohort_id": resolved_cohort_id}, {"_id": 0})
+    if not cohort or not is_cohort_manager(user, cohort):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # 3. Verify student is enrolled
+    student = await db.users.find_one({"user_id": student_id}, {"_id": 0})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if student_id not in (cohort.get("student_ids") or []):
+        raise HTTPException(status_code=400, detail="Student is not enrolled in this cohort")
+
+    submission_type = asgn.get("submission_type")
+    is_questionnaire = submission_type == "business_questionnaire"
+
+    # 4. Delete any prior submission for this student+milestone
+    existing = await db.submissions.find_one({
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "milestone_id": milestone_id,
+        "cohort_id": resolved_cohort_id,
+    }, {"_id": 0})
+    if existing:
+        await delete_file_from_doc(existing)
+
+    # 5. Save new submission (file OR questionnaire)
+    if is_questionnaire:
+        try:
+            answers_raw = json.loads(questionnaire_answers or "{}")
+        except Exception:
+            raise HTTPException(status_code=400, detail="questionnaire_answers must be valid JSON")
+        if not isinstance(answers_raw, dict):
+            raise HTTPException(status_code=400, detail="questionnaire_answers must be an object")
+        fields = asgn.get("questionnaire_fields") or []
+        answers: Dict[str, str] = {}
+        for f in fields:
+            fid = f.get("id")
+            ans = str(answers_raw.get(fid, "") or "").strip()
+            if f.get("required") and not ans:
+                raise HTTPException(status_code=400, detail=f"'{f.get('label')}' is required")
+            if len(ans) > 5000:
+                raise HTTPException(status_code=400, detail=f"'{f.get('label')}' must be 5000 characters or less")
+            answers[fid] = ans
+        filename = f"questionnaire_a_{assignment_id}_m_{milestone_id}.json"
+        gridfs_id = None
+    else:
+        if file is None or not file.filename:
+            raise HTTPException(status_code=400, detail="A file is required for this assignment")
+        filename = file.filename or "unnamed"
+        ext = filename.lower().split(".")[-1]
+        allowed_exts = (
+            SUBMISSION_TYPE_CONFIG[submission_type]["extensions"]
+            if submission_type in SUBMISSION_TYPE_CONFIG and SUBMISSION_TYPE_CONFIG[submission_type]["input_kind"] == "file"
+            else DEFAULT_HOMEWORK_EXTENSIONS
+        )
+        if ext not in allowed_exts:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Allowed file types for this assignment: {', '.join('.' + e for e in allowed_exts)}",
+            )
+        content = await file.read()
+        placeholder = f"sub_{uuid.uuid4().hex[:12]}"
+        gridfs_id = await save_bytes_to_gridfs(content, f"{placeholder}_{filename}")
+        answers = None
+
+    now = datetime.now(timezone.utc).isoformat()
+    if existing:
+        submission_id = existing["submission_id"]
+        await db.submissions.update_one(
+            {"submission_id": submission_id},
+            {"$set": {
+                "file_path": "",
+                "gridfs_id": gridfs_id,
+                "file_name": filename,
+                "submission_type": submission_type,
+                "questionnaire_answers": answers,
+                "status": "pending",
+                "ai_feedback": None,
+                "instructor_feedback": None,
+                "feedback_sent": False,
+                "resubmission_allowed": False,
+                "submitted_at": now,
+                "reviewed_at": None,
+                "sent_at": None,
+                "submitted_by": user["user_id"],
+                "resubmission_count": existing.get("resubmission_count", 0) + 1,
+            }},
+        )
+    else:
+        sub = Submission(
+            material_id="",  # milestone-based; no legacy material
+            cohort_id=resolved_cohort_id,
+            student_id=student_id,
+            file_path="",
+            gridfs_id=gridfs_id,
+            file_name=filename,
+            submission_type=submission_type,
+            questionnaire_answers=answers,
+            assignment_id=assignment_id,
+            milestone_id=milestone_id,
+        )
+        doc = sub.model_dump()
+        doc["submitted_at"] = now
+        doc["resubmission_count"] = 0
+        doc["submitted_by"] = user["user_id"]
+        submission_id = sub.submission_id
+        await db.submissions.insert_one(doc)
+
+    # 6. Fire auto AI review
+    week_number = int(milestone.get("week_number") or 1)
+    # Milestone-level feedback_template overrides the assignment's
+    effective_template = (milestone.get("feedback_template") or "").strip() or (asgn.get("feedback_template") or "").strip() or None
+    asyncio.create_task(_run_auto_ai_review_for_submission(
+        submission_id,
+        week_number=week_number,
+        title=asgn.get("title") or "Assignment",
+        description=asgn.get("description"),
+        feedback_template=effective_template,
+        cohort_id=resolved_cohort_id,
+        student_id=student_id,
+        assignment_id=assignment_id,
+    ))
+
+    # 7. Confirmation email to student
+    try:
+        student_first_name = (student.get("name") or "there").split()[0]
+        confirm_html = f"""
+        <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
+                <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Submission Received!</h1>
+            </div>
+            <div style="background-color: #F9F8F6; padding: 24px; border-radius: 0 0 12px 12px;">
+                <p style="color: #1A1A1A; font-size: 16px;">Hi <strong>{student_first_name}</strong>,</p>
+                <p style="color: #5A5A5A; font-size: 14px;">
+                    Your instructor has submitted <strong>{asgn.get("title", "your assignment")}</strong>
+                    (Week {week_number}: {milestone.get("title") or ""}) on your behalf.
+                    Coach Max is reviewing your work and your instructor will send you personalized feedback.
+                </p>
+                <p style="color: #888; font-size: 13px;">{cohort.get('name', '')} &middot; The Boost Pad</p>
+            </div>
+        </div>
+        """
+        await send_email_notification(
+            student["email"],
+            f"Submission Received: {asgn.get('title', 'Assignment')}",
+            confirm_html,
+        )
+    except Exception as e:
+        logger.error(f"Confirmation email failed for {submission_id}: {e}")
+
+    return {
+        "submission_id": submission_id,
+        "message": f"Submitted on behalf of {student.get('name', 'the student')}. AI review in progress.",
+    }
+
+
+
 @api_router.post("/materials/{material_id}/submit-on-behalf")
 async def submit_on_behalf(
     material_id: str,
