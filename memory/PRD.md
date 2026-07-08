@@ -311,6 +311,25 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Submit-on-Behalf per Milestone + Thinkific Link Fix (Completed - July 8, 2026)
+**BUG FIX — Thinkific stable link "Not published yet — Access denied":**
+- Root cause: the frontend `AssignmentMilestoneSubmit` was calling the ACL-gated `/api/cohorts/{cohort_id}/assignments` after the resolver. Any instructor not managing that specific cohort — and any student not yet enrolled — hit a 403.
+- Fix (backend): `GET /api/submit-link/a/{assignment_id}/w/{week_number}` now returns the full milestone + assignment metadata (title, description, submission_type, feedback_template, drive_folder_url, questionnaire_fields, is_final_capstone, ...). Endpoint stays public — enrollment is enforced at POST submit-time, not page-load time.
+- Fix (frontend): `DirectSubmit.js` `AssignmentMilestoneSubmit` uses the enriched resolver response directly, no second API call.
+
+**NEW FEATURE — Submit for student per milestone:**
+- New endpoint `POST /api/milestones/{milestone_id}/submit-on-behalf`: instructor-only, validates in order (assignment → milestone → cohort-manager → student exists → student enrolled → file extension against `SUBMISSION_TYPE_CONFIG`). Idempotent via `(student_id, assignment_id, milestone_id, cohort_id)` composite key with `resubmission_count` incrementing.
+- Auto AI review: fires `_run_auto_ai_review_for_submission()` helper as a background task (fresh extraction of the review closure so both the legacy material path and the new milestone path share the logic). Uses `build_cumulative_context` with `assignment_id` — pulls in prior same-assignment submissions so iterative feedback is contextual. Auto-send to student honors `cohort.auto_send_feedback`.
+- New UI: `SubmitOnBehalfMilestoneDialog` component; button `submit-on-behalf-milestone-{milestone_id}` on every milestone row of expanded assignment cards in Assignments tab. Hidden for Business Questionnaire assignments (students must fill these themselves).
+- Confirmation email sent to student on successful submit.
+
+**Test coverage (iteration_43.json):** 15 new tests in `test_submit_on_behalf_milestone.py` — all pass. 228 regression tests pass across 12 legacy suites. Playwright verified UI: 14 SOB buttons render on 60-Sec Pitch expansion, 0 on Business Questionnaire, dialog opens with all testids.
+
+**Deferred hardening (from reviewer):**
+- Persistent auto-review failure signal (status='review_failed' + error_message)
+- Multi-worker task queue for background auto-review (Celery/Arq) — current `asyncio.create_task` works on single-worker Uvicorn but is fragile at scale
+- Upload file size cap on submit-on-behalf endpoint
+
 ### Code Quality Pass 5 — Complexity Reduction + Component Splits (Completed - July 7, 2026)
 **BACKEND — server.py function extractions (no behavior change):**
 - [x] `read_file_text()` split into `_questionnaire_text_from_doc()` + `_video_transcript_text()` helpers; main function now branches cleanly (None = not applicable, "" = branch matched but no content). Semantics verified by 3 unit tests.
