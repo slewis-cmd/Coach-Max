@@ -2365,7 +2365,9 @@ async def update_milestone(assignment_id: str, milestone_id: str, payload: Miles
 
 @api_router.get("/submit-link/a/{assignment_id}/w/{week_number}")
 async def resolve_assignment_submit_link(assignment_id: str, week_number: int, cohort_id: str = None):
-    """Stable Thinkific link resolver — returns the milestone for a given assignment + week."""
+    """Stable Thinkific link resolver — returns the milestone + assignment metadata for a given
+    assignment + week. Public (no auth) so Thinkific-embedded links show the submit page to
+    anyone who arrives; auth + enrollment is still enforced on the actual submit POST."""
     asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
     if not asgn or not asgn.get("is_active", True):
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -2376,6 +2378,16 @@ async def resolve_assignment_submit_link(assignment_id: str, week_number: int, c
         "assignment_id": assignment_id,
         "milestone_id": milestone["milestone_id"],
         "cohort_id": asgn["cohort_id"],
+        "assignment": {
+            "assignment_id": asgn["assignment_id"],
+            "title": asgn.get("title"),
+            "description": asgn.get("description"),
+            "submission_type": asgn.get("submission_type"),
+            "feedback_template": asgn.get("feedback_template"),
+            "drive_folder_url": asgn.get("drive_folder_url"),
+            "questionnaire_fields": asgn.get("questionnaire_fields") or [],
+        },
+        "milestone": milestone,
     }
 
 

@@ -324,14 +324,15 @@ export function AssignmentMilestoneSubmit() {
       try {
         const qs = cohortParam ? `?cohort_id=${encodeURIComponent(cohortParam)}` : '';
         const linkRes = await axios.get(`${API_URL}/api/submit-link/a/${assignmentId}/w/${week}${qs}`);
-        // Fetch the assignment itself (student is enrolled → has access)
-        const cohortId = cohortParam || linkRes.data.cohort_id;
-        const asgnListRes = await axios.get(`${API_URL}/api/cohorts/${cohortId}/assignments`);
-        const asgn = (asgnListRes.data || []).find(a => a.assignment_id === assignmentId);
-        if (!asgn) throw new Error('Assignment not accessible');
-        const ms = (asgn.milestones || []).find(m => m.milestone_id === linkRes.data.milestone_id);
-        if (!ms) throw new Error('Milestone not found');
-        setResolved({ assignment: asgn, milestone: ms, cohort_id: cohortId });
+        const { assignment, milestone, cohort_id: cohortIdFromApi } = linkRes.data || {};
+        if (!assignment || !milestone) {
+          throw new Error('Milestone not found');
+        }
+        setResolved({
+          assignment,
+          milestone,
+          cohort_id: cohortParam || cohortIdFromApi,
+        });
       } catch (err) {
         setError(err?.response?.data?.detail || err?.message || 'Milestone not published yet.');
       }
