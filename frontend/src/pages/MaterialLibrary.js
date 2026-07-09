@@ -335,12 +335,12 @@ export default function MaterialLibrary() {
 
       {/* Upload Dialog */}
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
+        <DialogContent className="bg-white max-w-lg max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2 flex-shrink-0 border-b border-[#E5E7EB]">
             <DialogTitle className="font-normal text-2xl">Add to Library</DialogTitle>
             <DialogDescription>Upload a workbook, case study, or homework to share across cohorts.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 px-6 py-4 flex-1 overflow-y-auto min-h-0" data-testid="lib-upload-body">
             <div>
               <Label htmlFor="lib-title">Title</Label>
               <Input id="lib-title" data-testid="lib-title-input" placeholder="e.g., Leadership Foundations Workbook"
@@ -387,6 +387,20 @@ export default function MaterialLibrary() {
                 questionnaireFields={form.questionnaire_fields || []}
                 onQuestionnaireFieldsChange={(v) => setForm({ ...form, questionnaire_fields: v })}
                 idPrefix="lib-submission-type"
+                inlineSaveButton={
+                  form.submission_type === 'business_questionnaire' ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleUpload}
+                      disabled={uploading}
+                      className="h-7 text-xs bg-[#22438E] hover:bg-[#1A3A7A] text-white"
+                      data-testid="lib-upload-inline-save-btn"
+                    >
+                      {uploading ? 'Saving…' : 'Save Progress'}
+                    </Button>
+                  ) : null
+                }
               />
             )}
             {form.material_type === 'homework' && (
@@ -464,7 +478,7 @@ export default function MaterialLibrary() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-6 py-4 flex-shrink-0 border-t border-[#E5E7EB] bg-white">
             <Button variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
             <Button onClick={handleUpload} disabled={uploading} className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
               data-testid="lib-upload-submit">

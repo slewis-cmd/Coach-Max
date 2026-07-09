@@ -19,6 +19,7 @@ export function SubmissionTypeFields({
   questionnaireFields,
   onQuestionnaireFieldsChange,
   idPrefix = 'submission-type',
+  inlineSaveButton = null,
 }) {
   const config = SUBMISSION_TYPE_BY_ID[submissionType] || null;
   const isQuestionnaire = submissionType === 'business_questionnaire';
@@ -75,17 +76,20 @@ export function SubmissionTypeFields({
         <div className="border border-[#B8D4E8] rounded-lg p-3 bg-[#F8FBFF] space-y-2" data-testid={`${idPrefix}-questionnaire-builder`}>
           <div className="flex items-center justify-between">
             <Label className="text-sm">Questionnaire Questions</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addField}
-              disabled={questionnaireFields.length >= 20}
-              className="h-7 text-xs"
-              data-testid={`${idPrefix}-add-question-btn`}
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" /> Add Question
-            </Button>
+            <div className="flex items-center gap-2">
+              {inlineSaveButton}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addField}
+                disabled={questionnaireFields.length >= 20}
+                className="h-7 text-xs"
+                data-testid={`${idPrefix}-add-question-btn`}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add Question
+              </Button>
+            </div>
           </div>
           {questionnaireFields.length === 0 && (
             <p className="text-xs text-[#666666] italic">

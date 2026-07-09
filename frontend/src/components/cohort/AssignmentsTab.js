@@ -337,8 +337,8 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" data-testid="assignment-form-dialog">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0" data-testid="assignment-form-dialog">
+        <DialogHeader className="px-6 pt-6 pb-2 flex-shrink-0 border-b border-[#E5E7EB]">
           <DialogTitle>{editing ? 'Edit Assignment' : 'New Assignment'}</DialogTitle>
           <DialogDescription>
             {editing
@@ -346,7 +346,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
               : "Pick a file format and give your assignment a name. Weekly milestones will be created automatically — you can edit each one separately."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 px-6 py-4 flex-1 overflow-y-auto min-h-0" data-testid="assignment-form-body">
           <div>
             <Label htmlFor="asgn-title">Title</Label>
             <Input
@@ -378,6 +378,20 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
               questionnaireFields={questionnaireFields}
               onQuestionnaireFieldsChange={setQuestionnaireFields}
               idPrefix="asgn-submission-type"
+              inlineSaveButton={
+                submissionType === 'business_questionnaire' ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="h-7 text-xs bg-[#22438E] hover:bg-[#1A3A7A] text-white"
+                    data-testid="assignment-form-inline-save-btn"
+                  >
+                    {saving ? 'Saving…' : 'Save Progress'}
+                  </Button>
+                ) : null
+              }
             />
           )}
           {editing && submissionType === 'business_questionnaire' && (
@@ -387,6 +401,18 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
               questionnaireFields={questionnaireFields}
               onQuestionnaireFieldsChange={setQuestionnaireFields}
               idPrefix="asgn-submission-type-edit"
+              inlineSaveButton={
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="h-7 text-xs bg-[#22438E] hover:bg-[#1A3A7A] text-white"
+                  data-testid="assignment-form-inline-save-btn"
+                >
+                  {saving ? 'Saving…' : 'Save Progress'}
+                </Button>
+              }
             />
           )}
           <div>
@@ -407,7 +433,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
             label="Default AI Feedback Rubric"
           />
         </div>
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 flex-shrink-0 border-t border-[#E5E7EB] bg-white">
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="assignment-form-cancel-btn">Cancel</Button>
           <Button onClick={handleSave} disabled={saving} data-testid="assignment-form-save-btn">
             {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Assignment'}
