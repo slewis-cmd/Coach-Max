@@ -1,0 +1,51 @@
+{
+  "summary": "Iter 46 — REPRODUCTION ATTEMPT for user bug 'Coach Max returns: Sorry, I'm having trouble right now'. NO BUG REPRODUCED ON PREVIEW. Ran 14 existing milestone tests + 19 NEW comprehensive E2E tests + full Playwright UI test — all 33 passed. Conclusion: iter_45 patch is present and working; the user is likely testing production (not redeployed) or has a stale/expired session token on their browser.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "passed_tests": [
+    "Existing test_coach_max_milestone.py: 14/14 PASS (regression) — synthetic material shape, top-level assignment+milestone, legacy compat, 403/404 access control, ask-tutor 400/404, milestone-based sent → 200 real GPT-5.2, legacy sent → 200, feedback email uses assignment.title + Week 3 + coach-max CTA URL, build_coach_max_context accepts week_number kwarg",
+    "NEW test_coach_max_e2e_iter46.py: 19/19 PASS covering all 4 milestone-based assignment types AND the specific 3-step flow the frontend runs:",
+    "  60_second_pitch:      GET /api/submissions/{id} 200 + material.title set  |  GET /api/chat/history/{id} 200 []  |  POST /api/chat/ask-tutor 200 + non-empty GPT-5.2 response",
+    "  10_slide_pitch:       same 3-step flow → 200, 200, 200 with real LLM reply",
+    "  case_activity:        same 3-step flow → 200, 200, 200 with real LLM reply",
+    "  business_questionnaire: same 3-step flow → 200, 200, 200 with real LLM reply",
+    "EDGE A (late-enrolled student): 200 + LLM reply",
+    "EDGE B (migrated sub — BOTH material_id AND assignment_id set): GET 200 + POST 200 + LLM reply",
+    "EDGE C (instructor_feedback empty, ai_feedback populated): 200 + LLM reply",
+    "EDGE D (assignment.is_active=False): GET 200 + POST 200 + LLM reply (defensive path OK)",
+    "AUTH: no Authorization header → 401 (not 500); bad token → 401",
+    "CORS preflight OPTIONS on /api/chat/ask-tutor: Access-Control-Allow-Headers includes 'authorization' (or *) — Authorization is NOT stripped",
+    "FRONTEND Playwright: seeded live milestone sub + student token → localStorage → /coach-max/{sid} → header shows 'Week 3 — TEST_CM46UI_60-Second Elevator Pitch' → input+send enabled → typed message → received real GPT-5.2 reply ('Lead with the outcome you create…') → NO 'having trouble' fallback → NO console errors"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_coach_max_e2e_iter46.py",
+    "/app/backend/tests/test_coach_max_milestone.py",
+    "/app/test_reports/pytest/iter46_e2e.xml",
+    "/app/test_reports/pytest/iter46_coach_max_milestone.xml"
+  ],
+  "action_items": [
+    "NO CODE FIX NEEDED. Preview is fully working end-to-end for all 4 milestone-based assignment types (60_second_pitch, 10_slide_pitch, case_activity, business_questionnaire).",
+    "The user is almost certainly testing on PRODUCTION which has not been redeployed with the iter_45 milestone-compat patch. Main agent should: (1) confirm production is running the current build; (2) if not, trigger a redeploy; (3) instruct the user to hard-refresh + re-login so a fresh session token is used (an expired token also triggers the same 'having trouble' toast because the frontend catch treats all errors identically — see /app/frontend/src/pages/CoachMaxPage.js line 106-110).",
+    "OPTIONAL polish (not the bug): CoachMaxPage.js handleSend catch block currently shows the same 'having trouble' fallback for both 401 (auth) and 500 (LLM). Consider surfacing a distinct 'Session expired — please log in again' message when err.response?.status === 401, since that's the most likely real-world cause of the user report."
+  ],
+  "critical_code_review_comments": [
+    "server.py:3844-3859 ask_tutor milestone→assignment resolution is correct; asgn_title and week_number are populated for all 4 milestone-based types — no KeyError path exists.",
+    "server.py:3810-3933 ask-tutor returns HTTPException(500, 'Coach Max is unavailable right now') only when the LlmChat.send_message call itself raises. This is what the frontend catch block translates into the user-facing 'Sorry, I'm having trouble' message. If the user is hitting this, backend logs would show the LLM exception.",
+    "CoachMaxPage.js:106-110 catches ALL errors (401, 404, 500, network) and always appends the 'Sorry, I'm having trouble' fallback message. This is the ROOT of the ambiguity the user is reporting — the same toast is shown for expired token / prod-not-redeployed / rate-limit / etc. Consider branching by err.response?.status.",
+    "AuthContext.js:14-20 axios interceptor correctly injects Bearer token on every request including /api/chat/ask-tutor — verified live.",
+    "CORS (server.py:6588-6592) uses allow_headers=['*'] and allow_methods=['*'] — Authorization header is NOT stripped by the preflight, confirmed via OPTIONS test."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_coach_max_e2e_iter46.py (NEW — 19 tests / 3 classes: TestCoachMaxFlowPerType parametrized × 4 types × 3 steps = 12 tests, TestEdgeCases × 4, TestAuthPath × 3)"
+  ],
+  "success_rate": {
+    "backend": "100% — 14/14 (iter45 regression) + 19/19 (iter46 E2E + edge cases + auth) = 33/33 passed on preview. All 4 assignment types return 200 with real GPT-5.2 responses. Real LLM calls used (no mocking).",
+    "frontend": "100% — /coach-max/{milestone_sub_id} loads with correct 'Week 3 — <assignment title>' header, chat input works, real Coach Max reply received, zero console errors. Fallback string never appeared."
+  },
+  "test_credentials": "Super Admin: slewis@theboostpad.org (unused this iteration — used ephemeral TEST_CM46_ + TEST_CM46UI_ prefixed instructor/student session tokens seeded directly into user_sessions).",
+  "seed_data_creation": "test_coach_max_e2e_iter46.py::seed (module-scoped): 1 instructor + 2 students (owner + late-enrolled) + 1 cohort + 4 milestone-based assignments (one per assignment type) + 1 inactive assignment + 1 legacy material + 8 submissions (4 sent per-type + 4 edge-case subs). All cleaned up in teardown. Additional live Playwright seed (TEST_CM46UI_*) manually cleaned post-run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 46 confirms iter_45 milestone-based Ask Coach Max fix is present and working end-to-end on preview for all 4 assignment types (60_second_pitch, 10_slide_pitch, case_activity, business_questionnaire), including edge cases (late enrollment, migrated subs, ai_feedback-only, inactive assignment) and auth path. User bug is a PRODUCTION deployment gap, not a preview regression. Regression command: `cd /app && export $(grep -v '^#' /app/backend/.env | xargs) && export $(grep -v '^#' /app/frontend/.env | xargs) && python -m pytest /app/backend/tests/test_coach_max_e2e_iter46.py /app/backend/tests/test_coach_max_milestone.py -v` (~45s, 33 tests, all pass).",
+  "rca of the issue": "USER'S BUG NOT REPRODUCED ON PREVIEW. Preview backend + frontend fully working. Most likely RCAs (in order of probability): (1) user is testing production which has not been redeployed with the iter_45 milestone-compat patch — production backend still crashes on assignment_id→title resolution for the 4 new assignment types, causing a 500 → frontend catches → 'having trouble' toast; (2) user's session token is expired → backend returns 401 → frontend catches → same 'having trouble' toast (masked by generic catch block in CoachMaxPage.js:106-110); (3) transient LLM rate limit / network blip. Mitigation: (a) redeploy production; (b) instruct user to log out + log back in; (c) as a code polish, main agent may branch the frontend error handling in CoachMaxPage.js:106-110 to surface 'Session expired' distinctly when err.response?.status === 401."
+}
