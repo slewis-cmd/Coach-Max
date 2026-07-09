@@ -43,27 +43,30 @@ export const AuthProvider = ({ children }) => {
 
     // Magic-link: if the URL has ?auth=<magic_token> (from an email CTA), exchange it for a
     // session so the user isn't forced to sign in again. Runs before the standard /me check.
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const magic = params.get('auth');
-      if (magic && !getStoredToken()) {
-        const exchange = await axios.post(`${API_URL}/api/auth/magic-link`, { token: magic });
-        if (exchange?.data?.session_token) {
-          storeToken(exchange.data.session_token);
+    // We ALWAYS strip the ?auth= param from the URL (even for already-authenticated users)
+    // so a stale magic doesn't linger in a shared/bookmarked link.
+    const params = new URLSearchParams(window.location.search);
+    const magic = params.get('auth');
+    if (magic) {
+      try {
+        if (!getStoredToken()) {
+          const exchange = await axios.post(`${API_URL}/api/auth/magic-link`, { token: magic });
+          if (exchange?.data?.session_token) {
+            storeToken(exchange.data.session_token);
+          }
         }
-        // Strip the auth param from the URL so it's not shared/bookmarked/reused
-        params.delete('auth');
-        const cleanUrl =
-          window.location.pathname +
-          (params.toString() ? `?${params.toString()}` : '') +
-          window.location.hash;
-        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (err) {
+        if (err?.response?.status !== 401) {
+          console.warn('Magic-link exchange failed:', err?.message || err);
+        }
+        // Fall through: no session established; user will see normal login prompt.
       }
-    } catch (err) {
-      if (err?.response?.status !== 401) {
-        console.warn('Magic-link exchange failed:', err?.message || err);
-      }
-      // Fall through: no session established; user will see normal login prompt.
+      params.delete('auth');
+      const cleanUrl =
+        window.location.pathname +
+        (params.toString() ? `?${params.toString()}` : '') +
+        window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
     }
 
     const token = getStoredToken();

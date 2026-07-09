@@ -311,6 +311,21 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Two Production Bugs Fixed — Student Submit Auto-Review + Magic-Link Email CTA (Completed - July 10, 2026)
+**BUG #1 — Homework submitted via Thinkific was never AI-reviewed:**
+The student `POST /api/milestones/{milestone_id}/submit` endpoint didn't trigger the AI auto-review background task — so submissions coming from the Thinkific-embedded link would save to the DB but never get feedback. Coach Max then had nothing to work with. Meanwhile `submit-on-behalf` worked fine because I'd added the auto-review to that endpoint earlier.
+**Fix:** Added `asyncio.create_task(_run_auto_ai_review_for_submission(...))` at the end of the student submit endpoint (both new-submission AND resubmission paths). Effective feedback template resolves in order: milestone.feedback_template_override → assignment.feedback_template. On resubmit, transcript / transcription_status / ai_feedback_error are cleared so the video/audio pipeline runs fresh.
+
+**BUG #2 — Ask Coach Max email CTA forced re-login:**
+When students clicked the "Ask Coach Max" button in a feedback email, they were bounced to the login page even if they'd recently been signed in.
+**Fix (magic-link auto-auth):**
+- New helper `_create_session_token_for_user(user_id, ttl_days=30)` creates a bounded, purpose-tagged session in `user_sessions`.
+- New endpoint `POST /api/auth/magic-link {token}` validates and returns the session token + user.
+- `send_feedback_to_student` + PDF export path now append `?auth=<magic>` to the Coach Max CTA URL.
+- Frontend `AuthContext.checkAuth` detects `?auth=<token>` in the URL, exchanges it before the standard `/me` check, then strips the query param from the address bar (via `history.replaceState`) so it can't be shared/bookmarked/reused. Strip runs unconditionally (even for already-authenticated users) so stale magic tokens don't linger.
+
+**Testing (iteration_47.json):** 5 new tests (auto-review on submit/resubmit/questionnaire/override precedence) + 12 new tests (magic-link endpoint security + email URL + regression) + 3 Playwright UI scenarios = 20/20 new tests pass. All prior regression suites (test_coach_max_milestone, test_submit_on_behalf_milestone, test_assignments_phase2) still pass. Real GPT-5.2 responses verified end-to-end in a fresh browser context.
+
 ### Ask Coach Max Wired to 4 Milestone-Based Homework Types (Completed - July 9, 2026)
 **FEATURE:** The Ask Coach Max chat flow (which existed for legacy per-material homework) was 100% broken for the 4 new assignment types (60-Second Pitch, 10-Slide Deck, Case Activity, Business Questionnaire) — the `ask_tutor` endpoint 500'd on KeyError for `material['title']`, and the feedback email said "Feedback on Your Homework — Week ?".
 
