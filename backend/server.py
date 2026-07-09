@@ -508,22 +508,32 @@ def build_submission_email_html(user_name: str, material: dict, cohort_name: str
     """
 
 
-async def build_coach_max_context(submission: dict, material: dict) -> tuple:
-    """Build context strings for Coach Max AI tutor. Returns (submission_text, context_text)."""
+async def build_coach_max_context(submission: dict, material: dict, week_number: Optional[int] = None) -> tuple:
+    """Build context strings for Coach Max AI tutor. Returns (submission_text, context_text).
+    Works for both legacy material-based and new milestone-based submissions.
+    Pass `week_number` explicitly when there is no `material` doc (milestone-based submissions)."""
     submission_text = await read_file_text(submission)
+    # Ensure video/audio submission transcripts are resolved (mirrors auto-review path)
+    if _is_media_submission(submission) and not (submission_text or "").strip():
+        submission = await _ensure_submission_transcript(submission)
+        submission_text = await read_file_text(submission)
     
+    wk = (material or {}).get("week_number") if material else week_number
     context_text = ""
-    if material:
+    if wk is not None:
         context_materials = await db.materials.find({
-            "cohort_id": submission["cohort_id"],
-            "week_number": material.get("week_number"),
+            "$or": [{"cohort_ids": submission["cohort_id"]}, {"cohort_id": submission["cohort_id"]}],
+            "week_number": wk,
             "material_type": {"$in": ["workbook", "case_study", "video"]}
         }, {"_id": 0}).to_list(10)
-        
-        for mat in context_materials:
+        # Always include Course-Wide Resources (global library materials linked to this cohort)
+        global_materials = await db.materials.find({
+            "is_library": True, "is_global": True, "cohort_ids": submission["cohort_id"],
+        }, {"_id": 0}).to_list(20)
+        for mat in (list(global_materials) + list(context_materials)):
             mat_text = await read_file_text(mat)
             if mat_text:
-                context_text += f"\n--- {mat['title']} ---\n{mat_text[:3000]}"
+                context_text += f"\n--- {mat.get('title', '')} ---\n{mat_text[:3000]}"
     
     return submission_text, context_text
 
@@ -3831,19 +3841,30 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
     
     feedback = submission.get("instructor_feedback") or submission.get("ai_feedback", "")
     
-    # Get material info
-    material = await db.materials.find_one(
-        {"material_id": submission["material_id"]},
-        {"_id": 0}
-    )
+    # Resolve source: prefer milestone-based (new model), fall back to legacy material.
+    material = None
+    asgn_title = None
+    week_number = None
+    if submission.get("assignment_id") and submission.get("milestone_id"):
+        asgn = await db.assignments.find_one({"assignment_id": submission["assignment_id"]}, {"_id": 0})
+        if asgn:
+            ms = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == submission["milestone_id"]), None)
+            asgn_title = asgn.get("title") or "Assignment"
+            week_number = (ms or {}).get("week_number")
+    if submission.get("material_id"):
+        material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    if asgn_title is None:
+        asgn_title = (material or {}).get("title") or "Unknown"
+    if week_number is None:
+        week_number = (material or {}).get("week_number") or 1
     
-    # Build context using helper
-    submission_text, context_text = await build_coach_max_context(submission, material)
+    # Build context (works for both material-based and milestone-based; queries cohort materials by week)
+    submission_text, context_text = await build_coach_max_context(submission, material, week_number=week_number)
     
-    # Build cumulative context from prior weeks
-    current_week = material.get("week_number", 1) if material else 1
+    # Build cumulative context from prior weeks + prior submissions in the same assignment
     cumulative_ctx = await build_cumulative_context(
-        user["user_id"], submission.get("cohort_id", ""), current_week
+        user["user_id"], submission.get("cohort_id", ""), week_number,
+        assignment_id=submission.get("assignment_id"),
     )
     
     api_key = os.environ.get("EMERGENT_LLM_KEY")
@@ -3868,8 +3889,8 @@ Your personality:
 - Keep responses concise (2-4 paragraphs max)
 - Never give grades or scores
 
-CURRENT ASSIGNMENT: {material['title'] if material else 'Unknown'}
-CURRENT WEEK: {material.get('week_number', '?') if material else '?'}
+CURRENT ASSIGNMENT: {asgn_title}
+CURRENT WEEK: {week_number}
 
 THE STUDENT'S SUBMISSION:
 {submission_text[:5000] if submission_text else 'Not available'}
@@ -5004,7 +5025,7 @@ async def get_cohort_analytics(cohort_id: str, user: dict = Depends(require_inst
 
 @api_router.get("/submissions/{submission_id}")
 async def get_submission(submission_id: str, user: dict = Depends(get_current_user)):
-    """Get single submission details"""
+    """Get single submission details. Works for both legacy material-based and new milestone-based."""
     submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
@@ -5018,9 +5039,37 @@ async def get_submission(submission_id: str, user: dict = Depends(get_current_us
         if not cohort or not is_cohort_manager(user, cohort):
             raise HTTPException(status_code=403, detail="Access denied")
     
-    # Add related info
-    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    # Related info: prefer milestone-based (new) with a synthetic `material` shape for frontend compat;
+    # fall back to legacy material record when material_id is set.
+    material = None
+    assignment = None
+    milestone = None
+    if submission.get("assignment_id") and submission.get("milestone_id"):
+        assignment = await db.assignments.find_one(
+            {"assignment_id": submission["assignment_id"]}, {"_id": 0}
+        )
+        if assignment:
+            milestone = next(
+                (m for m in (assignment.get("milestones") or []) if m.get("milestone_id") == submission["milestone_id"]),
+                None,
+            )
+            # Synthetic material-like shape so the CoachMaxPage + other UIs work without changes
+            material = {
+                "title": assignment.get("title") or "Assignment",
+                "week_number": (milestone or {}).get("week_number"),
+                "description": assignment.get("description"),
+                "material_type": "assignment",
+                "assignment_id": assignment.get("assignment_id"),
+                "milestone_id": (milestone or {}).get("milestone_id"),
+                "milestone_title": (milestone or {}).get("title"),
+                "submission_type": assignment.get("submission_type"),
+                "feedback_template": (milestone or {}).get("feedback_template") or assignment.get("feedback_template"),
+            }
+    if material is None and submission.get("material_id"):
+        material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
     submission["material"] = material
+    submission["assignment"] = assignment
+    submission["milestone"] = milestone
     
     if user["role"] in ["instructor", "super_admin"]:
         student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0, "name": 1, "email": 1})
@@ -5410,11 +5459,26 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     
     # Get student and material info
     student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
-    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0}) if submission.get("material_id") else None
     instructor = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
+
+    # Resolve human-readable title + week for the email. Prefer milestone-based (new model).
+    assignment_title = None
+    week_num_display: Any = "?"
+    if submission.get("assignment_id") and submission.get("milestone_id"):
+        asgn = await db.assignments.find_one({"assignment_id": submission["assignment_id"]}, {"_id": 0, "title": 1, "milestones": 1})
+        if asgn:
+            assignment_title = asgn.get("title") or "Assignment"
+            ms = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == submission["milestone_id"]), None)
+            if ms and ms.get("week_number"):
+                week_num_display = ms["week_number"]
+    if assignment_title is None:
+        assignment_title = (material or {}).get("title") or "Homework"
+        if (material or {}).get("week_number"):
+            week_num_display = material["week_number"]
     
     # Get student's language preference for email
     lang = student.get("language_preference", "en")
@@ -5433,8 +5497,8 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
                 {t['greeting']} <strong>{student['name'].split()[0]}</strong>,
             </p>
             <p style="color: #5A5A5A; font-size: 14px; margin-bottom: 16px;">
-                {t['body']} <strong>{material['title'] if material else 'Homework'}</strong> 
-                ({t['week']} {material['week_number'] if material else '?'}).
+                {t['body']} <strong>{assignment_title}</strong> 
+                ({t['week']} {week_num_display}).
             </p>
             <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 20px; margin: 20px 0;">
                 <p style="color: #166534; font-size: 15px; line-height: 1.7; margin: 0;">
@@ -5462,7 +5526,7 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     
     await send_email_notification(
         student["email"],
-        f"Feedback on {material['title'] if material else 'Your Homework'} - {cohort['name']}",
+        f"Feedback on {assignment_title} - {cohort['name']}",
         email_html
     )
     
