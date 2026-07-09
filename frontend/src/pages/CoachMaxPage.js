@@ -104,8 +104,16 @@ export default function CoachMaxPage() {
       });
       setMessages(prev => [...prev, { role: 'coach', text: res.data.response }]);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Coach Max is unavailable right now');
-      setMessages(prev => [...prev, { role: 'coach', text: "Sorry, I'm having trouble right now. Please try again." }]);
+      const status = error?.response?.status;
+      const serverDetail = error?.response?.data?.detail;
+      // Auth failures get a distinct message so users know to re-login (a common cause
+      // of the previously-catch-all "having trouble" message).
+      const isAuthError = status === 401 || status === 403;
+      const bubbleText = isAuthError
+        ? "Your session has expired. Please sign out and sign back in, then try again."
+        : (serverDetail || "Sorry, I'm having trouble right now. Please try again.");
+      toast.error(isAuthError ? 'Session expired — please sign in again' : (serverDetail || 'Coach Max is unavailable right now'));
+      setMessages(prev => [...prev, { role: 'coach', text: bubbleText }]);
     } finally {
       setSending(false);
     }
