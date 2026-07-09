@@ -4444,7 +4444,7 @@ async def submit_milestone_on_behalf(
     # 6. Fire auto AI review
     week_number = int(milestone.get("week_number") or 1)
     # Milestone-level feedback_template overrides the assignment's
-    effective_template = (milestone.get("feedback_template") or "").strip() or (asgn.get("feedback_template") or "").strip() or None
+    effective_template = (milestone.get("feedback_template_override") or "").strip() or (asgn.get("feedback_template") or "").strip() or None
     asyncio.create_task(_run_auto_ai_review_for_submission(
         submission_id,
         week_number=week_number,
@@ -5063,7 +5063,7 @@ async def get_submission(submission_id: str, user: dict = Depends(get_current_us
                 "milestone_id": (milestone or {}).get("milestone_id"),
                 "milestone_title": (milestone or {}).get("title"),
                 "submission_type": assignment.get("submission_type"),
-                "feedback_template": (milestone or {}).get("feedback_template") or assignment.get("feedback_template"),
+                "feedback_template": (milestone or {}).get("feedback_template_override") or assignment.get("feedback_template"),
             }
     if material is None and submission.get("material_id"):
         material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
@@ -5234,7 +5234,7 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
             title = assignment.get("title") or "Assignment"
             description = assignment.get("description") or ""
             week_number = (milestone or {}).get("week_number") or 1
-            feedback_template = ((milestone or {}).get("feedback_template") or "").strip() or (assignment.get("feedback_template") or "").strip() or None
+            feedback_template = ((milestone or {}).get("feedback_template_override") or "").strip() or (assignment.get("feedback_template") or "").strip() or None
     if material is None and submission.get("material_id"):
         material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
         if material and title is None:

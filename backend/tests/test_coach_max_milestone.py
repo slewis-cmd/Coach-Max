@@ -260,11 +260,9 @@ class TestGetSubmissionMilestone:
         assert "elevator pitch" in (mat.get("description") or "").lower()
         assert mat["material_type"] == "assignment"
         assert mat["submission_type"] == "60_second_pitch"
-        # NOTE: server.py:5066 reads `milestone.get("feedback_template")` but the
-        # milestone schema uses `feedback_template_override` (see server.py:826, 2464).
-        # As a result the milestone override NEVER wins and the assignment-level
-        # template is always used. Flagged as a bug to main agent.
-        assert mat["feedback_template"] == "Assignment-level template"
+        # Milestone-level `feedback_template_override` (when set) takes precedence over the
+        # assignment-level template. Fixed 2026-07-09.
+        assert mat["feedback_template"] == "Milestone-specific feedback template"
 
     def test_milestone_submission_top_level_assignment_and_milestone(self, seed):
         r = requests.get(

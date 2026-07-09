@@ -311,6 +311,18 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Ask Coach Max Wired to 4 Milestone-Based Homework Types (Completed - July 9, 2026)
+**FEATURE:** The Ask Coach Max chat flow (which existed for legacy per-material homework) was 100% broken for the 4 new assignment types (60-Second Pitch, 10-Slide Deck, Case Activity, Business Questionnaire) — the `ask_tutor` endpoint 500'd on KeyError for `material['title']`, and the feedback email said "Feedback on Your Homework — Week ?".
+
+**FIX (backend compatibility patch):**
+- **`GET /api/submissions/{id}`** now returns a synthetic `material` shape for milestone-based submissions: `{title=assignment.title, week_number=milestone.week_number, description, material_type='assignment', submission_type, feedback_template}` + raw `assignment` + `milestone` at top level. Frontend `CoachMaxPage.js` renders correctly with zero changes.
+- **`POST /api/chat/ask-tutor`** resolves assignment/milestone context BEFORE building the prompt — no more crash on empty `material_id`. Also adds `assignment_id` to `build_cumulative_context` so Coach Max sees prior submissions to the same assignment (great for iterative pitch/deck feedback).
+- **`build_coach_max_context(submission, material, week_number=None)`** helper now accepts an explicit `week_number` kwarg, always includes Course-Wide global resources, and resolves video/audio transcripts on-the-fly via `_ensure_submission_transcript`.
+- **`POST /api/submissions/{id}/send-to-student`** feedback email now uses `assignment.title` + `milestone.week_number` correctly. Existing "Ask Coach Max" CTA button in the email now lands on a working chat page for milestone submissions.
+- **Milestone override bug fixed:** All references to `milestone.get('feedback_template')` corrected to `milestone.get('feedback_template_override')` (the actual field name). Milestone-level rubric overrides now correctly take precedence over assignment-level defaults.
+
+**Testing (iteration_45.json):** 14 new tests in `test_coach_max_milestone.py` + 47 regression = 61/61 pass. Real GPT-5.2 call verified end-to-end.
+
 ### Video Submission Transcription — 60-Second Pitch Review Fix (Completed - July 9, 2026)
 **BUG:** Reviewing 60-Second Pitch VIDEO/AUDIO submissions was "timing out" on production (per user report). Root cause: the AI review pipeline (`read_file_text`) had no branch for video/audio submissions — it tried UTF-8 decoding a binary .mp4/.mp3 and either got garbage → silent no-op, or hit the LLM synchronously with nonsense → ingress timeout. Additionally, **ffmpeg was NOT installed** in the container (silent baseline failure for library video material transcription too).
 
