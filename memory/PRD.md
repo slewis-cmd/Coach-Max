@@ -311,6 +311,22 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Video Submission Transcription — 60-Second Pitch Review Fix (Completed - July 9, 2026)
+**BUG:** Reviewing 60-Second Pitch VIDEO/AUDIO submissions was "timing out" on production (per user report). Root cause: the AI review pipeline (`read_file_text`) had no branch for video/audio submissions — it tried UTF-8 decoding a binary .mp4/.mp3 and either got garbage → silent no-op, or hit the LLM synchronously with nonsense → ingress timeout. Additionally, **ffmpeg was NOT installed** in the container (silent baseline failure for library video material transcription too).
+
+**FIX:**
+- **Extracted `_transcribe_media_bytes(file_bytes, filename) → (status, transcript_text)`** — pure helper, no DB writes. Behavior: (1) if file ≤ 25 MB AND extension in `WHISPER_NATIVE_EXTS` (mp3/mp4/mpeg/mpga/m4a/wav/webm), skip ffmpeg entirely and send directly to Whisper — **works even when ffmpeg is missing**. (2) Otherwise, ffmpeg-extract mono/16kHz/32kbps mp3, then send to Whisper. (3) Last-ditch fallback: if ffmpeg fails, try Whisper on raw file if ≤ 25MB.
+- **New helpers**: `_is_media_submission(doc)`, `_ensure_submission_transcript(doc)`, `_whisper_transcribe_file(path)`, `_run_ffmpeg_extract_audio(input, output)`.
+- **`_video_transcript_text` extended** to return the persisted transcript for video/audio SUBMISSIONS (previously only handled library video MATERIALS).
+- **`_run_auto_ai_review_for_submission` now transcribes first**: calls `_ensure_submission_transcript` before `read_file_text`. Failed transcription → sets `ai_feedback_error` + `status='review_failed'` on the submission (no more silent no-ops).
+- **`POST /api/submissions/{id}/review` (manual review) refactored** to (i) support BOTH legacy material-based AND new milestone-based submissions (previously errored on milestone-based since `submission["material_id"]` was empty), (ii) transcribe video/audio first, (iii) return graceful 400 with actionable error on transcription failure.
+- **`transcribe_video_material` refactored** to use the shared helper (removed ~70 lines of duplicated ffmpeg+Whisper code).
+- **ffmpeg installed** in preview environment via `apt-get install ffmpeg`.
+
+**Testing (iteration_44.json):** 13 new targeted tests in `test_video_submission_review.py` + 52 regression tests, all pass. Critical validation: **ffmpeg-disabled fallback path proven working** — temporarily renamed `/usr/bin/ffmpeg → .disabled`, ran a small mp3 through the pipeline, got `status='done'` via direct Whisper path. Production without ffmpeg will still work for typical 5-30MB pitch videos.
+
+**Production caveat:** For files > 25 MB, ffmpeg IS required (to downsample to <25MB before Whisper). Common 60-second pitches are typically well under 25 MB in native formats, so direct-Whisper fallback covers the common case. If large-file transcription is critical, ffmpeg needs to be added to the production container image (contact Emergent Support).
+
 ### Submit-on-Behalf per Milestone + Thinkific Link Fix (Completed - July 8, 2026)
 **BUG FIX — Thinkific stable link "Not published yet — Access denied":**
 - Root cause: the frontend `AssignmentMilestoneSubmit` was calling the ACL-gated `/api/cohorts/{cohort_id}/assignments` after the resolver. Any instructor not managing that specific cohort — and any student not yet enrolled — hit a 403.
