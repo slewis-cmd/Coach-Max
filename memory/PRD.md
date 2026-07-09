@@ -311,6 +311,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Submission Nomenclature Fix — Assignment Title + Week in Lists + PDF (Completed - July 10, 2026)
+**BUG:** Instructor's `/submissions` page was displaying "Homework · Week ?" for milestone-based submissions instead of the actual assignment title + week (e.g., "60-Second Elevator Pitch · Week 3"). Same problem in the feedback PDF export. Root cause: three endpoints (`GET /api/submissions`, `GET /api/cohorts/{id}/submissions`, `POST /api/submissions/{id}/export-pdf`) were only reading `material_id` for enrichment, which is empty for milestone-based submissions.
+
+**FIX:**
+- New shared helper `_enrich_submissions_with_material(submissions)` — in-place enrichment that synthesizes `sub.material = {title, week_number}` from `assignment + milestone` when material_id is empty. Batched `.find` with `$in` to avoid N+1.
+- All three endpoints now use the helper (list + cohort-scoped list + PDF export).
+
+**Testing (iteration_49.json):** 9 targeted tests in `test_submission_enrichment.py` pass. Playwright live-verified on preview: milestone submission `sub_0816379928a9` (ShiftSure Case Activity, Week 1) now correctly shows "The ShiftSure Case Activity • Week 1" (was "Homework · Week ?" pre-fix). PDF export verified via pypdf text extraction — assignment title + correct week appear in the header line.
+
 ### Questionnaire Builder Scroll Fix + Inline Save Progress (Completed - July 10, 2026)
 **BUG:** When creating a Business Questionnaire assignment (or homework material), instructors couldn't scroll after adding many questions — the DialogContent had no `max-height` / `overflow`, so the dialog grew past the viewport and the footer Save button was pushed off-screen and unreachable.
 
