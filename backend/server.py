@@ -4830,6 +4830,52 @@ Provide feedback with exactly 3 bullet points under "What You Did Well:" and exa
     return {"submission_id": submission_id, "message": f"Homework submitted on behalf of {student['name']}. AI review in progress."}
 
 
+async def _enrich_submissions_with_material(submissions: List[dict]) -> None:
+    """Attach a `material`-shape dict (title, week_number) to each submission in place.
+    For milestone-based submissions (new model), synthesizes the shape from the assignment +
+    milestone. For legacy material-based submissions, reads the actual material record.
+    Batches DB lookups (one .find per collection) to avoid N+1 queries."""
+    if not submissions:
+        return
+    material_ids = list({s["material_id"] for s in submissions if s.get("material_id")})
+    assignment_ids = list({s["assignment_id"] for s in submissions if s.get("assignment_id")})
+
+    materials_by_id = {}
+    if material_ids:
+        async for m in db.materials.find(
+            {"material_id": {"$in": material_ids}},
+            {"_id": 0, "material_id": 1, "title": 1, "week_number": 1},
+        ):
+            materials_by_id[m["material_id"]] = {"title": m.get("title"), "week_number": m.get("week_number")}
+
+    assignments_by_id = {}
+    if assignment_ids:
+        async for a in db.assignments.find(
+            {"assignment_id": {"$in": assignment_ids}},
+            {"_id": 0, "assignment_id": 1, "title": 1, "milestones": 1},
+        ):
+            assignments_by_id[a["assignment_id"]] = a
+
+    for sub in submissions:
+        mat = None
+        # Prefer milestone-based (new)
+        if sub.get("assignment_id") and sub.get("milestone_id"):
+            asgn = assignments_by_id.get(sub["assignment_id"])
+            if asgn:
+                ms = next(
+                    (m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == sub["milestone_id"]),
+                    None,
+                )
+                mat = {
+                    "title": asgn.get("title") or "Assignment",
+                    "week_number": (ms or {}).get("week_number"),
+                }
+        # Fallback to legacy material-based
+        if mat is None and sub.get("material_id"):
+            mat = materials_by_id.get(sub["material_id"])
+        sub["material"] = mat
+
+
 @api_router.get("/submissions")
 async def get_submissions(user: dict = Depends(get_current_user)):
     """Get submissions for current user"""
@@ -4873,13 +4919,9 @@ async def get_submissions(user: dict = Depends(get_current_user)):
             )
             sub["student"] = student
     
-    # Add material info
-    for sub in submissions:
-        material = await db.materials.find_one(
-            {"material_id": sub["material_id"]},
-            {"_id": 0, "title": 1, "week_number": 1}
-        )
-        sub["material"] = material
+    # Attach material-shape (title + week_number). Handles both legacy material-based
+    # AND new milestone-based submissions (synthesized from assignment + milestone).
+    await _enrich_submissions_with_material(submissions)
     
     return submissions
 
@@ -5265,11 +5307,9 @@ async def get_cohort_submissions(cohort_id: str, user: dict = Depends(require_in
             {"_id": 0, "name": 1, "email": 1, "picture": 1}
         )
         sub["student"] = student
-        material = await db.materials.find_one(
-            {"material_id": sub["material_id"]},
-            {"_id": 0, "title": 1, "week_number": 1}
-        )
-        sub["material"] = material
+    
+    # Attach material-shape (title + week_number). Handles both legacy + milestone-based subs.
+    await _enrich_submissions_with_material(submissions)
     
     return submissions
 
@@ -5639,15 +5679,31 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
         raise HTTPException(status_code=400, detail="No feedback available. Generate AI feedback first.")
     
     student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
-    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0}) if submission.get("material_id") else None
     instructor = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     
+    # Resolve human-readable title + week. Prefer milestone-based (new model), fall back to legacy material.
+    material_title = None
+    week_num: Any = "?"
+    if submission.get("assignment_id") and submission.get("milestone_id"):
+        asgn = await db.assignments.find_one(
+            {"assignment_id": submission["assignment_id"]},
+            {"_id": 0, "title": 1, "milestones": 1},
+        )
+        if asgn:
+            material_title = asgn.get("title") or "Assignment"
+            ms = next((m for m in (asgn.get("milestones") or []) if m.get("milestone_id") == submission["milestone_id"]), None)
+            if ms and ms.get("week_number"):
+                week_num = ms["week_number"]
+    if material_title is None:
+        material_title = (material or {}).get("title") or "Homework"
+        if (material or {}).get("week_number"):
+            week_num = material["week_number"]
+    
     student_name = student.get("name", "Student")
-    material_title = material.get("title", "Homework") if material else "Homework"
-    week_num = material.get("week_number", "?") if material else "?"
     cohort_name = cohort.get("name", "")
     instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
     coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}?auth={await _create_session_token_for_user(student['user_id'], ttl_days=30)}"

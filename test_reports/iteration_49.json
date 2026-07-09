@@ -1,0 +1,42 @@
+{
+  "summary": "Iter 49 — Submission material-enrichment fix VERIFIED end-to-end. Created /app/backend/tests/test_submission_enrichment.py (9 tests, ALL PASSING) covering the shared `_enrich_submissions_with_material` helper via the 3 affected endpoints. Live-checked /submissions page as super_admin via Playwright: the target milestone submission (sub_0816379928a9, assignment 'The ShiftSure Case Activity', milestone week 1, material_id='') now correctly displays 'The ShiftSure Case Activity • Week 1' in the UI (was 'Homework · Week ?' pre-fix). Also verified via HTTP that GET /api/submissions and GET /api/cohorts/{id}/submissions return material={title,week_number} for all 6 milestone-based subs, and POST /api/submissions/{id}/export-pdf produces a PDF whose extracted text contains the assignment title + correct week (asserted via pypdf text extraction).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/submissions (Student Submissions)",
+        "issues": [
+          "OUT-OF-SCOPE (data hygiene, NOT this bug): 16 orphaned legacy submissions in preview DB have material_id set but the referenced material record has been deleted, and they have no assignment_id/milestone_id — so they legitimately show 'Homework · Week ?'. These are unrecoverable at read time. Consider either (a) a data-cleanup script to hard-delete orphaned subs, or (b) a nicer UI fallback like 'Deleted homework · Week N/A' so instructors see meaningful text. NOT a regression of iter_49 — these were 'Homework · Week ?' before the fix too."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_submission_enrichment.py",
+    "/app/test_reports/pytest/enrichment_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:4833-4876 — `_enrich_submissions_with_material` is clean: pure in-place, batched with $in, prefers assignment/milestone over legacy material (correct precedence), gracefully degrades to None. LGTM.",
+    "server.py:4924, 5312 — Both /api/submissions and /api/cohorts/{id}/submissions call the same helper. DRY. LGTM.",
+    "server.py:5688-5704 — export-pdf now resolves assignment→title + milestone→week_number with fallback to material. Uses direct DB reads (not the batched helper) because it's a single-submission endpoint — reasonable trade-off. LGTM.",
+    "MINOR (pre-existing): server.py:5350 — `if material is None and submission.get('material_id')` in /api/submissions/{id}/review — variable `material` was never set to a non-None value above this line (only assignment/milestone was resolved), so `material is None` is always True. The condition is effectively dead; simplify to just `if submission.get('material_id')`. Not a bug, just noise.",
+    "MINOR (pre-existing, out of scope): 16 orphaned submissions in preview DB have dangling material_ids. Consider adding a nightly cleanup task or a defensive UI fallback so instructors don't see 'Homework · Week ?' rows for legacy junk data.",
+    "MINOR: preview DB has some subs that are BOTH milestone-based AND have a material_id (e.g. sub_7bf4870c7bd8). The helper correctly prefers the assignment/milestone. Verified via test_response_shape."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_submission_enrichment.py (NEW — 9 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed): /api/health, auth-required, /api/submissions milestone enrichment + regression + response shape, /api/cohorts/{id}/submissions enrichment + shape, export-pdf milestone content extraction + auth-required.",
+    "frontend": "100% verified via Playwright — target milestone sub renders correctly as 'The ShiftSure Case Activity • Week 1' on /submissions. Also verified 3 other correctly-enriched rows ('Your Business Questionnaire · Week 1/2')."
+  },
+  "test_credentials": "Super admin slewis@theboostpad.org (user_d198275ccff4). Session tokens seeded in user_sessions via `_run(_seed)` fixture with proper datetime expires_at; all TEST_ENRICH_* and TEST_PW_* tokens cleaned up post-run.",
+  "seed_data_creation": "No seed data created — used existing DB row sub_0816379928a9 (assignment 'The ShiftSure Case Activity', milestone_id ms_a4d7d01e840c, cohort 'Cohort 12'), which matches the exact bug scenario (material_id='').",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The fix is data-enrichment only; no schema or endpoint changes. Test file test_submission_enrichment.py uses a fresh Motor client per async op (via `_run()`) to avoid the event-loop-attachment issue that blocks direct imports of `server._enrich_submissions_with_material`. If you need direct helper unit tests in the future, monkeypatch `server.db` to a fresh AsyncIOMotorClient on the current loop, or convert the whole test to pytest-asyncio with a module-scoped Motor client bound to pytest's loop. Some pre-existing test files (test_milestone_titles.py, test_coach_max_milestone.py) fail at collection/setup time due to unrelated env-loading and fixture bugs — safe to skip per project convention.",
+  "rca of the issue": "USER BUG: Instructor's /submissions page showed 'Homework · Week ?' for milestone-based submissions because the two list endpoints (GET /api/submissions, GET /api/cohorts/{id}/submissions) and the export-pdf endpoint only enriched using `material_id`, which is empty ('') for milestone-based submissions. The frontend then fell back to its own defaults `sub.material?.title || 'Homework'` and `sub.material?.week_number || '?'`. FIX: extracted `_enrich_submissions_with_material` helper that prefers assignment.title + milestone.week_number, falls back to material record for legacy subs, and gracefully returns None for orphans. Applied to both list endpoints; export-pdf uses equivalent inline logic. VERIFIED: (a) the exact bug scenario (sub_0816379928a9, empty material_id) now returns material={title:'The ShiftSure Case Activity', week_number:1} in both endpoints and displays correctly in the UI, (b) the PDF export contains 'Assignment: The ShiftSure Case Activity  |  Week 1  |  Cohort 12' in its header (extracted via pypdf), (c) legacy material-based subs still enrich from the materials collection, (d) subs with neither identifier gracefully get material=None."
+}
