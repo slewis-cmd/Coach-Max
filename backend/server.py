@@ -203,16 +203,23 @@ async def _questionnaire_text_from_doc(doc: dict) -> Optional[str]:
 
 
 def _video_transcript_text(doc: dict) -> Optional[str]:
-    """Return labeled transcript text for a video material, or None if not applicable."""
-    if doc.get("material_type") != "video":
-        return None
-    transcript = (doc.get("transcript") or "").strip()
-    if not transcript:
-        return ""
-    label = "VIDEO TRANSCRIPT"
-    if doc.get("video_url"):
-        label += f" ({doc.get('video_url')})"
-    return f"[{label}]\n{transcript}"
+    """Return labeled transcript text for a video material OR a media-file submission, or None if not applicable."""
+    # Library video material path
+    if doc.get("material_type") == "video":
+        transcript = (doc.get("transcript") or "").strip()
+        if not transcript:
+            return ""
+        label = "VIDEO TRANSCRIPT"
+        if doc.get("video_url"):
+            label += f" ({doc.get('video_url')})"
+        return f"[{label}]\n{transcript}"
+    # Video/audio submission path (60-second pitch etc.) — transcript is persisted on the submission doc
+    if doc.get("submission_id") and _is_media_submission(doc):
+        transcript = (doc.get("transcript") or "").strip()
+        if not transcript:
+            return ""
+        return f"[VIDEO/AUDIO TRANSCRIPT]\n{transcript}"
+    return None
 
 
 async def read_file_text(doc_or_path, file_name: str = None) -> str:
@@ -251,82 +258,175 @@ async def save_uploaded_file(file: UploadFile, prefix: str) -> tuple:
     return gridfs_id, filename
 
 
-async def transcribe_video_material(material_id: str) -> None:
-    """Background task: pull video bytes from GridFS, extract mono 32kbps mp3 audio via ffmpeg, transcribe via Whisper, save transcript.
-    Runs OUT-OF-BAND (fire-and-forget)."""
-    import tempfile
+WHISPER_MAX_BYTES = 25 * 1024 * 1024  # OpenAI Whisper 25 MB hard limit
+WHISPER_NATIVE_EXTS = {"mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"}  # Formats Whisper accepts natively
+
+
+async def _run_ffmpeg_extract_audio(input_path: str, output_path: str) -> Tuple[bool, str]:
+    """Run ffmpeg to extract mono/16kHz/32kbps mp3 audio. Returns (ok, stderr_snippet)."""
     import subprocess
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            ["ffmpeg", "-y", "-i", input_path, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", output_path],
+            capture_output=True,
+            timeout=600,
+        )
+        if proc.returncode != 0:
+            return False, proc.stderr[:500].decode(errors="ignore")
+        return True, ""
+    except FileNotFoundError:
+        return False, "ffmpeg not installed"
+    except Exception as e:
+        return False, str(e)[:500]
+
+
+async def _whisper_transcribe_file(path: str) -> str:
+    """Send a file path to Whisper. Raises on any error."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise RuntimeError("EMERGENT_LLM_KEY not set")
+    from emergentintegrations.llm.openai import OpenAISpeechToText
+    stt = OpenAISpeechToText(api_key=api_key)
+    with open(path, "rb") as audio_file:
+        response = await stt.transcribe(
+            file=audio_file,
+            model="whisper-1",
+            response_format="text",
+        )
+    return response if isinstance(response, str) else getattr(response, "text", "")
+
+
+async def _transcribe_media_bytes(file_bytes: bytes, filename: str) -> Tuple[str, str]:
+    """Pure helper: transcribe a video/audio blob via ffmpeg (audio extract) + Whisper.
+    Falls back to sending the raw file to Whisper when the file is already ≤ 25 MB in a
+    Whisper-native format (works even if ffmpeg is missing).
+    Returns (status, transcript_text) where status is one of 'done' | 'failed' | 'failed_too_large'.
+    No DB writes."""
+    import tempfile
+    file_ext = (filename or "video.mp4").rsplit(".", 1)[-1].lower()
+
+    # Path 1: Small file + Whisper-native extension → skip ffmpeg entirely (works without ffmpeg)
+    if len(file_bytes) <= WHISPER_MAX_BYTES and file_ext in WHISPER_NATIVE_EXTS:
+        raw_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=f".{file_ext}", delete=False) as tmp:
+                tmp.write(file_bytes)
+                raw_path = tmp.name
+            transcript_text = await _whisper_transcribe_file(raw_path)
+            return "done", (transcript_text or "").strip()
+        except Exception as e:
+            logger.warning(f"Direct Whisper transcribe failed ({e}); falling through to ffmpeg pipeline")
+        finally:
+            if raw_path:
+                try:
+                    os.remove(raw_path)
+                except OSError:
+                    pass
+
+    # Path 2: ffmpeg pipeline (large file or non-native format)
+    with tempfile.NamedTemporaryFile(suffix=f".{file_ext}", delete=False) as vid_tmp:
+        vid_tmp.write(file_bytes)
+        vid_path = vid_tmp.name
+    audio_path = vid_path + ".mp3"
+    try:
+        ok, err = await _run_ffmpeg_extract_audio(vid_path, audio_path)
+        if not ok:
+            logger.error(f"ffmpeg pipeline failed: {err}")
+            # Last-ditch: try Whisper directly if file is small enough
+            if len(file_bytes) <= WHISPER_MAX_BYTES:
+                try:
+                    transcript_text = await _whisper_transcribe_file(vid_path)
+                    return "done", (transcript_text or "").strip()
+                except Exception as e:
+                    logger.error(f"Fallback direct Whisper also failed: {e}")
+            return "failed", ""
+        audio_size = os.path.getsize(audio_path)
+        if audio_size > WHISPER_MAX_BYTES:
+            logger.error(f"Audio too large for Whisper ({audio_size} bytes)")
+            return "failed_too_large", ""
+        try:
+            transcript_text = await _whisper_transcribe_file(audio_path)
+        except Exception as e:
+            logger.error(f"Whisper API error: {e}")
+            return "failed", ""
+        return "done", (transcript_text or "").strip()
+    except Exception as e:
+        logger.exception(f"Transcription pipeline error: {e}")
+        return "failed", ""
+    finally:
+        for p in (vid_path, audio_path):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+# Extensions we treat as video/audio submissions eligible for Whisper transcription.
+MEDIA_EXTS_FOR_TRANSCRIPTION = {"mp4", "mov", "m4v", "avi", "mkv", "webm", "mp3", "m4a", "wav", "aac", "ogg", "flac"}
+
+
+def _is_media_submission(doc: dict) -> bool:
+    """Return True if the submission file is a video/audio file we can transcribe."""
+    fname = (doc.get("file_name") or "").lower()
+    ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
+    return ext in MEDIA_EXTS_FOR_TRANSCRIPTION
+
+
+async def _ensure_submission_transcript(doc: dict) -> dict:
+    """If the submission is video/audio and lacks a stored transcript, transcribe it now
+    (blocking, but only run within background tasks). Persists to db.submissions and returns
+    the refreshed doc. If transcription fails, returns the doc unchanged with a
+    `transcription_status` field so the caller can decide what to do."""
+    if not _is_media_submission(doc):
+        return doc
+    if (doc.get("transcript") or "").strip():
+        return doc
+    if doc.get("transcription_status") in ("failed", "failed_too_large"):
+        return doc
+    try:
+        # Mark in-flight so concurrent tasks don't double-transcribe
+        await db.submissions.update_one(
+            {"submission_id": doc["submission_id"]},
+            {"$set": {"transcription_status": "pending"}},
+        )
+        file_bytes = await read_bytes_from_doc(doc)
+        status, transcript_text = await _transcribe_media_bytes(file_bytes, doc.get("file_name") or "")
+        update = {"transcription_status": status}
+        if status == "done":
+            update["transcript"] = transcript_text
+        await db.submissions.update_one(
+            {"submission_id": doc["submission_id"]},
+            {"$set": update},
+        )
+        doc = {**doc, **update}
+        logger.info(f"Submission {doc['submission_id']} transcription: {status}, {len(transcript_text)} chars")
+    except Exception as e:
+        logger.exception(f"Submission transcription error for {doc.get('submission_id')}: {e}")
+        try:
+            await db.submissions.update_one(
+                {"submission_id": doc["submission_id"]},
+                {"$set": {"transcription_status": "failed"}},
+            )
+        except Exception:
+            pass
+    return doc
+
+
+async def transcribe_video_material(material_id: str) -> None:
+    """Background task: pull video bytes from GridFS, transcribe via Whisper, save transcript.
+    Runs OUT-OF-BAND (fire-and-forget)."""
     try:
         material = await db.materials.find_one({"material_id": material_id}, {"_id": 0})
         if not material or not material.get("gridfs_id"):
             return
-        
         file_bytes = await read_bytes_from_doc(material)
-        file_ext = (material.get("file_name") or "video.mp4").split(".")[-1].lower()
-
-        with tempfile.NamedTemporaryFile(suffix=f".{file_ext}", delete=False) as vid_tmp:
-            vid_tmp.write(file_bytes)
-            vid_path = vid_tmp.name
-
-        audio_path = vid_path + ".mp3"
-        try:
-            # Extract audio: mono, 16 kHz, 32 kbps mp3 — Whisper-friendly, keeps ~60 min under 25 MB
-            proc = await asyncio.to_thread(
-                subprocess.run,
-                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", audio_path],
-                capture_output=True,
-                timeout=600
-            )
-            if proc.returncode != 0:
-                logger.error(f"ffmpeg failed for material {material_id}: {proc.stderr[:500].decode(errors='ignore')}")
-                await db.materials.update_one(
-                    {"material_id": material_id},
-                    {"$set": {"transcription_status": "failed"}}
-                )
-                return
-
-            # Whisper 25 MB limit
-            audio_size = os.path.getsize(audio_path)
-            if audio_size > 25 * 1024 * 1024:
-                logger.error(f"Audio too large for Whisper ({audio_size} bytes) — material {material_id}")
-                await db.materials.update_one(
-                    {"material_id": material_id},
-                    {"$set": {"transcription_status": "failed_too_large"}}
-                )
-                return
-
-            api_key = os.environ.get("EMERGENT_LLM_KEY")
-            if not api_key:
-                logger.error("Whisper: EMERGENT_LLM_KEY not set")
-                await db.materials.update_one(
-                    {"material_id": material_id},
-                    {"$set": {"transcription_status": "failed"}}
-                )
-                return
-
-            from emergentintegrations.llm.openai import OpenAISpeechToText
-            stt = OpenAISpeechToText(api_key=api_key)
-            with open(audio_path, "rb") as audio_file:
-                response = await stt.transcribe(
-                    file=audio_file,
-                    model="whisper-1",
-                    response_format="text"
-                )
-            transcript_text = response if isinstance(response, str) else getattr(response, "text", "")
-            await db.materials.update_one(
-                {"material_id": material_id},
-                {"$set": {
-                    "transcript": (transcript_text or "").strip(),
-                    "transcription_status": "done"
-                }}
-            )
-            logger.info(f"Transcribed material {material_id}: {len(transcript_text or '')} chars")
-        finally:
-            for p in (vid_path, audio_path):
-                try:
-                    os.remove(p)
-                except OSError:
-                    pass
+        status, transcript_text = await _transcribe_media_bytes(file_bytes, material.get("file_name") or "video.mp4")
+        update = {"transcription_status": status}
+        if status == "done":
+            update["transcript"] = transcript_text
+            logger.info(f"Transcribed material {material_id}: {len(transcript_text)} chars")
+        await db.materials.update_one({"material_id": material_id}, {"$set": update})
     except Exception as e:
         logger.exception(f"Transcription pipeline error for {material_id}: {e}")
         try:
@@ -4033,10 +4133,33 @@ async def _run_auto_ai_review_for_submission(
             logger.error(f"Auto review: submission {submission_id} not found")
             return
 
+        # For video/audio submissions (e.g. 60-Second Pitch): transcribe first if not already done
+        submission = await _ensure_submission_transcript(submission)
+        if _is_media_submission(submission):
+            status = submission.get("transcription_status")
+            if status == "failed_too_large":
+                logger.error(f"Auto review: audio too large for Whisper, submission {submission_id}")
+                await db.submissions.update_one(
+                    {"submission_id": submission_id},
+                    {"$set": {"ai_feedback_error": "Audio/video file is too large to transcribe (25 MB Whisper limit). Please upload a shorter clip.", "status": "review_failed"}},
+                )
+                return
+            if status == "failed":
+                logger.error(f"Auto review: transcription failed for submission {submission_id}")
+                await db.submissions.update_one(
+                    {"submission_id": submission_id},
+                    {"$set": {"ai_feedback_error": "Could not transcribe the audio/video file. Please try again or upload a different format.", "status": "review_failed"}},
+                )
+                return
+
         # Extract submission text (handles file, questionnaire, video transcript)
         submission_text = await read_file_text(submission)
         if not (submission_text or "").strip():
             logger.error(f"Auto review: empty submission text for {submission_id}")
+            await db.submissions.update_one(
+                {"submission_id": submission_id},
+                {"$set": {"ai_feedback_error": "No readable content found in the submission. If you uploaded a video or audio file, please ensure it contains clear spoken content.", "status": "review_failed"}},
+            )
             return
 
         # Context: current-week workbook/case_study/video materials + course-wide globals
@@ -5033,7 +5156,7 @@ async def get_cohort_submissions(cohort_id: str, user: dict = Depends(require_in
 
 @api_router.post("/submissions/{submission_id}/review")
 async def review_submission(submission_id: str, user: dict = Depends(require_instructor)):
-    """Generate AI review for a submission"""
+    """Generate AI review for a submission (works for both legacy material-based and new milestone-based submissions)."""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     
     submission = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0})
@@ -5044,18 +5167,50 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     if not cohort or not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Get material info (for context)
-    material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
-    if not material:
+    # Resolve source: prefer milestone-based (new model), fall back to material-based (legacy).
+    material = None
+    assignment = None
+    milestone = None
+    week_number = None
+    title = None
+    description = ""
+    feedback_template = None
+    if submission.get("assignment_id") and submission.get("milestone_id"):
+        assignment = await db.assignments.find_one({"assignment_id": submission["assignment_id"]}, {"_id": 0})
+        if assignment:
+            milestone = next(
+                (m for m in (assignment.get("milestones") or []) if m.get("milestone_id") == submission["milestone_id"]),
+                None,
+            )
+            title = assignment.get("title") or "Assignment"
+            description = assignment.get("description") or ""
+            week_number = (milestone or {}).get("week_number") or 1
+            feedback_template = ((milestone or {}).get("feedback_template") or "").strip() or (assignment.get("feedback_template") or "").strip() or None
+    if material is None and submission.get("material_id"):
+        material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0})
+        if material and title is None:
+            title = material.get("title") or "Homework"
+            description = material.get("description") or ""
+            week_number = material.get("week_number") or 1
+            feedback_template = (material.get("feedback_template") or "").strip() or None
+    if title is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    
+
+    # For video/audio submissions (e.g. 60-Second Pitch): transcribe first if not already done.
+    submission = await _ensure_submission_transcript(submission)
+    if _is_media_submission(submission):
+        status = submission.get("transcription_status")
+        if status == "failed_too_large":
+            raise HTTPException(status_code=400, detail="Audio/video file is too large to transcribe (25 MB Whisper limit). Please upload a shorter clip.")
+        if status == "failed":
+            raise HTTPException(status_code=400, detail="Could not transcribe the audio/video file. Please try again or upload a different format.")
+
     # Get related workbooks and case studies for context
     context_materials = await db.materials.find({
         "cohort_id": submission["cohort_id"],
-        "week_number": material["week_number"],
+        "week_number": week_number,
         "material_type": {"$in": ["workbook", "case_study", "video"]}
     }, {"_id": 0}).to_list(10)
-    
     # Always include Course-Wide Resources (is_global=True library materials linked to this cohort)
     global_materials = await db.materials.find({
         "is_library": True,
@@ -5098,18 +5253,18 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     
     # Build cumulative context from prior weeks + prior submissions for the SAME assignment
     cumulative_ctx = await build_cumulative_context(
-        submission["student_id"], submission.get("cohort_id", ""), material.get("week_number", 1),
+        submission["student_id"], submission.get("cohort_id", ""), week_number,
         assignment_id=submission.get("assignment_id"),
     )
     
     feedback = ""
-    custom_template = (material.get("feedback_template") or "").strip()
+    custom_template = (feedback_template or "").strip() if feedback_template else ""
     if custom_template:
         # Substitute placeholders
         try:
             _rendered = custom_template.format(
-                week_number=material.get("week_number", "?"),
-                title=material.get("title", ""),
+                week_number=week_number,
+                title=title,
                 persona="",
             )
         except (KeyError, IndexError, ValueError):
@@ -5165,10 +5320,10 @@ A brief closing sentence with encouragement and motivation to keep going.{lang_i
         
         prompt = f"""Please review this student's homework submission and provide structured feedback.
 
-ASSIGNMENT: {material['title']}
-{f"DESCRIPTION: {material['description']}" if material.get('description') else ""}
+ASSIGNMENT: {title}
+{f"DESCRIPTION: {description}" if description else ""}
 
-CURRENT WEEK CONTEXT (Week {material['week_number']} materials):
+CURRENT WEEK CONTEXT (Week {week_number} materials):
 {context_text[:6000] if context_text else "No additional context available."}
 
 PRIOR WEEKS CONTEXT (earlier course materials + student's previous feedback):
