@@ -311,6 +311,15 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Questionnaire Builder Scroll Fix + Inline Save Progress (Completed - July 10, 2026)
+**BUG:** When creating a Business Questionnaire assignment (or homework material), instructors couldn't scroll after adding many questions — the DialogContent had no `max-height` / `overflow`, so the dialog grew past the viewport and the footer Save button was pushed off-screen and unreachable.
+
+**FIX:**
+- **AssignmentFormDialog (`AssignmentsTab.js`)** and **MaterialLibrary upload dialog** — DialogContent now uses `max-h-[90vh] flex flex-col p-0`. Header + footer are `flex-shrink-0` (stay pinned). Body wrapper is `flex-1 overflow-y-auto min-h-0` (scrolls independently). Footer Save button is now ALWAYS reachable no matter how many questions are added.
+- **Inline 'Save Progress' button** — a new prop `inlineSaveButton` on `SubmissionTypeFields` renders alongside the 'Add Question' button inside the questionnaire builder header. Only shown when `submission_type === 'business_questionnaire'`. Same handler as the footer Save. Instructors can now save mid-build without scrolling or losing work.
+
+**Testing (iteration_48.json):** Full live Playwright verification on preview URL — body scrolls independently (grew from 636 → 2304 px with 18 questions), footer save button remains visible + clickable throughout, inline 'Save Progress' button appears only for business_questionnaire (both create + edit modes, and for MaterialLibrary homework), non-questionnaire types unaffected. All prior regression suites still pass.
+
 ### Two Production Bugs Fixed — Student Submit Auto-Review + Magic-Link Email CTA (Completed - July 10, 2026)
 **BUG #1 — Homework submitted via Thinkific was never AI-reviewed:**
 The student `POST /api/milestones/{milestone_id}/submit` endpoint didn't trigger the AI auto-review background task — so submissions coming from the Thinkific-embedded link would save to the DB but never get feedback. Coach Max then had nothing to work with. Meanwhile `submit-on-behalf` worked fine because I'd added the auto-review to that endpoint earlier.
