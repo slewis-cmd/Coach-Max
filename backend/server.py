@@ -1171,6 +1171,47 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out"}
 
+
+async def _create_session_token_for_user(user_id: str, ttl_days: int = 30) -> str:
+    """Create a fresh session token for a user (used by magic-link email flows).
+    Returns the raw token string. The token is stored in user_sessions with the given TTL."""
+    token = f"magic_{uuid.uuid4().hex}"
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "purpose": "magic_link",
+    })
+    return token
+
+
+@api_router.post("/auth/magic-link")
+async def magic_link_login(request: Request):
+    """Consume a magic-link session token from an email CTA. Validates the token exists in
+    user_sessions and is unexpired, then returns the same token so the frontend can store it
+    as its active session. If the caller is already authenticated, this is a no-op."""
+    data = await request.json()
+    magic_token = (data.get("token") or "").strip()
+    if not magic_token:
+        raise HTTPException(status_code=400, detail="token is required")
+    session = await db.user_sessions.find_one({"session_token": magic_token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        await db.user_sessions.delete_one({"session_token": magic_token})
+        raise HTTPException(status_code=401, detail="Token expired")
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"session_token": magic_token, "user": user}
+
+
 @api_router.post("/auth/set-role")
 async def set_user_role(request: Request, user: dict = Depends(get_current_user)):
     """Set user role - only super_admin can promote to instructor"""
@@ -2927,6 +2968,14 @@ async def submit_milestone(
         gridfs_id = await save_bytes_to_gridfs(content, f"{placeholder}_{filename}")
         answers = None
 
+    # Kick off AI auto-review (same as submit-on-behalf and legacy student submit flows).
+    week_number = int(milestone.get("week_number") or 1)
+    effective_template = (
+        (milestone.get("feedback_template_override") or "").strip()
+        or (asgn.get("feedback_template") or "").strip()
+        or None
+    )
+
     now = datetime.now(timezone.utc).isoformat()
     if existing:
         await db.submissions.update_one(
@@ -2945,28 +2994,51 @@ async def submit_milestone(
                 "submitted_at": now,
                 "reviewed_at": None,
                 "sent_at": None,
+                "transcript": None,
+                "transcription_status": None,
+                "ai_feedback_error": None,
                 "resubmission_count": existing.get("resubmission_count", 0) + 1,
             }}
         )
-        return {"submission_id": existing["submission_id"], "message": "Milestone resubmitted", "is_resubmission": True}
+        submission_id = existing["submission_id"]
+        is_resubmission = True
+    else:
+        sub = Submission(
+            material_id=asgn.get("material_id") or "",  # optional legacy reference
+            cohort_id=resolved_cohort_id,
+            student_id=user["user_id"],
+            file_path="",
+            gridfs_id=gridfs_id,
+            file_name=filename,
+            submission_type=submission_type,
+            questionnaire_answers=answers,
+            assignment_id=assignment_id,
+            milestone_id=milestone_id,
+        )
+        doc = sub.model_dump()
+        doc["submitted_at"] = doc["submitted_at"].isoformat()
+        doc["resubmission_count"] = 0
+        await db.submissions.insert_one(doc)
+        submission_id = sub.submission_id
+        is_resubmission = False
 
-    sub = Submission(
-        material_id=asgn.get("material_id") or "",  # optional legacy reference
+    # Fire background auto-review (identical to submit-on-behalf path)
+    asyncio.create_task(_run_auto_ai_review_for_submission(
+        submission_id,
+        week_number=week_number,
+        title=asgn.get("title") or "Assignment",
+        description=asgn.get("description"),
+        feedback_template=effective_template,
         cohort_id=resolved_cohort_id,
         student_id=user["user_id"],
-        file_path="",
-        gridfs_id=gridfs_id,
-        file_name=filename,
-        submission_type=submission_type,
-        questionnaire_answers=answers,
         assignment_id=assignment_id,
-        milestone_id=milestone_id,
-    )
-    doc = sub.model_dump()
-    doc["submitted_at"] = doc["submitted_at"].isoformat()
-    doc["resubmission_count"] = 0
-    await db.submissions.insert_one(doc)
-    return {"submission_id": sub.submission_id, "message": "Milestone submitted", "is_resubmission": False}
+    ))
+
+    return {
+        "submission_id": submission_id,
+        "message": "Milestone resubmitted" if is_resubmission else "Milestone submitted",
+        "is_resubmission": is_resubmission,
+    }
 
 
 @api_router.get("/cohorts/{cohort_id}/materials")
@@ -5486,7 +5558,10 @@ async def send_feedback_to_student(submission_id: str, user: dict = Depends(requ
     
     # Send email to student
     feedback_html = feedback.replace("\n", "<br>")
-    coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}"
+    # Magic-link: a fresh session token for the student so clicking the CTA doesn't
+    # force them to sign in again. Bound to their user, 30-day expiry.
+    magic_token = await _create_session_token_for_user(student["user_id"], ttl_days=30)
+    coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}?auth={magic_token}"
     email_html = f"""
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background-color: #22438E; padding: 20px; border-radius: 12px 12px 0 0;">
@@ -5575,8 +5650,7 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     week_num = material.get("week_number", "?") if material else "?"
     cohort_name = cohort.get("name", "")
     instructor_name = instructor.get("name", "Your Instructor") if instructor else "Your Instructor"
-    coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}"
-    logger.info(f"Coach Max URL generated: {coach_max_url}")
+    coach_max_url = f"{APP_BASE_URL}/coach-max/{submission_id}?auth={await _create_session_token_for_user(student['user_id'], ttl_days=30)}"
     pdf_lang = student.get("language_preference", "en")
     pdf_t = get_feedback_email_strings(pdf_lang)
     

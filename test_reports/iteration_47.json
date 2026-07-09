@@ -1,0 +1,51 @@
+{
+  "summary": "Iter 47 — BOTH bug fixes VERIFIED end-to-end. (1) AUTO-REVIEW ON STUDENT SUBMIT: 5/5 new tests + regressions PASS — text file submit, resubmit (with count increment + field reset), business_questionnaire, milestone-override template precedence, and submit-on-behalf regression all trigger AI feedback within ~90s. (2) MAGIC-LINK AUTO-AUTH: 12/12 new backend tests PASS + 3/3 Playwright UI scenarios PASS — /api/auth/magic-link handles missing/empty/nonexistent/expired/deleted-user cases correctly; send-feedback CTA appends ?auth=<magic_...>; token security bounds verified (30-day TTL, unpredictable hex, bound to single user); UI flow strips ?auth= after exchange, no login prompt, real GPT-5.2 reply received.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/milestones/{id}/submit", "issue": "assignment_id and cohort_id must be passed as QUERY-STRING params (not multipart form) because they lack Form() annotations, unlike POST /api/milestones/{id}/submit-on-behalf which uses Form(...). Not a functional bug (frontend already sends them as query params in DirectSubmit.js:409-414), but this inconsistency between the two endpoints is a footgun for future contributors and tests. Recommend adding Form() annotations to submit_milestone for parity."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Magic-link already-authenticated short-circuit (Scenario C)", "issue": "When a user already has a stored session token and hits /coach-max/{id}?auth=<other_magic>, the AuthContext correctly SHORT-CIRCUITS the exchange (`if (magic && !getStoredToken())`) — but as a side effect it ALSO skips `history.replaceState` so the `?auth=<other_magic>` stays visible in the address bar. This is not a security hole (the other magic is never used or stored) but it does leave the URL cluttered and shareable-with-token. Recommend moving the URL-strip out of the exchange branch and always running it whenever `?auth=` is present.", "affected_selectors": ["src/context/AuthContext.js line 44-67"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_milestone_submit_auto_review.py",
+    "/app/backend/tests/test_magic_link.py",
+    "/app/test_reports/pytest/iter47_auto_review.xml",
+    "/app/test_reports/pytest/iter47_magic_link.xml",
+    "/app/test_reports/pytest/iter47_regression.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: In server.py submit_milestone (line ~2892), promote `assignment_id` and `cohort_id` from bare defaults to `Form(...)` for API parity with submit_milestone_on_behalf. Frontend already passes them as query params so this is non-breaking if handled with Union or by keeping the query fallback.",
+    "OPTIONAL: In AuthContext.js line 44-67, move the `history.replaceState` URL-strip OUTSIDE the `if (magic && !getStoredToken())` block so the `?auth=` param is always stripped whenever it's present, even for already-authenticated users. This prevents a stale magic from lingering in the address bar for shareable/bookmarkable pages.",
+    "PRE-EXISTING (not related to iter47): 4 tests in test_video_submission_review.py fail with `FileNotFoundError: 'ffmpeg'` because ffmpeg isn't installed in the preview container. Not related to Bug Fix #1/#2 — the auto-review helper's media transcription code path is untested here."
+  ],
+  "critical_code_review_comments": [
+    "server.py:3025-3035 — auto-review trigger is correctly placed AFTER the DB insert/update and correctly extracts week_number + effective_template (milestone override → assignment fallback → None). Precedence proven by test 4.",
+    "server.py:2971-2977 — effective_template resolution correctly strips whitespace and falls through empty strings. LGTM.",
+    "server.py:1175-1186 _create_session_token_for_user — `magic_` prefix + uuid4().hex (32 hex chars) → strong entropy; expires_at stored as ISO string with UTC tz; purpose='magic_link' distinguishes these from normal sessions.",
+    "server.py:1189-1212 magic_link_login — correctly deletes expired tokens (prevents indefinite growth), returns HTTP 401 for both invalid AND expired (no info leak on which is which), returns 404 only when user was deleted (edge case).",
+    "server.py:5540-5564 send_feedback_to_student — magic token created BEFORE building coach_max_url, embedded in link. Same treatment in generate_feedback_pdf (5653). Consistent.",
+    "AuthContext.js:46-67 — magic exchange runs BEFORE the /me check (correct order). Short-circuits with `if (magic && !getStoredToken())` — safe. Fallthrough on error means the user gets the standard login flow if the magic is invalid.",
+    "MINOR: AuthContext.js:60 — `history.replaceState` only runs inside the exchange branch. If the user is already authenticated (`getStoredToken()` non-null), the ?auth= param stays in the URL. Recommend moving the strip outside the branch."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_milestone_submit_auto_review.py (NEW — 5 tests × 3 classes over the /milestones/{id}/submit endpoint incl. resubmit, questionnaire, milestone-override template precedence, and submit-on-behalf regression)",
+    "/app/backend/tests/test_magic_link.py (NEW — 12 tests × 3 classes: endpoint validation matrix, send-feedback → CTA URL end-to-end, security bounds)"
+  ],
+  "success_rate": {
+    "backend": "100% on the two features under test: 5/5 auto-review + 12/12 magic-link = 17/17 new tests pass. Regression: 80/84 pass on the requested suites (95.2%); the 4 failures are pre-existing test_video_submission_review.py tests that require ffmpeg (not installed in preview container) — unrelated to iter_47 changes.",
+    "frontend": "100% — 3/3 Playwright scenarios: (A) fresh browser + valid magic → auto-signs in, ?auth= stripped, chat loads with correct Week 3 header, real GPT-5.2 reply, no 'having trouble' fallback. (B) invalid magic → fallthrough to landing (`/`) with no token stored. (C) already-authenticated + different magic → existing session preserved (short-circuit works)."
+  },
+  "test_credentials": "TEST_MAR_/TEST_ML_/TEST_MLUI_ prefixed ephemeral sessions seeded directly into user_sessions. Super Admin slewis@theboostpad.org NOT used this iteration.",
+  "seed_data_creation": "test_milestone_submit_auto_review.py seeds 1 instructor + 1 student + 1 cohort + 3 assignments (case_activity, business_questionnaire, case_activity-with-milestone-override) + related sessions, all TEST_MAR_ prefixed, module-scoped teardown. test_magic_link.py seeds 1 instructor + 2 students + 1 cohort + 1 assignment + 1 pre-populated submission, TEST_ML_ prefixed, module-scoped teardown. UI test seeded TEST_MLUI_ prefixed live milestone submission — cleaned up post-run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both fixes VERIFIED. Regression command: `cd /app && export $(grep -v '^#' /app/backend/.env | xargs) && export $(grep -v '^#' /app/frontend/.env | xargs) && python -m pytest /app/backend/tests/test_milestone_submit_auto_review.py /app/backend/tests/test_magic_link.py /app/backend/tests/test_coach_max_milestone.py /app/backend/tests/test_submit_on_behalf_milestone.py /app/backend/tests/test_assignments_phase2.py /app/backend/tests/test_assignment_templates.py -v` (~2.5 min, 97+ tests, all pass). test_video_submission_review.py has 4 ffmpeg-dependent tests that fail in preview (env issue, not code). NOTE for main agent: submit_milestone endpoint accepts assignment_id/cohort_id as QUERY params (frontend already correct); test files use `?assignment_id=X&cohort_id=Y` in URL.",
+  "rca of the issue": "Both bug fixes correctly implemented. Bug #1 root cause was submit-on-behalf path fired auto-review via asyncio.create_task while the student direct-submit path did not — patched at server.py:3025-3035 mirroring the on-behalf pattern. Bug #2 root cause was clicking the feedback email CTA landed on /coach-max/{id} without any session — patched by (a) generating a purpose='magic_link' user_session at email-send time and appending ?auth=<token> to the CTA URL (server.py:5563-5564, 5653), (b) adding POST /api/auth/magic-link (server.py:1189-1212) that validates + returns the same token, (c) frontend AuthContext hook that consumes ?auth= before the /me check and strips it from the URL (AuthContext.js:44-67). Verified live: fresh browser + magic → auto-signed-in Coach Max chat with real LLM reply, no login prompt."
+}
