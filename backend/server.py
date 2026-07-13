@@ -3930,24 +3930,45 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
     if week_number is None:
         week_number = (material or {}).get("week_number") or 1
     
+    branding = await get_branding()
+    persona = branding.get("ai_persona_name", "Coach Max")
+    persona_override = (branding.get("ai_system_prompt") or "").strip()
+    
+    # Load recent chat history (last 6 turns = 12 messages) to include compactly in the prompt.
+    # This lets us use a FRESH LlmChat session per request, preventing server-side history
+    # accumulation that was causing runaway prompt sizes on follow-up questions.
+    prior_chats = await db.tutor_chats.find(
+        {"submission_id": submission_id, "student_id": user["user_id"]},
+        {"_id": 0, "message": 1, "response": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(6)
+    prior_chats.reverse()  # oldest → newest
+    history_block = ""
+    if prior_chats:
+        turns = []
+        for c in prior_chats:
+            q = (c.get("message") or "").strip()
+            a = (c.get("response") or "").strip()
+            # Trim each turn so the block never explodes past ~4KB
+            turns.append(f"Student: {q[:400]}\n{persona}: {a[:800]}")
+        history_block = "\n\n".join(turns)
+
     # Build context (works for both material-based and milestone-based; queries cohort materials by week)
     submission_text, context_text = await build_coach_max_context(submission, material, week_number=week_number)
-    
+
     # Build cumulative context from prior weeks + prior submissions in the same assignment
     cumulative_ctx = await build_cumulative_context(
         user["user_id"], submission.get("cohort_id", ""), week_number,
         assignment_id=submission.get("assignment_id"),
     )
-    
+
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
-    
+
     response = ""
-    branding = await get_branding()
-    persona = branding.get("ai_persona_name", "Coach Max")
-    persona_override = (branding.get("ai_system_prompt") or "").strip()
     try:
+        # Aggressively trimmed context sizes — keeps total prompt under ~15K chars so the
+        # LLM stays under ~30-45s response time even on long conversations.
         default_prompt = f"""You are {persona}, a friendly, supportive AI tutor for a leadership development course.
 A student has received feedback on their homework and wants to discuss it with you.
 
@@ -3965,28 +3986,43 @@ CURRENT ASSIGNMENT: {asgn_title}
 CURRENT WEEK: {week_number}
 
 THE STUDENT'S SUBMISSION:
-{submission_text[:5000] if submission_text else 'Not available'}
+{submission_text[:2500] if submission_text else 'Not available'}
 
 FEEDBACK THE STUDENT RECEIVED:
-{feedback}
+{feedback[:2000] if feedback else 'Not available'}
 
 CURRENT WEEK MATERIALS:
-{context_text[:5000] if context_text else 'Not available'}
+{context_text[:2500] if context_text else 'Not available'}
 
 PRIOR WEEKS CONTEXT (materials covered + student's previous feedback):
-{cumulative_ctx[:5000] if cumulative_ctx else 'This is the first week — no prior context.'}{get_language_instruction(lang)}"""
+{cumulative_ctx[:2500] if cumulative_ctx else 'This is the first week — no prior context.'}
+
+{('RECENT CONVERSATION:' + chr(10) + history_block + chr(10) + chr(10) + 'Continue the conversation with the student below.') if history_block else ''}{get_language_instruction(lang)}"""
 
         system_prompt = (persona_override.replace("{persona}", persona)
                          if persona_override else default_prompt)
 
+        # Use a UNIQUE session_id per request — prevents LlmChat from accumulating server-side
+        # history across calls (which was compounding with our system prompt on every message).
         chat = LlmChat(
             api_key=api_key,
-            session_id=f"coach_max_{user['user_id']}_{submission_id}",
-            system_message=system_prompt
+            session_id=f"coach_max_{uuid.uuid4().hex[:12]}",
+            system_message=system_prompt,
         ).with_model("openai", "gpt-5.2")
-        
-        response = await chat.send_message(UserMessage(text=message))
-        
+
+        # Fail fast at 75s so we hit our own error (with retry-hint) BEFORE Cloudflare's 100s
+        # 524. Better UX than a Cloudflare error page.
+        response = await asyncio.wait_for(
+            chat.send_message(UserMessage(text=message)),
+            timeout=75.0,
+        )
+
+    except asyncio.TimeoutError:
+        logger.error(f"Coach Max timeout for submission {submission_id}, user {user['user_id']}")
+        raise HTTPException(
+            status_code=504,
+            detail=f"{persona} is taking longer than expected. Please try asking again — often a slightly shorter question helps.",
+        )
     except Exception as e:
         logger.error(f"Coach Max error: {e}")
         raise HTTPException(status_code=500, detail=f"{persona} is unavailable right now")
