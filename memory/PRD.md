@@ -311,6 +311,19 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Ask Coach Max Follow-Up Question Cloudflare 524 Fix (Completed - July 13, 2026)
+**BUG:** On the second (and subsequent) questions to Coach Max, students hit Cloudflare's 524 error ("origin web server did not respond within the allowed time"). Cloudflare's cap is ~100s.
+
+**Root cause:** The `POST /api/chat/ask-tutor` endpoint was passing the SAME `session_id` (`coach_max_{user}_{submission}`) to LlmChat on every message. LlmChat accumulates conversation history server-side. On the second call, GPT-5.2 was receiving: [full 20K-char system prompt] + [entire prior turn history] — the total token count compounded per message and latency ballooned past 100s.
+
+**FIX:**
+- **Fresh unique session_id per request** (`coach_max_{uuid4}`) — no more server-side history accumulation.
+- **Compact history injection** — endpoint now reads the last 6 turns from `tutor_chats`, trims each (400 chars for question, 800 for response), and includes them in the prompt as a `RECENT CONVERSATION:` block. Model still gets conversational context, but bounded.
+- **Aggressive context trimming** — submission_text / context_text / cumulative_ctx reduced from 5000→2500 chars each. Feedback trimmed to 2000. Total prompt now stays under ~15K chars regardless of conversation length.
+- **`asyncio.wait_for(75s)` around the LLM call** — if GPT-5.2 exceeds 75s, we return HTTP 504 with a friendly retry hint BEFORE Cloudflare's 100s kills the connection.
+
+**Testing (iteration_50.json):** 15 targeted tests in `test_ask_tutor_performance.py` + 26 regression = all pass. Real GPT-5.2 latencies: Q1=9.7s, Q2=8.6s, Q3=2.7s (3 sequential to the same submission — proving no accumulation). History-window bounded test with 8 preloaded turns: 3.0s. Timeout path returns 504 with retry-hint.
+
 ### Submission Nomenclature Fix — Assignment Title + Week in Lists + PDF (Completed - July 10, 2026)
 **BUG:** Instructor's `/submissions` page was displaying "Homework · Week ?" for milestone-based submissions instead of the actual assignment title + week (e.g., "60-Second Elevator Pitch · Week 3"). Same problem in the feedback PDF export. Root cause: three endpoints (`GET /api/submissions`, `GET /api/cohorts/{id}/submissions`, `POST /api/submissions/{id}/export-pdf`) were only reading `material_id` for enrichment, which is empty for milestone-based submissions.
 
