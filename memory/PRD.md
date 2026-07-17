@@ -311,6 +311,17 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Support Bot: Route Student Submission Questions to Thinkific (Completed - July 13, 2026)
+**REQUEST:** Students always submit assignments through Thinkific (not the in-app platform), so the support bot must direct student "how do I submit X?" questions to Thinkific rather than to the in-app "My Assignments" upload flow.
+
+**FIX:** Updated `SUPPORT_SYSTEM_PROMPT` with:
+- Explicit rule: "STUDENTS ONLY SUBMIT HOMEWORK VIA THINKIFIC — this is the ONLY supported submission path for students."
+- Canned redirect message the bot uses when students ask about any submission type (60-Sec Pitch / Deck / Case / Questionnaire).
+- Re-framed "My Assignments" as a VIEW-only progress tracker (not a submission portal).
+- Documented Submit-on-Behalf as the ONLY in-app upload path, and instructor-only.
+
+**Testing (iteration_52.json):** 9 new tests in `test_support_thinkific_redirect.py` cover all 4 student submission types + instructor Submit-on-Behalf + student non-submission questions + Coach Max boundary. Real GPT-5.2 verified. 70/70 total support-related tests pass (20 original + 9 new + 41 regression).
+
 ### Platform Support Bot + Admin Escalation (Completed - July 13, 2026)
 **NEW FEATURE:** Two-tier platform support — an AI bot that answers HOW-TO questions about the platform, plus a one-click escalation that persists a ticket + emails the super admin.
 
