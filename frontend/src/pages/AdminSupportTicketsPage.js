@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { ArrowLeft, LifeBuoy, CheckCircle2, Circle, User } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function AdminSupportTicketsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('open'); // 'open' | 'resolved' | 'all'
@@ -28,6 +30,14 @@ export default function AdminSupportTicketsPage() {
   }, [filter]);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
+
+  // Guard: only super_admin can access this page
+  if (!authLoading && user && user.role !== 'super_admin') {
+    return <Navigate to="/" replace />;
+  }
+  if (authLoading || !user) {
+    return null;
+  }
 
   const updateTicket = async (ticketId, patch) => {
     try {

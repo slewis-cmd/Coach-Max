@@ -311,6 +311,22 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Platform Support Bot + Admin Escalation (Completed - July 13, 2026)
+**NEW FEATURE:** Two-tier platform support — an AI bot that answers HOW-TO questions about the platform, plus a one-click escalation that persists a ticket + emails the super admin.
+
+**Backend (new endpoints in `server.py` after Coach Max block):**
+- `POST /api/support/chat` — GPT-5.2 support bot with a `SUPPORT_SYSTEM_PROMPT` scoped strictly to platform navigation (how to submit, how to use Coach Max, where to find feedback, etc.). Explicitly REFUSES to coach business/leadership content — redirects to Coach Max. History bounded to last 6 turns (400/600 char trims); fresh session_id per call; `asyncio.wait_for(45s)` → 504 with retry-hint.
+- `POST /api/support/escalate` — creates a persistent record in new `support_tickets` collection (ticket_id, user info, conversation transcript up to 40 turns × 2000 chars, status, timestamps, admin_notes) AND best-effort emails the transcript to `SUPER_ADMIN_EMAIL`.
+- `GET /api/admin/support/tickets?status=open|resolved` — super_admin only; sorted desc by created_at.
+- `PATCH /api/admin/support/tickets/{id}` — super_admin only; toggle status (with resolved_at) + edit admin_notes.
+
+**Frontend (new components):**
+- `SupportWidget.js` — floating "?" button bottom-right (hidden for unauthenticated users), opens a chat panel. `data-testid`s: `support-widget-{trigger,panel,close,messages,input,send,escalate,reset}`. Escalate button disabled until user has sent at least one message; disabled again after successful escalation. Reset clears the conversation.
+- `AdminSupportTicketsPage.js` — `/admin/support-tickets` route. Filter tabs (open/resolved/all), expandable transcripts, one-click Resolve/Reopen, admin notes textarea that auto-saves on blur. Client-side RBAC guard redirects non-super-admin to `/`.
+- Mounted globally in `App.js` so the widget appears on every page for authenticated users.
+
+**Testing (iteration_51.json):** 20/20 targeted backend tests pass (auth, real GPT-5.2 platform boundary enforcement, escalate persistence + email, RBAC on list/patch, resolve/reopen). Full frontend E2E via Playwright: widget flows work end-to-end including the platform-only boundary test — bot refuses "how should I improve my pitch's value prop?" and redirects to Coach Max. All prior regression suites pass.
+
 ### Ask Coach Max Follow-Up Question Cloudflare 524 Fix (Completed - July 13, 2026)
 **BUG:** On the second (and subsequent) questions to Coach Max, students hit Cloudflare's 524 error ("origin web server did not respond within the allowed time"). Cloudflare's cap is ~100s.
 
