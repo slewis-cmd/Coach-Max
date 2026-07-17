@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 51 — Platform Support Bot + Escalation. 20/20 targeted backend tests passing (auth, chat GPT-5.2 real calls, platform-only boundary enforcement, escalate ticket persistence, RBAC on list/patch, resolve/reopen with resolved_at, admin_notes). Frontend E2E: SupportWidget floats on every authenticated page (hidden on landing), chat streams real GPT-5.2 nav guidance, Escalate correctly disabled pre-message and enabled after, ticket confirmation renders in chat, Admin /admin/support-tickets page lists tickets, expands transcript, auto-saves notes on blur, and resolve/reopen cycle works. Regression suites (ask_tutor_perf 15, submission_enrichment 9, magic_link 13, milestone_submit_auto_review 5) all pass. Only unrelated failures were 6 pre-existing test_video_submission_review cases (ffmpeg binary missing + event-loop setup) — not related to this feature.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/support-tickets", "issues": ["Route is guarded only by ProtectedRoute (authenticated). Instructors/students can navigate to the URL directly; the page shell renders and API returns 403 (toast 'Super admin access required') with an empty list. Server-side security is fine, but consider adding a client-side role guard (redirect non-super_admin to /dashboard) to avoid rendering the empty page + toast."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_support.py",
+    "/app/test_reports/pytest/iter51_support.xml",
+    "/app/test_reports/pytest/iter51_regression.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Add super_admin role check inside AdminSupportTicketsPage (or a wrapper route) to redirect non-super_admin users to /dashboard instead of rendering the shell + 'Super admin access required' toast.",
+    "PRE-EXISTING (not this feature): test_video_submission_review.py has 6 failing tests due to missing ffmpeg binary + event-loop init — unrelated to the support feature."
+  ],
+  "critical_code_review_comments": [
+    "SupportWidget history cap: client sends slice(-8) while backend caps at prior[-6:] — mismatch is harmless (backend truncates further) but consider aligning to 6 to avoid wasted payload.",
+    "support_chat exception handler swallows the LLM exception and returns 500 without exposing detail (correct). No sensitive data leaks.",
+    "support_escalate is best-effort with email — good pattern. Uses SUPER_ADMIN_EMAIL env with a users.find_one fallback.",
+    "AdminSupportTicketsPage uses `defaultValue` + `onBlur` for admin_notes autosave — works, but if the ticket list re-renders (e.g. after Resolve), the textarea keeps its React state instead of the updated t.admin_notes. Since resolve triggers a state replace of that ticket, React may unmount/remount and this is fine — but worth eyeballing if any UX regressions surface."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_support.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% (all critical widget + admin flows)"},
+  "test_credentials": "Seeded temporary student + super_admin session tokens directly into user_sessions collection; cleaned up after tests. Real production super_admin (slewis@theboostpad.org) not used.",
+  "seed_data_creation": "Test fixture in /app/backend/tests/test_support.py seeds student, instructor, super_admin users + session tokens with TEST_SUPPORT_ prefix; teardown removes all TEST_SUPPORT_ users/sessions and their tickets. Frontend E2E seeded TEST_UI_ prefixed docs, also cleaned up post-test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The 4 new endpoints (/api/support/chat, /api/support/escalate, GET /api/admin/support/tickets, PATCH /api/admin/support/tickets/{id}) are covered by /app/backend/tests/test_support.py (20 tests including 3 real GPT-5.2 calls). Widget and admin page pass full E2E. Only enhancement suggested is a client-side role guard on /admin/support-tickets (currently only ProtectedRoute — API enforces super_admin correctly).",
+  "rca of the issue": "No bug found — feature works as specified."
+}

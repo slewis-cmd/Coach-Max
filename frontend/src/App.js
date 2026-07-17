@@ -24,6 +24,8 @@ import CoachMaxPage from "./pages/CoachMaxPage";
 import CoachMaxInsightsPage from "./pages/CoachMaxInsightsPage";
 import RubricLibrary from "./pages/RubricLibrary";
 import AssignmentTemplatesPage from "./pages/AssignmentTemplatesPage";
+import AdminSupportTicketsPage from "./pages/AdminSupportTicketsPage";
+import SupportWidget from "./components/SupportWidget";
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -178,6 +180,11 @@ const AppRouter = () => {
           <CoachMaxInsightsPage />
         </ProtectedRoute>
       } />
+      <Route path="/admin/support-tickets" element={
+        <ProtectedRoute>
+          <AdminSupportTicketsPage />
+        </ProtectedRoute>
+      } />
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -190,6 +197,7 @@ function App() {
       <BrandingProvider>
         <AuthProvider>
           <AppRouter />
+          <SupportWidget />
           <Toaster position="top-right" richColors />
         </AuthProvider>
       </BrandingProvider>

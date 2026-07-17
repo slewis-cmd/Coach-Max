@@ -4054,6 +4054,221 @@ async def get_chat_history(submission_id: str, user: dict = Depends(get_current_
     return chats
 
 
+# ==================== SUPPORT AI + ESCALATION ====================
+
+SUPPORT_SYSTEM_PROMPT = """You are the platform support bot for The Boost Pad — a cohort-based
+AI-tutor learning platform. You help students AND instructors with HOW to use the platform.
+
+CRITICAL BOUNDARY: You do NOT answer content questions about business, leadership, pitches,
+case studies, or the student's actual coursework. If the user asks for coaching on their work,
+politely redirect them to "Coach Max" (the in-app AI tutor available on their feedback page).
+
+Your knowledge of the platform:
+
+FOR STUDENTS:
+- The "My Assignments" page shows all 14-week milestones for their cohort. Each milestone has
+  a submission type: 60-Second Elevator Pitch (video/audio), 10-Slide Pitch Deck (PDF/PPTX),
+  ShiftSure Case Activity (PDF/DOC), or Business Questionnaire (fill-in form).
+- To submit homework: navigate to the milestone card in "My Assignments" OR click the
+  Thinkific-embedded link in their course. Upload the file (or fill the questionnaire),
+  then click Submit. AI review runs automatically and their instructor reviews before
+  sending feedback.
+- After receiving feedback (via email), students can click the "Ask Coach Max" button in the
+  email or on the submission detail page to chat about their feedback with an AI tutor.
+- To change UI/feedback language: visit their Profile page and set language preference.
+
+FOR INSTRUCTORS:
+- The Cohort Detail page has tabs: Students, Knowledge Base (materials), Assignments
+  (milestones), Submissions (student uploads), Coach Max Insights.
+- To create an assignment: Assignments tab → "New Assignment" → pick submission type +
+  title. Milestones for 14 weeks are auto-created; each can be edited individually.
+- To view a student's submission: Submissions tab or /submissions → click a row.
+- To send feedback: open the submission → review AI-generated draft → edit or accept →
+  click "Send to Student" (also emails them with an Ask Coach Max button).
+- To submit ON BEHALF of a student: Assignments tab → expand an assignment → click
+  "Submit for student" on the specific milestone row → pick student + upload.
+- To bulk-invite students: Students tab → "Bulk Import" → upload a CSV with email column.
+- Rubric Library (/rubrics) lets instructors save reusable AI feedback templates.
+- Assignment Template Library lets them save reusable assignment blueprints.
+
+GUIDELINES FOR YOUR RESPONSES:
+- Be concise (2-4 short paragraphs max, ideally 1-2).
+- Give step-by-step navigation when relevant ("Click X → Y → Z").
+- If the question is ambiguous, ask ONE targeted clarifying question first.
+- If the question is about their business/leadership content, redirect: "I help with
+  how to use the platform. For coaching on your actual work, click 'Ask Coach Max' on
+  your submission after receiving feedback."
+- If you don't know or the question is a bug report / access issue, say so honestly and
+  offer to escalate to a human administrator.
+"""
+
+
+@api_router.post("/support/chat")
+async def support_chat(request: Request, user: dict = Depends(get_current_user)):
+    """Ephemeral AI support chat. History is sent by the client per request (not persisted
+    unless escalated). Returns the AI's reply."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    data = await request.json()
+    message = (data.get("message") or "").strip()
+    prior = data.get("history") or []  # [{"role": "user"|"assistant", "text": "..."}]
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+
+    # Compact prior turns to avoid runaway token counts (cap 6 turns, trim aggressively)
+    prior = prior[-6:]
+    history_lines = []
+    for turn in prior:
+        r = turn.get("role")
+        t = (turn.get("text") or "").strip()
+        if not t:
+            continue
+        prefix = "User" if r == "user" else "Support"
+        history_lines.append(f"{prefix}: {t[:600]}")
+
+    role_label = "instructor" if user.get("role") in ("instructor", "super_admin") else "student"
+    system_msg = (
+        SUPPORT_SYSTEM_PROMPT
+        + f"\n\nTHE USER'S ROLE: {role_label}\nTHE USER'S NAME: {user.get('name', 'friend')}"
+        + (("\n\nRECENT CONVERSATION:\n" + "\n".join(history_lines)) if history_lines else "")
+    )
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"support_{uuid.uuid4().hex[:12]}",
+            system_message=system_msg,
+        ).with_model("openai", "gpt-5.2")
+        response = await asyncio.wait_for(
+            chat.send_message(UserMessage(text=message)),
+            timeout=45.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Support bot is taking longer than expected. Please try again or escalate to an administrator.")
+    except Exception as e:
+        logger.error(f"Support chat error: {e}")
+        raise HTTPException(status_code=500, detail="Support bot is temporarily unavailable. Please try again or escalate to an administrator.")
+
+    return {"response": response}
+
+
+@api_router.post("/support/escalate")
+async def support_escalate(request: Request, user: dict = Depends(get_current_user)):
+    """Create a persistent support ticket and notify the super admin via email.
+    Client sends the full conversation transcript captured so far."""
+    data = await request.json()
+    subject = (data.get("subject") or "").strip()[:200]
+    conversation = data.get("conversation") or []
+    if not isinstance(conversation, list) or not conversation:
+        raise HTTPException(status_code=400, detail="Conversation is required")
+    # Normalize & bound
+    normalized = []
+    for turn in conversation[-40:]:
+        r = "user" if turn.get("role") == "user" else "assistant"
+        t = (turn.get("text") or "").strip()
+        if not t:
+            continue
+        normalized.append({
+            "role": r,
+            "text": t[:2000],
+            "ts": turn.get("ts") or datetime.now(timezone.utc).isoformat(),
+        })
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Conversation is empty")
+    if not subject:
+        # Use the first user message as the subject
+        first_user_msg = next((c["text"] for c in normalized if c["role"] == "user"), "")
+        subject = (first_user_msg or "Support request")[:120]
+
+    ticket = {
+        "ticket_id": f"tkt_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "user_name": user.get("name") or "",
+        "user_email": user.get("email") or "",
+        "user_role": user.get("role") or "",
+        "subject": subject,
+        "conversation": normalized,
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "resolved_at": None,
+        "admin_notes": "",
+    }
+    await db.support_tickets.insert_one(ticket)
+
+    # Notify super admin via email (best-effort — don't block the ticket if it fails)
+    try:
+        admin_email = SUPER_ADMIN_EMAIL
+        if not admin_email:
+            admin = await db.users.find_one({"role": "super_admin"}, {"_id": 0, "email": 1})
+            admin_email = (admin or {}).get("email") or ""
+        if admin_email:
+            transcript_html = "".join(
+                f"<div style='margin:8px 0;padding:8px;border-radius:6px;background:{'#EFF6FF' if c['role']=='user' else '#F3F4F6'};'>"
+                f"<strong>{c['role'].upper()}:</strong> {c['text'].replace(chr(10), '<br>')}"
+                "</div>"
+                for c in normalized
+            )
+            body = f"""
+            <div style="font-family: 'Inter', Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #22438E; font-weight: normal;">Support Ticket #{ticket['ticket_id']}</h2>
+                <p style="color:#555;">
+                    <strong>From:</strong> {ticket['user_name']} &lt;{ticket['user_email']}&gt; ({ticket['user_role']})<br>
+                    <strong>Subject:</strong> {subject}<br>
+                    <strong>Created:</strong> {ticket['created_at']}
+                </p>
+                <hr style="border:none;border-top:1px solid #ddd;margin:20px 0;">
+                <h3 style="color:#333;font-weight:normal;">Conversation Transcript</h3>
+                {transcript_html}
+                <p style="color:#888;font-size:12px;margin-top:24px;">
+                    View or resolve this ticket at {APP_BASE_URL}/admin/support-tickets
+                </p>
+            </div>
+            """
+            await send_email_notification(admin_email, f"[Support] {subject}", body)
+    except Exception as e:
+        logger.error(f"Failed to send support ticket email: {e}")
+
+    return {"ticket_id": ticket["ticket_id"], "message": "Escalated to administrator. They'll follow up by email."}
+
+
+@api_router.get("/admin/support/tickets")
+async def list_support_tickets(user: dict = Depends(require_super_admin), status: Optional[str] = None):
+    """Super admin: list all support tickets, optionally filtered by status ('open' | 'resolved')."""
+    q = {}
+    if status in ("open", "resolved"):
+        q["status"] = status
+    tickets = await db.support_tickets.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return tickets
+
+
+@api_router.patch("/admin/support/tickets/{ticket_id}")
+async def update_support_ticket(ticket_id: str, request: Request, user: dict = Depends(require_super_admin)):
+    """Super admin: mark ticket resolved/reopen, or add notes."""
+    data = await request.json()
+    updates = {}
+    if "status" in data:
+        if data["status"] not in ("open", "resolved"):
+            raise HTTPException(status_code=400, detail="status must be 'open' or 'resolved'")
+        updates["status"] = data["status"]
+        updates["resolved_at"] = datetime.now(timezone.utc).isoformat() if data["status"] == "resolved" else None
+    if "admin_notes" in data:
+        updates["admin_notes"] = (data["admin_notes"] or "")[:5000]
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = await db.support_tickets.update_one({"ticket_id": ticket_id}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    ticket = await db.support_tickets.find_one({"ticket_id": ticket_id}, {"_id": 0})
+    return ticket
+
+
+
+
 # ==================== SUBMISSION ENDPOINTS ====================
 
 @api_router.post("/materials/{material_id}/submit")
