@@ -2100,13 +2100,64 @@ async def unrelease_week(cohort_id: str, request: Request, user: dict = Depends(
 
 # ==================== MATERIAL ENDPOINTS ====================
 
+def _ocr_pdf_bytes(file_bytes: bytes, max_pages: int = 30) -> str:
+    """Render each PDF page to an image and OCR it with Tesseract.
+
+    Used as a last-resort fallback for scanned or image-only decks where both
+    PyPDF2 and pdfplumber yield essentially no text. Silently returns "" if
+    Tesseract or pypdfium2 is unavailable so we never break the review pipeline.
+    """
+    try:
+        import pypdfium2 as pdfium
+        import pytesseract  # noqa: F401 — presence check
+    except ImportError as e:
+        logger.warning(f"OCR fallback unavailable ({e}); returning empty")
+        return ""
+
+    try:
+        # Verify the tesseract binary is actually installed on this host.
+        pytesseract.get_tesseract_version()
+    except Exception as e:
+        logger.warning(f"Tesseract binary not available on host ({e}); skipping OCR")
+        return ""
+
+    try:
+        pdf = pdfium.PdfDocument(file_bytes)
+    except Exception as e:
+        logger.error(f"OCR: could not open PDF for rasterization: {e}")
+        return ""
+
+    parts = []
+    try:
+        n = min(len(pdf), max_pages)
+        for i in range(n):
+            try:
+                page = pdf[i]
+                # scale=2 ≈ 144 DPI — good OCR accuracy without blowing memory
+                pil_image = page.render(scale=2).to_pil()
+                page_text = pytesseract.image_to_string(pil_image) or ""
+                if page_text.strip():
+                    parts.append(page_text)
+            except Exception as page_err:
+                logger.warning(f"OCR page {i} failed: {page_err}")
+    finally:
+        try:
+            pdf.close()
+        except Exception:
+            pass
+
+    return "\n".join(parts).strip()
+
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract text from PDF file.
 
-    Tries PyPDF2 first (fast, low-memory). If that yields little/no text — common
-    for slide decks exported from Canva, Keynote, Google Slides, or PDFs where
-    text lives in XObjects — falls back to pdfplumber, which handles those
-    layouts much more reliably.
+    Three-tier extraction, escalating only when the prior tier yields little text:
+      1. PyPDF2 — fast, low-memory, works for most text-native PDFs.
+      2. pdfplumber — handles slide decks exported from Canva, Keynote, Google
+         Slides, or PDFs where text lives in XObjects.
+      3. Tesseract OCR (via pypdfium2 rasterization) — last resort for scanned
+         or image-only decks with no embedded text layer.
     """
     text = ""
     # 1) PyPDF2 (fast path)
@@ -2141,10 +2192,17 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         except Exception as e:
             logger.error(f"pdfplumber extraction failed: {e}")
 
+    # 3) OCR fallback for scanned / image-only decks
+    if len(text) < 40:
+        ocr_text = _ocr_pdf_bytes(file_bytes)
+        if len(ocr_text) > len(text):
+            logger.info(f"PDF extraction: OCR fallback recovered {len(ocr_text)} chars")
+            text = ocr_text
+
     if text:
         return text
 
-    # 3) Last-resort: treat bytes as text (rarely helpful, but preserves prior behaviour)
+    # 4) Last-resort: treat bytes as text (rarely helpful, but preserves prior behaviour)
     try:
         return file_bytes.decode('utf-8', errors='ignore').strip()
     except Exception:

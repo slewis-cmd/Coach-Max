@@ -68,11 +68,76 @@ def test_extract_text_from_pdf_empty_bytes():
     assert text == ""
 
 
+def _build_image_only_pdf(text_lines):
+    """Build an image-only PDF (text rendered into an image, no embedded text layer).
+
+    Used to exercise the Tesseract OCR fallback. If PIL/fpdf2 aren't available
+    or Tesseract isn't installed on the host we skip.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        from fpdf import FPDF
+    except ImportError:  # pragma: no cover
+        pytest.skip("PIL/fpdf2 not available to build an image-only PDF")
+
+    # Render the text lines into a PNG image at OCR-friendly DPI.
+    img = Image.new("RGB", (1200, 800), "white")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+    except (OSError, IOError):
+        font = ImageFont.load_default()
+
+    y = 60
+    for line in text_lines:
+        draw.text((60, y), line, fill="black", font=font)
+        y += 90
+
+    img_path = "/tmp/_ocr_test_slide.png"
+    img.save(img_path, "PNG")
+
+    # Wrap the image in a PDF (no text layer at all).
+    pdf = FPDF(unit="pt", format=(1200, 800))
+    pdf.add_page()
+    pdf.image(img_path, x=0, y=0, w=1200, h=800)
+    return bytes(pdf.output(dest="S"))
+
+
+def test_extract_text_from_pdf_ocr_fallback_for_scanned_decks():
+    """Image-only PDFs (scanned decks) should be recovered via Tesseract OCR."""
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+    except Exception:
+        pytest.skip("Tesseract binary not available on this host — skipping OCR test")
+
+    pdf_bytes = _build_image_only_pdf([
+        "KAWASAKI SLIDE DECK",
+        "Problem: Nurses lose time",
+        "Solution: ShiftSure",
+    ])
+
+    # Sanity: PyPDF2 alone should NOT recover this (no text layer).
+    from PyPDF2 import PdfReader
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    pypdf_text = "\n".join((p.extract_text() or "") for p in reader.pages).strip()
+    assert len(pypdf_text) < 40, "Test setup invalid — PDF has a text layer"
+
+    # Full extractor should recover the OCR text.
+    text = extract_text_from_pdf(pdf_bytes)
+    lower = text.lower()
+    # OCR is imperfect; accept partial matches on the most distinctive tokens.
+    hits = sum(kw in lower for kw in ("kawasaki", "problem", "solution", "shiftsure", "nurses"))
+    assert hits >= 2, f"OCR fallback failed to recover recognisable text; got: {text!r}"
+
+
 # ---------------------------------------------------------------------------
 # Format-aware submission context
 # ---------------------------------------------------------------------------
 
 def test_format_context_video_recording():
+
+
     ctx = _submission_format_context({"file_name": "elevator.mp4"})
     assert ctx["kind"] == "video"
     assert ctx["descriptor"] == "your recording"
