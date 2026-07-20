@@ -311,6 +311,23 @@ Build an AI tutor for Thinkific LMS Platform for a cohort learning environment. 
 - [x] All materials downloadable and ready to assign to any cohort
 - [x] Assigned to "Fall 2024 Leadership" cohort and released for students
 
+### Per-Assignment Accepted File Types Override (Completed - July 14, 2026)
+**FEATURE:** Instructors can now widen (or tighten) the accepted file extensions on any assignment. Example: a 60-Second Elevator Pitch that accepts BOTH video (mp4/mov) AND written formats (pdf/docx) — configured per assignment.
+
+**Backend:**
+- `Assignment` + `AssignmentCreate` + `AssignmentUpdate` models get new `allowed_extensions: Optional[List[str]]` field.
+- New helpers: `_normalize_extensions(raw)` (accepts str/list, strips dots, lowercases, dedupes, returns list or None); `_effective_allowed_extensions(assignment, submission_type)` (override wins → type default → global default).
+- All 3 submit endpoints (`POST /api/milestones/{id}/submit`, `POST /api/milestones/{id}/submit-on-behalf`, legacy `POST /api/submissions`) now call the helper.
+- POST create + PUT update assignment endpoints normalize + persist. Passing empty list clears the override.
+- `GET /api/submit-link/a/{asgn}/w/{wk}` returns `assignment.allowed_extensions` = effective list so the frontend `accept` attribute matches.
+
+**Frontend:**
+- `AssignmentFormDialog` gets a new "Accepted file types (optional)" input with per-type placeholder examples + helper text. Disabled with N/A for Business Questionnaire.
+- `DirectSubmit` file input's `accept` attribute + hint text now use the effective list from the resolver response.
+- `SubmitOnBehalfMilestoneDialog` uses the effective list too.
+
+**Testing (iteration_53.json):** 26 targeted tests in `test_allowed_extensions.py` + 43 regression = all pass. Playwright confirmed on preview.
+
 ### Support Bot: Route Student Submission Questions to Thinkific (Completed - July 13, 2026)
 **REQUEST:** Students always submit assignments through Thinkific (not the in-app platform), so the support bot must direct student "how do I submit X?" questions to Thinkific rather than to the in-app "My Assignments" upload flow.
 
