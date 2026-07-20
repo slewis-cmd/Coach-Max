@@ -373,6 +373,126 @@ def _is_media_submission(doc: dict) -> bool:
     return ext in MEDIA_EXTS_FOR_TRANSCRIPTION
 
 
+def _submission_format_context(submission: dict, assignment_title: str = "") -> dict:
+    """Return format-aware descriptors so the AI reviewer can phrase feedback
+    naturally for the submitted medium (video, slide deck, doc, writeup,
+    questionnaire).
+
+    Args:
+        submission: the submission doc (file_name, submission_type, etc.)
+        assignment_title: title of the assignment/milestone — used as a
+            heuristic to distinguish slide-deck PDFs from generic PDFs.
+
+    Returns keys:
+      - ext:             raw file extension (e.g. "pdf", "mp4"), or "" if none
+      - kind:            one of "video", "audio", "slide_deck", "document",
+                         "writeup", "questionnaire", "other"
+      - descriptor:      short natural phrase — e.g. "your recording",
+                         "your slide deck", "your writeup"
+      - guidance:        instruction block to append to the AI system prompt
+    """
+    submission_type = (submission.get("submission_type") or "").lower()
+    fname = (submission.get("file_name") or "").lower()
+    ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
+
+    # 1) Questionnaire submissions have no file
+    if submission_type == "business_questionnaire":
+        return {
+            "ext": "",
+            "kind": "questionnaire",
+            "descriptor": "your questionnaire answers",
+            "guidance": (
+                "The student submitted their responses via a structured business questionnaire. "
+                "When citing evidence, refer to \"your answer to <question>\" or \"your questionnaire responses\" "
+                "— never call it a document, video, or slide deck."
+            ),
+        }
+
+    # 2) Video / audio (60-second pitch, etc.)
+    if ext in {"mp4", "mov", "webm", "m4v", "avi", "mkv"}:
+        return {
+            "ext": ext,
+            "kind": "video",
+            "descriptor": "your recording",
+            "guidance": (
+                "The student submitted a VIDEO recording; the text below is an automated transcript of what was spoken. "
+                "Refer to it as \"your recording\", \"your pitch\", or \"what you said\" — NOT a document, essay, or slide deck. "
+                "Comment on delivery cues you can infer from the transcript (clarity, structure, pacing, filler words) rather than visual/formatting elements."
+            ),
+        }
+    if ext in {"mp3", "wav", "m4a", "aac", "ogg", "flac", "aiff"}:
+        return {
+            "ext": ext,
+            "kind": "audio",
+            "descriptor": "your recording",
+            "guidance": (
+                "The student submitted an AUDIO recording; the text below is an automated transcript. "
+                "Refer to it as \"your recording\" or \"what you said\" — NOT a document or slide deck. "
+                "Comment on what was said and how (clarity, structure, pacing) rather than visual formatting."
+            ),
+        }
+
+    # 3) Slide decks (heuristic: PDF used for pitch-deck-style assignments)
+    if ext in {"pdf"}:
+        title = (assignment_title or submission.get("title") or "").lower()
+        # Heuristic: treat as slide deck if the assignment title suggests one.
+        slide_hint = any(k in title for k in ("slide", "deck", "kawasaki", "pitch deck", "presentation"))
+        if slide_hint:
+            return {
+                "ext": ext,
+                "kind": "slide_deck",
+                "descriptor": "your slide deck",
+                "guidance": (
+                    "The student submitted a PDF slide deck; the text below is extracted from those slides "
+                    "(order and slide breaks may not be perfectly preserved). "
+                    "Refer to it as \"your slide deck\" or \"your deck\" — NOT a recording, essay, or questionnaire. "
+                    "When possible, reference specific slides by their headline (e.g. \"on your Problem slide\"). "
+                    "If key sections you would expect for this assignment appear missing from the extracted text, "
+                    "call that out gently as an area for growth rather than assuming they were omitted."
+                ),
+            }
+        return {
+            "ext": ext,
+            "kind": "document",
+            "descriptor": "your document",
+            "guidance": (
+                "The student submitted a PDF document; the text below was extracted from it. "
+                "Refer to it as \"your document\" or \"your writeup\" — NOT a recording or slide deck."
+            ),
+        }
+
+    # 4) Word documents
+    if ext in {"docx", "doc"}:
+        return {
+            "ext": ext,
+            "kind": "document",
+            "descriptor": "your document",
+            "guidance": (
+                "The student submitted a Word document; the text below was extracted from it. "
+                "Refer to it as \"your document\" or \"your writeup\"."
+            ),
+        }
+
+    # 5) Plain text / markdown / notes
+    if ext in {"txt", "md", "rtf"} or ext == "":
+        return {
+            "ext": ext,
+            "kind": "writeup",
+            "descriptor": "your writeup",
+            "guidance": (
+                "The student submitted their work as a text writeup. "
+                "Refer to it as \"your writeup\" or \"what you wrote\"."
+            ),
+        }
+
+    return {
+        "ext": ext,
+        "kind": "other",
+        "descriptor": "your submission",
+        "guidance": "",
+    }
+
+
 async def _ensure_submission_transcript(doc: dict) -> dict:
     """If the submission is video/audio and lacks a stored transcript, transcribe it now
     (blocking, but only run within background tasks). Persists to db.submissions and returns
@@ -1981,20 +2101,54 @@ async def unrelease_week(cohort_id: str, request: Request, user: dict = Depends(
 # ==================== MATERIAL ENDPOINTS ====================
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
-    """Extract text from PDF file"""
+    """Extract text from PDF file.
+
+    Tries PyPDF2 first (fast, low-memory). If that yields little/no text — common
+    for slide decks exported from Canva, Keynote, Google Slides, or PDFs where
+    text lives in XObjects — falls back to pdfplumber, which handles those
+    layouts much more reliably.
+    """
+    text = ""
+    # 1) PyPDF2 (fast path)
     try:
         reader = PdfReader(io.BytesIO(file_bytes))
-        text = ""
+        parts = []
         for page in reader.pages:
-            text += page.extract_text() or ""
-        return text.strip()
+            try:
+                parts.append(page.extract_text() or "")
+            except Exception as page_err:
+                logger.warning(f"PyPDF2 page extraction failed: {page_err}")
+        text = "\n".join(parts).strip()
     except Exception as e:
-        logger.error(f"PDF extraction error: {e}")
-        # Try as plain text if PDF parsing fails
+        logger.warning(f"PyPDF2 extraction failed, will try pdfplumber: {e}")
+
+    # 2) pdfplumber fallback for slide decks / complex layouts
+    if len(text) < 40:  # essentially empty or a stray page number
         try:
-            return file_bytes.decode('utf-8', errors='ignore').strip()
-        except Exception:
-            return ""
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                plumber_parts = []
+                for page in pdf.pages:
+                    try:
+                        page_text = page.extract_text() or ""
+                        if page_text.strip():
+                            plumber_parts.append(page_text)
+                    except Exception as page_err:
+                        logger.warning(f"pdfplumber page extraction failed: {page_err}")
+                plumber_text = "\n".join(plumber_parts).strip()
+            if len(plumber_text) > len(text):
+                text = plumber_text
+        except Exception as e:
+            logger.error(f"pdfplumber extraction failed: {e}")
+
+    if text:
+        return text
+
+    # 3) Last-resort: treat bytes as text (rarely helpful, but preserves prior behaviour)
+    try:
+        return file_bytes.decode('utf-8', errors='ignore').strip()
+    except Exception:
+        return ""
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
     """Extract text from Word document"""
@@ -4589,6 +4743,10 @@ async def _run_auto_ai_review_for_submission(
         lang_instr = get_language_instruction(lang)
 
         custom_tpl = (feedback_template or "").strip()
+        fmt_ctx = _submission_format_context(submission, assignment_title=title or "")
+        fmt_guidance = fmt_ctx["guidance"]
+        fmt_block = f"\n\nSUBMISSION FORMAT: The student submitted this work as {fmt_ctx['descriptor']}.\n{fmt_guidance}" if fmt_guidance else ""
+
         if custom_tpl:
             try:
                 _rendered = custom_tpl.format(week_number=week_number, title=title, persona="")
@@ -4603,6 +4761,7 @@ Guidelines:
 - Reference prior weeks' concepts when relevant
 - Do NOT give grades or scores
 - Write in a mentoring tone
+{fmt_block}
 
 For THIS assignment, follow these custom instructions from the instructor:
 
@@ -4620,6 +4779,7 @@ Guidelines:
 - Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
+{fmt_block}
 
 You MUST structure your feedback EXACTLY as follows:
 
@@ -4647,6 +4807,7 @@ A brief closing sentence with encouragement and motivation to keep going.{lang_i
 
 ASSIGNMENT: {title}
 {f"DESCRIPTION: {description}" if description else ""}
+SUBMISSION FORMAT: {fmt_ctx['descriptor']} ({fmt_ctx['kind']})
 
 CURRENT WEEK CONTEXT (Week {week_number} materials):
 {context_text[:6000] if context_text else "No additional context available."}
@@ -4654,7 +4815,7 @@ CURRENT WEEK CONTEXT (Week {week_number} materials):
 PRIOR WEEKS CONTEXT (earlier course materials + student's previous feedback):
 {cumulative_ctx[:5000] if cumulative_ctx else "This is the student's first submission — no prior context."}
 
-STUDENT SUBMISSION:
+STUDENT SUBMISSION ({fmt_ctx['descriptor']}):
 {submission_text[:10000]}
 
 Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""
@@ -5715,6 +5876,10 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     
     feedback = ""
     custom_template = (feedback_template or "").strip() if feedback_template else ""
+    fmt_ctx = _submission_format_context(submission, assignment_title=title or "")
+    fmt_guidance = fmt_ctx["guidance"]
+    fmt_block = f"\n\nSUBMISSION FORMAT: The student submitted this work as {fmt_ctx['descriptor']}.\n{fmt_guidance}" if fmt_guidance else ""
+
     if custom_template:
         # Substitute placeholders
         try:
@@ -5734,6 +5899,7 @@ Guidelines:
 - Reference prior weeks' concepts when relevant
 - Do NOT give grades or scores
 - Write in a mentoring tone
+{fmt_block}
 
 For THIS assignment, follow these custom instructions from the instructor:
 
@@ -5751,6 +5917,7 @@ Guidelines:
 - Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
+{fmt_block}
 
 You MUST structure your feedback EXACTLY as follows:
 
@@ -5778,6 +5945,7 @@ A brief closing sentence with encouragement and motivation to keep going.{lang_i
 
 ASSIGNMENT: {title}
 {f"DESCRIPTION: {description}" if description else ""}
+SUBMISSION FORMAT: {fmt_ctx['descriptor']} ({fmt_ctx['kind']})
 
 CURRENT WEEK CONTEXT (Week {week_number} materials):
 {context_text[:6000] if context_text else "No additional context available."}
@@ -5785,7 +5953,7 @@ CURRENT WEEK CONTEXT (Week {week_number} materials):
 PRIOR WEEKS CONTEXT (earlier course materials + student's previous feedback):
 {cumulative_ctx[:5000] if cumulative_ctx else "This is the student's first submission — no prior context."}
 
-STUDENT SUBMISSION:
+STUDENT SUBMISSION ({fmt_ctx['descriptor']}):
 {submission_text[:10000]}
 
 Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""

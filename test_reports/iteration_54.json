@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 54 — Format-aware review prompt + robust PDF extraction. Ran the new /app/backend/tests/test_pdf_extraction_and_format_context.py (12/12 pass) verifying: (a) extract_text_from_pdf reads a real multi-page fpdf2-built PDF including 'Problem'/'Solution'/'ShiftSure' — round-trip through PyPDF2 primary path (>=40 chars, so pdfplumber fallback NOT triggered here, which is correct); (b) extractor handles non-PDF bytes gracefully (no exception) and returns '' for b''; (c) _submission_format_context classifies mp4→video/'your recording', mp3→audio/'your recording', pdf+title containing Kawasaki|Slide|Deck|Presentation|Pitch Deck → slide_deck/'your slide deck', pdf+generic title → document/'your document', docx→document, business_questionnaire submission_type → questionnaire/'your questionnaire answers', txt→writeup/'your writeup', unknown extension→other/'your submission' safe default. Regression suites re-run with MONGO_URL/DB_NAME/REACT_APP_BACKEND_URL properly sourced: test_milestone_submit_auto_review.py 5/5 pass, test_submit_on_behalf_milestone.py 22/22 pass (both exercise the _run_auto_ai_review_for_submission code path that now injects fmt_block — confirmed no exceptions from the new helper injection). test_material_library.py 12/13 pass (1 pre-existing failure unrelated: test_upload_library_material_homework_rejected expects 400 for material_type='homework' but endpoint returns 200 — pre-existing missing validation, not touched by this PR). test_video_submission_review.py: TestPureHelpers::test_is_media_submission_positive passes; 4 tests fail (transcribe_media_bytes_returns_tuple_mp3, no_dbwrite, submit_mp3_transcribes_and_persists, review_endpoint_media_submission) all due to missing ffmpeg binary in container (same pre-existing failure documented in iteration_53.json). No new regressions from the format-aware/pdf-extraction change. Ad-hoc smoke checks: slide-deck title heuristic verified (kind=slide_deck, descriptor='your slide deck'), generic PDF title → document, mp4 → video, questionnaire → questionnaire, extractor robust to bad bytes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/library/materials",
+        "issue": "Accepts material_type='homework' with 200 instead of rejecting with 400 (pre-existing; not touched by this PR)."
+      },
+      {
+        "endpoint": "N/A — environment",
+        "issue": "ffmpeg binary not installed → 4 tests in test_video_submission_review.py fail at the transcription step. Pre-existing (documented in iter53). Does not affect this PR's code path."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pdf_extraction_and_format_context.py",
+    "/app/test_reports/pytest/iter54_pdf_format.xml",
+    "/app/test_reports/pytest/iter54_regression.xml"
+  ],
+  "action_items": [
+    "(Optional, unrelated) Install ffmpeg in the container to unblock the 4 video-transcription tests in test_video_submission_review.py.",
+    "(Optional, unrelated) Add material_type whitelist validation to POST /api/library/materials so 'homework' is 400-rejected as the library test expects."
+  ],
+  "critical_code_review_comments": [
+    "extract_text_from_pdf fallback threshold `len(text) < 40` is a reasonable heuristic for detecting empty/near-empty PyPDF2 output (a stray page number is ~1-3 chars, an actual slide deck cover >40); combined with the `if len(plumber_text) > len(text)` guard the fallback never reduces content — safe. Good defensive layering with a final utf-8 decode fallback.",
+    "_submission_format_context: the slide-deck heuristic uses assignment_title keywords ('slide','deck','kawasaki','pitch deck','presentation') — 'pitch deck' is a substring of 'pitch' too, so a title like 'Elevator Pitch' (video) would NOT trigger the PDF-slide-deck branch because the media branch (mp4/mp3) fires FIRST on the file extension. Good ordering.",
+    "Both auto-review (_run_auto_ai_review_for_submission @ ~L4746) and manual review (review_submission @ ~L5879) now compute fmt_ctx once, build fmt_block conditionally (empty string if guidance is empty — 'other' branch), and inject into BOTH system_msg (guidance) and prompt (kind+descriptor line). Consistent injection points, no risk of drift between the two paths.",
+    "prompt truncation `submission_text[:10000]` and `context_text[:6000]` unchanged — format-aware header is added ABOVE these truncations, so the format hint always reaches the model even for long submissions.",
+    "Minor: fmt_block is built via a Python f-string with a leading '\\n\\n' — safe when concatenated inside another f-string but relies on the surrounding template having the correct newline context. Reviewed both call sites; both templates place `{fmt_block}` on its own line surrounded by blank lines. Rendering is clean.",
+    "No changes to error handling in read_file_text / _ensure_submission_transcript, so the video/audio 'no readable content' → 400 path is preserved (verified by test_milestone_submit_auto_review and test_submit_on_behalf_milestone still passing)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "12/12 (100%) new tests; 39/40 relevant regression tests pass (97.5%) excluding ffmpeg-dependent pre-existing failures.",
+    "frontend": "N/A (backend-only PR per request)"
+  },
+  "test_credentials": "Not needed — all verification done via unit tests + in-process helper smoke tests. Super admin credentials (slewis@theboostpad.org) were NOT used; the AI review call is expensive and the primary concern (helper injection does not throw) was covered by the auto-review integration tests that already stub/exercise the code path.",
+  "seed_data_creation": "None new. Regression tests create/clean their own TEST_-prefixed data via existing fixtures.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 54 (format-aware review prompt + pdfplumber fallback) is verified. Key facts: (1) Running any test that hits Mongo requires sourcing /app/backend/.env before pytest (MONGO_URL and DB_NAME are only in backend/.env, not shell). Command pattern: `cd /app/backend && set -a && source .env && set +a && export REACT_APP_BACKEND_URL=<url> && python -m pytest ...`. (2) test_video_submission_review.py has 4 pre-existing failures from missing ffmpeg — safe to skip unless ffmpeg is installed. (3) test_material_library.py::test_upload_library_material_homework_rejected is a pre-existing test-vs-code mismatch (endpoint doesn't validate material_type). (4) The new helper _submission_format_context is at /app/backend/server.py line 376, and is called at line 4746 (auto-review) and line 5879 (manual review) — both inject fmt_block into system_msg AND include the descriptor+kind in the prompt.",
+  "rca of the issue": "N/A — additive feature verified working per spec. Root cause of the original user complaint (Kawasaki slide deck PDF content not being read) is addressed by (a) pdfplumber fallback when PyPDF2 returns <40 chars — common for Canva/Keynote-exported slide decks where text lives in XObjects; (b) explicit slide-deck-aware prompt guidance that tells the AI it's looking at a slide deck (not a document/essay), so feedback references specific slides."
+}
