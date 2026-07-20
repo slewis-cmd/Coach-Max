@@ -233,3 +233,28 @@ def test_format_context_no_filename():
     assert isinstance(ctx["descriptor"], str) and ctx["descriptor"]
     # Empty file_name with no submission_type falls into the writeup branch.
     assert ctx["kind"] in {"writeup", "other"}
+
+
+def test_extract_text_from_pdf_vision_fallback_for_image_only_deck():
+    """End-to-end: image-only PDF (Google-Slides-style export) should be recovered
+    via the GPT-5.2 vision fallback even when Tesseract is unavailable.
+
+    Skipped if EMERGENT_LLM_KEY is not set. Uses the same helper as the OCR test.
+    """
+    import os as _os
+    if not _os.environ.get("EMERGENT_LLM_KEY"):
+        pytest.skip("EMERGENT_LLM_KEY not set — skipping live vision integration test")
+
+    pdf_bytes = _build_image_only_pdf([
+        "KAWASAKI SLIDE DECK",
+        "Problem: Nurses lose time",
+        "Solution: ShiftSure automates it",
+    ])
+
+    text = extract_text_from_pdf(pdf_bytes)
+    lower = text.lower()
+    # At least two of the distinctive tokens must survive round-trip.
+    hits = sum(kw in lower for kw in ("kawasaki", "problem", "solution", "shiftsure", "nurses"))
+    assert hits >= 2, (
+        f"Vision fallback failed to recover recognisable slide text; got: {text!r}"
+    )

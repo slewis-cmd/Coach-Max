@@ -637,13 +637,20 @@ Follow-up work needed to complete the vision:
 
 
 ### Format-Aware AI Review + Robust PDF Extraction (Completed - July 20, 2026)
-- [x] `extract_text_from_pdf`: added **pdfplumber** fallback when PyPDF2 returns <40 chars (fixes silent-empty extraction on Canva/Keynote/Google-Slides–exported slide decks where text lives in XObjects).
-- [x] `extract_text_from_pdf`: added **Tesseract OCR** third-tier fallback for scanned or image-only PDFs (rasterizes via `pypdfium2` at 2× scale then OCRs each page). Gracefully skips when tesseract binary is unavailable so PDF review never breaks.
-- [x] **Critical bug fix**: `extract_text_from_file` and `extract_text_from_pdf/docx` NO LONGER fall back to `file_bytes.decode('utf-8')` for known binary formats (pdf/docx/doc). Previously, when all parsers returned empty, raw PDF headers (`%PDF-1.4`, `/Creator (Google)`, `/Title`, `/MediaBox`) leaked into the AI review prompt and Coach Max wrote feedback about PDF internals instead of the student's work (real bug found in production feedback). Now returns "" so the submission endpoint surfaces a clear "no readable content" error.
-- [x] New helper `_submission_format_context(submission, assignment_title)` classifies each submission into: video, audio, slide_deck, document, writeup, questionnaire, other. Returns a natural-language descriptor and targeted guidance block.
-- [x] Both AI review paths — `_run_auto_ai_review_for_submission` and `review_submission` — inject the format-aware `fmt_block` into the LLM system prompt AND surface `SUBMISSION FORMAT: <descriptor> (<kind>)` in the user prompt.
-- [x] `/app/backend/tests/test_pdf_extraction_and_format_context.py` — 15 tests, all passing, including two regressions guaranteeing raw PDF/DOCX binary can never leak into the review prompt.
-- [x] Added dependencies: `pdfplumber==0.11.10`, `pdfminer.six==20260107`, `pypdfium2==5.12.1`, `pytesseract==0.3.13` (pinned in `requirements.txt`).
-- [x] **System package requirement** for production: `tesseract-ocr` (installed via `apt-get install -y tesseract-ocr`). Python code degrades gracefully without it.
+- [x] `extract_text_from_pdf`: **four-tier** extraction cascade:
+  1. PyPDF2 (fast path, works for text-native PDFs)
+  2. pdfplumber (handles slide decks exported from Canva/Keynote/Google Slides with XObject text)
+  3. Tesseract OCR via pypdfium2 (for scanned/image-only decks when the tesseract binary is available)
+  4. **GPT-5.2 vision** — rasterizes each page to PNG, base64-encodes, sends to gpt-5.2 via `LlmChat` + `ImageContent`, asks it to transcribe. Works in any environment (no system packages needed), reads slide layouts naturally, and handles Google Slides / Canva vector-path exports where all local extractors fail.
+- [x] Never leaks raw binary: for `.pdf`/`.docx`, we return "" (not utf-8-decoded raw bytes) if all extractors fail. AI review then marks status `review_failed` with a clear, actionable error message.
+- [x] User-facing error message now spells out the exact recovery path: "re-export from PowerPoint 'Save as PDF' or Google Slides 'Download as PDF' and re-upload".
+- [x] New helper `_submission_format_context(submission, assignment_title)` classifies each submission and injects a natural-language descriptor + guidance block into the AI review prompt.
+- [x] Both review paths (auto + manual) surface `SUBMISSION FORMAT: <descriptor> (<kind>)` in the user prompt.
+- [x] Auto-review's top-level exception handler now persists `status="review_failed"` + `ai_feedback_error` — no more silently stuck submissions.
+- [x] Frontend: red "Needs Attention" badge, error banner on SubmissionDetail, "Retry AI Feedback" button, `review_failed` submissions count as pending on InstructorDashboard + Submissions list.
+- [x] Student-facing status maps `review_failed` → `under_review` (they don't see failures).
+- [x] Tests: 15/15 passing including a live end-to-end vision-fallback test that recovers slide text from an image-only PDF via GPT-5.2 (real EMERGENT_LLM_KEY call, ~5s).
+- [x] Dependencies: `pdfplumber==0.11.10`, `pdfminer.six==20260107`, `pypdfium2==5.12.1`, `pytesseract==0.3.13` (pinned in `requirements.txt`).
+- [x] `tesseract-ocr` system binary is optional — the vision fallback covers the same use cases and works everywhere.
 
 

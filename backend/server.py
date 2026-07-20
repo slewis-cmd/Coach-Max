@@ -2149,6 +2149,107 @@ def _ocr_pdf_bytes(file_bytes: bytes, max_pages: int = 30) -> str:
     return "\n".join(parts).strip()
 
 
+def _vision_extract_pdf_text(file_bytes: bytes, max_pages: int = 10) -> str:
+    """Fourth-tier PDF text-extraction fallback: send rasterized page images to
+    GPT-5.2 vision to read the slides.
+
+    This handles Google Slides / Canva exports where the text is baked into
+    vector paths or images with no extractable text layer, AND environments
+    without a local Tesseract binary. Runs synchronously via ``asyncio.run`` so
+    it plugs into the existing sync extractor cascade without changing callers.
+    """
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        logger.warning("Vision-fallback PDF extraction: EMERGENT_LLM_KEY not set; skipping")
+        return ""
+
+    try:
+        import base64 as _b64
+        import pypdfium2 as pdfium
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    except ImportError as e:
+        logger.warning(f"Vision-fallback PDF extraction unavailable ({e}); skipping")
+        return ""
+
+    # Render pages to PNG bytes → base64
+    try:
+        pdf = pdfium.PdfDocument(file_bytes)
+    except Exception as e:
+        logger.error(f"Vision fallback: could not open PDF: {e}")
+        return ""
+
+    images = []
+    try:
+        n = min(len(pdf), max_pages)
+        for i in range(n):
+            try:
+                page = pdf[i]
+                pil_image = page.render(scale=2).to_pil()
+                buf = io.BytesIO()
+                pil_image.save(buf, format="PNG")
+                images.append(_b64.b64encode(buf.getvalue()).decode("ascii"))
+            except Exception as page_err:
+                logger.warning(f"Vision fallback: page {i} render failed: {page_err}")
+    finally:
+        try:
+            pdf.close()
+        except Exception:
+            pass
+
+    if not images:
+        return ""
+
+    async def _run() -> str:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"pdf_vision_extract_{uuid.uuid4()}",
+            system_message=(
+                "You are a document text extractor. You will receive one or more slide/page images "
+                "from a student's PDF submission. Return ONLY the visible text content, preserving "
+                "slide structure with 'Slide N:' headers and bullet points. Do not summarize, "
+                "critique, or add commentary — just transcribe the words on the slides."
+            ),
+        ).with_model("openai", "gpt-5.2")
+
+        msg = UserMessage(
+            text=(
+                f"Extract all visible text from these {len(images)} PDF page images, in order. "
+                "Prefix each page with 'Slide N:' where N is the 1-indexed page number. "
+                "Preserve bullet lists and headings. Return plain text only."
+            ),
+            file_contents=[ImageContent(image_base64=b) for b in images],
+        )
+        try:
+            resp = await chat.send_message(msg)
+            return (resp or "").strip()
+        except Exception as e:
+            logger.error(f"Vision fallback LLM call failed: {e}")
+            return ""
+
+    try:
+        # We're called from a sync extractor. If there's no running loop we can
+        # use asyncio.run; if we're already inside one (e.g. FastAPI async
+        # handler), spin the coroutine on a fresh thread's event loop.
+        try:
+            asyncio.get_running_loop()
+            import threading
+            result: dict = {"text": ""}
+
+            def _runner():
+                result["text"] = asyncio.run(_run())
+
+            t = threading.Thread(target=_runner, daemon=True)
+            t.start()
+            t.join(timeout=120)
+            return result["text"]
+        except RuntimeError:
+            # No running loop — safe to use asyncio.run directly
+            return asyncio.run(_run())
+    except Exception as e:
+        logger.error(f"Vision fallback runner error: {e}")
+        return ""
+
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract text from PDF file.
 
@@ -2198,6 +2299,16 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         if len(ocr_text) > len(text):
             logger.info(f"PDF extraction: OCR fallback recovered {len(ocr_text)} chars")
             text = ocr_text
+
+    # 4) Vision-model fallback (GPT-5.2 reads the slide images directly).
+    # Handles Google Slides / Canva exports where text lives in vector paths and
+    # environments without a local Tesseract binary. This is the most robust
+    # tier — runs last because it costs LLM tokens.
+    if len(text) < 40:
+        vision_text = _vision_extract_pdf_text(file_bytes)
+        if len(vision_text) > len(text):
+            logger.info(f"PDF extraction: vision fallback recovered {len(vision_text)} chars")
+            text = vision_text
 
     if text:
         return text
@@ -4762,7 +4873,16 @@ async def _run_auto_ai_review_for_submission(
             logger.error(f"Auto review: empty submission text for {submission_id}")
             await db.submissions.update_one(
                 {"submission_id": submission_id},
-                {"$set": {"ai_feedback_error": "No readable content found in the submission. If you uploaded a video or audio file, please ensure it contains clear spoken content.", "status": "review_failed"}},
+                {"$set": {
+                    "ai_feedback_error": (
+                        "We couldn't read any text from this submission — every extractor "
+                        "(PyPDF2, pdfplumber, OCR, and GPT vision) returned nothing. If it's a "
+                        "video/audio file the recording may be silent. If it's a PDF, ask the "
+                        "student to re-export from the source (PowerPoint 'Save as PDF', Google "
+                        "Slides 'Download as PDF') and re-upload."
+                    ),
+                    "status": "review_failed",
+                }},
             )
             return
 
@@ -5921,7 +6041,16 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
         raise HTTPException(status_code=500, detail=f"Error reading submission file: {type(e).__name__}")
     
     if not submission_text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract text from submission. The file may be empty or in an unsupported format.")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "We couldn't read any text from this submission after trying every extractor "
+                "(PyPDF2, pdfplumber, OCR, and GPT vision). If it's a video/audio file the recording "
+                "may be silent; if it's a PDF the file may be encrypted, corrupted, or a scanned "
+                "image the vision model couldn't parse. Ask the student to re-export from the source "
+                "(e.g. PowerPoint 'Save as PDF', Google Slides 'Download as PDF') and re-upload."
+            ),
+        )
     
     # Build context from course materials
     context_text = ""
