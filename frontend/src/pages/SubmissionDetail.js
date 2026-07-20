@@ -18,6 +18,7 @@ import {
   FileDown,
   Trash2,
   Download,
+  AlertTriangle,
   Eye,
   EyeOff
 } from 'lucide-react';
@@ -274,6 +275,8 @@ export default function SubmissionDetail() {
   const currentFeedback = submission.instructor_feedback || submission.ai_feedback;
   const isDraft = submission.status === 'draft';
   const isSent = submission.status === 'sent' || submission.feedback_sent;
+  const isReviewFailed = submission.status === 'review_failed';
+  const canGenerateReview = submission.status === 'pending' || isReviewFailed;
 
   return (
     <div className="min-h-screen bg-[#E1F0FF]" data-testid="submission-detail">
@@ -296,7 +299,7 @@ export default function SubmissionDetail() {
           </div>
           
           <div className="flex items-center gap-2">
-            {isInstructor && submission.status === 'pending' && (
+            {isInstructor && canGenerateReview && (
               <Button 
                 onClick={handleReview}
                 disabled={reviewing}
@@ -311,7 +314,7 @@ export default function SubmissionDetail() {
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Generate AI Feedback
+                    {isReviewFailed ? 'Retry AI Feedback' : 'Generate AI Feedback'}
                   </>
                 )}
               </Button>
@@ -334,6 +337,22 @@ export default function SubmissionDetail() {
       </header>
 
       <main className={`mx-auto px-6 md:px-12 py-8 ${previewOpen ? 'max-w-[1600px]' : 'max-w-4xl'}`}>
+        {/* AI Review Failure Banner — instructor-only, prompts retry */}
+        {isInstructor && isReviewFailed && submission.ai_feedback_error && (
+          <Card
+            className="bg-red-50 border-red-200 mb-6"
+            data-testid="review-failed-banner"
+          >
+            <CardContent className="p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800 mb-1">AI review did not complete</p>
+                <p className="text-sm text-red-700">{submission.ai_feedback_error}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Submission Info */}
         <Card className="bg-white border-[#B8D4E8] mb-6">
           <CardContent className="p-6">

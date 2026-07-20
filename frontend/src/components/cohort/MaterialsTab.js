@@ -16,6 +16,7 @@ const STATUS_STYLES = {
   sent: { className: 'bg-[#E1F0FF] text-[#22438E]', label: 'Reviewed' },
   draft: { className: 'bg-[#E1F0FF] text-[#6B21A8]', label: 'Draft' },
   pending: { className: 'bg-[#DBEAFE] text-[#1E40AF]', label: 'Pending' },
+  review_failed: { className: 'bg-red-100 text-red-700', label: 'Needs Attention' },
 };
 
 function SubmissionStatusBadge({ status }) {

@@ -67,7 +67,7 @@ export default function Submissions() {
     );
   }
 
-  const pendingSubmissions = submissions.filter(s => s.status === 'pending');
+  const pendingSubmissions = submissions.filter(s => s.status === 'pending' || s.status === 'review_failed');
   const draftSubmissions = submissions.filter(s => s.status === 'draft');
   const sentSubmissions = submissions.filter(s => s.status === 'sent' || s.feedback_sent);
 

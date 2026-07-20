@@ -96,13 +96,13 @@ export default function InstructorDashboard() {
     }
   };
 
-  const pendingSubmissions = submissions.filter(s => s.status === 'pending');
+  const pendingSubmissions = submissions.filter(s => s.status === 'pending' || s.status === 'review_failed');
   const draftSubmissions = submissions.filter(s => s.status === 'draft');
   const totalActionRequired = pendingSubmissions.length + draftSubmissions.length;
 
   const cohortPendingCounts = {};
   submissions.forEach(s => {
-    if (s.status === 'pending' || s.status === 'draft') {
+    if (s.status === 'pending' || s.status === 'draft' || s.status === 'review_failed') {
       cohortPendingCounts[s.cohort_id] = (cohortPendingCounts[s.cohort_id] || 0) + 1;
     }
   });

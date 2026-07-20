@@ -3907,7 +3907,7 @@ async def get_student_assignments_dashboard(user: dict = Depends(get_current_use
                 sub = subs_by_ms.get(ms_id)
                 if sub:
                     raw = sub.get("status") or "pending"
-                    status = {"pending": "submitted", "draft": "under_review", "sent": "feedback_provided", "reviewed": "under_review"}.get(raw, raw)
+                    status = {"pending": "submitted", "draft": "under_review", "sent": "feedback_provided", "reviewed": "under_review", "review_failed": "under_review"}.get(raw, raw)
                     submission_summary = {
                         "submission_id": sub["submission_id"],
                         "status": status,
@@ -4082,6 +4082,10 @@ async def get_student_dashboard(user: dict = Depends(get_current_user)):
                     if sub.get("status") == "pending":
                         hw_entry["status"] = "submitted"
                     elif sub.get("status") == "draft":
+                        hw_entry["status"] = "under_review"
+                    elif sub.get("status") == "review_failed":
+                        # From the student's perspective this still reads as "we're
+                        # working on it" — the instructor sees the error and retries.
                         hw_entry["status"] = "under_review"
                     elif sub.get("status") == "sent":
                         hw_entry["status"] = "feedback_provided"
@@ -4895,7 +4899,24 @@ Provide feedback with exactly 3 bullet points under "What You Did Well:" and exa
             except Exception as e:
                 logger.error(f"auto_send after auto-review failed for {submission_id}: {e}")
     except Exception as e:
-        logger.error(f"Auto AI review failed for {submission_id}: {e}")
+        logger.error(f"Auto AI review failed for {submission_id}: {type(e).__name__}: {e}", exc_info=True)
+        # Persist the failure so the instructor sees a clear state instead of the
+        # submission silently sitting in "pending" forever. Without this, missing
+        # dependencies, transient LLM errors, or unexpected exceptions leave the
+        # student's submission stuck with no visible signal.
+        try:
+            await db.submissions.update_one(
+                {"submission_id": submission_id},
+                {"$set": {
+                    "ai_feedback_error": (
+                        f"AI review could not complete ({type(e).__name__}). "
+                        "Click 'Generate AI Feedback' to retry, or contact support if this persists."
+                    ),
+                    "status": "review_failed",
+                }},
+            )
+        except Exception as persist_err:
+            logger.error(f"Also failed to persist review_failed status for {submission_id}: {persist_err}")
 
 
 @api_router.post("/milestones/{milestone_id}/submit-on-behalf")
@@ -6025,7 +6046,8 @@ Provide feedback with exactly 3 bullet points under "What You Did Well:" and exa
         {"$set": {
             "ai_feedback": feedback,
             "status": "draft",  # Changed from "reviewed" to "draft"
-            "reviewed_at": datetime.now(timezone.utc).isoformat()
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "ai_feedback_error": None,  # clear any prior failure on successful retry
         }}
     )
 

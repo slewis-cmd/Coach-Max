@@ -12,6 +12,7 @@ const statusColors = {
   pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending Review' },
   draft: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Draft' },
   sent: { bg: 'bg-green-100', text: 'text-green-800', label: 'Sent' },
+  review_failed: { bg: 'bg-red-100', text: 'text-red-700', label: 'Needs Attention' },
 };
 
 function FeedbackRow({ sub, mat, onDelete }) {
