@@ -57,15 +57,45 @@ def test_extract_text_from_pdf_reads_content():
 
 
 def test_extract_text_from_pdf_handles_garbage_gracefully():
-    # Not a real PDF — extractor should not crash, should just return "" or best-effort.
+    # Not a real PDF — extractor should not crash, and MUST NOT dump the raw bytes
+    # into the returned string (that would poison the AI review prompt).
     text = extract_text_from_pdf(b"not a pdf at all")
     assert isinstance(text, str)
-    # Should not raise. Empty or fallback plain-text is acceptable.
+    assert text == "", "extractor must not return raw bytes for a bogus PDF"
 
 
 def test_extract_text_from_pdf_empty_bytes():
     text = extract_text_from_pdf(b"")
     assert text == ""
+
+
+def test_extract_text_from_file_never_returns_raw_pdf_bytes():
+    """Regression: when a real PDF has no extractable text AND OCR is unavailable/empty,
+    extract_text_from_file must return "" — NOT the raw PDF header/streams. Otherwise
+    the AI review prompt gets fed '%PDF-1.4', '/Creator (Google)', '/MediaBox …' and
+    the LLM writes feedback about PDF internals instead of the student's work.
+    """
+    from server import extract_text_from_file  # noqa: WPS433 — test-local import
+
+    # Minimal valid-ish PDF header bytes that PyPDF2 / pdfplumber will reject or
+    # return empty for, and that OCR will not recover text from.
+    fake_pdf = b"%PDF-1.4\n%garbage stream data here\n/Creator (Google)\n/Title (Title)\n%%EOF\n"
+    result = extract_text_from_file(fake_pdf, "deck.pdf")
+    assert "%PDF" not in result
+    assert "/Creator" not in result
+    assert "/Title" not in result
+    assert "MediaBox" not in result
+
+
+def test_extract_text_from_file_never_returns_raw_docx_bytes():
+    """Same guarantee for .docx (which is a zip binary — decoding it dumps zip
+    headers like 'PK\\x03\\x04' into the prompt)."""
+    from server import extract_text_from_file  # noqa: WPS433
+
+    zip_garbage = b"PK\x03\x04" + b"\x00" * 200
+    result = extract_text_from_file(zip_garbage, "answer.docx")
+    assert "PK" not in result or result == ""
+    assert len(result) < 5, f"docx extractor should not leak binary; got: {result!r}"
 
 
 def _build_image_only_pdf(text_lines):

@@ -2202,11 +2202,11 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     if text:
         return text
 
-    # 4) Last-resort: treat bytes as text (rarely helpful, but preserves prior behaviour)
-    try:
-        return file_bytes.decode('utf-8', errors='ignore').strip()
-    except Exception:
-        return ""
+    # No safe text extractable. Do NOT return raw utf-8-decoded bytes for a PDF —
+    # that dumps PDF header/stream garbage (%PDF-1.4, /Creator, /MediaBox, …) into
+    # the AI review prompt and produces feedback about PDF internals instead of the
+    # student's actual work.
+    return ""
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
     """Extract text from Word document"""
@@ -2218,35 +2218,31 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         return text.strip()
     except Exception as e:
         logger.error(f"DOCX extraction error: {e}")
-        # Try as plain text if DOCX parsing fails
-        try:
-            return file_bytes.decode('utf-8', errors='ignore').strip()
-        except Exception:
-            return ""
+        # Do NOT return raw utf-8-decoded bytes here — a .docx is a zip file and
+        # decoding it dumps zip-header garbage into the AI review prompt.
+        return ""
 
 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-    """Extract text from file based on extension"""
+    """Extract text from file based on extension.
+
+    For known binary formats (pdf, docx, doc) we NEVER fall back to a raw utf-8
+    decode — that would send PDF/zip binary streams (e.g. ``%PDF-1.4``, ``/Creator``,
+    ``/MediaBox``) into the AI review prompt and produce feedback about the PDF
+    container instead of the student's work. Better to return "" and let the
+    caller surface a clear "no readable content" error.
+    """
     ext = filename.lower().split(".")[-1] if "." in filename else ""
-    text = ""
-    
+
     if ext == "pdf":
-        text = extract_text_from_pdf(file_bytes)
-    elif ext in ["docx", "doc"]:
-        text = extract_text_from_docx(file_bytes)
-    else:
-        try:
-            text = file_bytes.decode('utf-8', errors='ignore').strip()
-        except (UnicodeDecodeError, AttributeError):
-            text = ""
-    
-    # If still empty, try plain text as fallback
-    if not text:
-        try:
-            text = file_bytes.decode('utf-8', errors='ignore').strip()
-        except (UnicodeDecodeError, AttributeError):
-            text = ""
-    
-    return text
+        return extract_text_from_pdf(file_bytes)
+    if ext in ["docx", "doc"]:
+        return extract_text_from_docx(file_bytes)
+
+    # Plain-text / unknown extensions: utf-8 decode is safe.
+    try:
+        return file_bytes.decode('utf-8', errors='ignore').strip()
+    except (UnicodeDecodeError, AttributeError):
+        return ""
 
 @api_router.post("/cohorts/{cohort_id}/materials")
 async def upload_material(
