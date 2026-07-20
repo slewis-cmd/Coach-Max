@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 53 — Per-assignment allowed_extensions override. Created /app/backend/tests/test_allowed_extensions.py with 26 tests (all pass). Verified: (1) _normalize_extensions helper — strings/lists/None/dedupe/dot-strip/lowercase; (2) _effective_allowed_extensions — override wins, else type default, else DEFAULT_HOMEWORK_EXTENSIONS; (3) POST /api/cohorts/{cid}/assignments — normalizes + persists ['MP4', '.MOV', 'PDF', 'pdf'] → ['mp4','mov','pdf']; omitted field stored as null; (4) PUT /api/assignments/{aid} — set override, explicit-clear via empty list [] → null, omit-field-leaves-alone; (5) POST /api/milestones/{mid}/submit — 60_second_pitch + override ['mp4','pdf'] accepts .pdf (was default-rejected), accepts .mp4, rejects .txt with OVERRIDE list ('.mp4, .pdf') in error msg (no '.mov'); no override → falls back to type default (rejects .pdf); (6) POST /api/milestones/{mid}/submit-on-behalf — same override enforcement (.pdf accepted, .txt rejected); (7) legacy POST /api/materials/{mid}/submit — uses _effective_allowed_extensions({}, type) → type default (60sec rejects .pdf); (8) GET /api/submit-link/a/{aid}/w/{wk} — returns effective allowed_extensions (override if set, else type default). Regression: full test_assignments_phase2 (26) + test_milestone_submit_auto_review (5) + test_magic_link (12) pass. test_video_submission_review pre-existing failure (4) due to missing ffmpeg — NOT related to this feature. Frontend UI verified via Playwright: (a) DirectSubmit page for asgn with override ['mp4','pdf'] has file input accept='.mp4,.pdf', hint 'MP4, PDF', .mov correctly excluded; (b) AssignmentFormDialog shows 'Accepted file types (optional)' input with data-testid='assignment-allowed-extensions-input', helper text present, correct placeholder per type.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_allowed_extensions.py",
+    "/app/test_reports/pytest/iter53_allowed_extensions.xml",
+    "/app/test_reports/pytest/iter53_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_normalize_extensions signature is loosely typed (accepts anything) and silently returns None for unsupported input like dicts. This is safe because Pydantic AssignmentCreate/Update enforce Optional[List[str]] at the API boundary. Direct calls with list-of-dicts would stringify each dict and store the stringified form — not blocking, just noteworthy for future direct callers.",
+    "_effective_allowed_extensions correctly treats an empty list [] as 'no override' (line 892: `if override:` — empty list is falsy). This makes PUT with [] clear the override AND fall back to type default consistently on subsequent submissions — behavior matches the spec.",
+    "Error message in submit endpoints uses the EFFECTIVE list (override values shown when override exists), giving students accurate feedback — verified in test_override_rejects_txt_with_override_in_error.",
+    "Frontend AssignmentFormDialog handleSave (AssignmentsTab.js:311-315) mirrors backend normalization — parses comma/space/semicolon, strips leading dot, lowercases, filters empties. Empty input → null → backend stores null → next submit falls back to defaults. Round-trip complete."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_allowed_extensions.py (NEW — 26 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (26/26 new + 26/26 phase2 + 5/5 auto-review + 12/12 magic_link)",
+    "frontend": "100% (UI accept attr + form input verified)"
+  },
+  "test_credentials": "Seeded temporary super_admin/instructor/student session tokens with TEST_AEXT_ prefix, cleaned in teardown. UI test used seeded TEST_UI_AEXT_ session token for real slewis@theboostpad.org super admin, cleaned post-run.",
+  "seed_data_creation": "Module-scoped fixture in test_allowed_extensions.py creates TEST_AEXT_-prefixed sa/instructor/student users + session tokens, plus per-test cohorts. Auto-cleanup on module teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 53 feature (per-assignment allowed_extensions override) fully verified — 26 targeted backend tests + 2 UI checks pass. Pre-existing test_video_submission_review.py failures (4) are due to missing ffmpeg binary in the environment — unrelated to this feature. No behavioral regressions. Endpoints unchanged in signature — only additive schema field. Frontend uses new field via resolver response and via form input.",
+  "rca of the issue": "N/A — additive feature verified working per spec."
+}

@@ -289,6 +289,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
   const [submissionType, setSubmissionType] = useState('60_second_pitch');
   const [feedbackTemplate, setFeedbackTemplate] = useState('');
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
+  const [allowedExtensions, setAllowedExtensions] = useState(''); // comma-separated user input
   const [questionnaireFields, setQuestionnaireFields] = useState([]);
   const [saving, setSaving] = useState(false);
 
@@ -299,12 +300,19 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
       setSubmissionType(editing?.submission_type || '60_second_pitch');
       setFeedbackTemplate(editing?.feedback_template || '');
       setDriveFolderUrl(editing?.drive_folder_url || '');
+      setAllowedExtensions((editing?.allowed_extensions || []).join(', '));
       setQuestionnaireFields(editing?.questionnaire_fields || []);
     }
   }, [open, editing]);
 
   const handleSave = async () => {
     if (!title.trim()) return toast.error('Title is required');
+    // Parse allowed_extensions: comma/space/semicolon separated → list. Empty = null (use default).
+    const parsedExts = allowedExtensions
+      .split(/[,;\s]+/)
+      .map((e) => e.replace(/^\./, '').trim().toLowerCase())
+      .filter(Boolean);
+    const allowedExtPayload = parsedExts.length > 0 ? parsedExts : null;
     setSaving(true);
     try {
       if (editing) {
@@ -314,6 +322,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
           feedback_template: feedbackTemplate,
           drive_folder_url: driveFolderUrl,
           questionnaire_fields: submissionType === 'business_questionnaire' ? questionnaireFields : null,
+          allowed_extensions: allowedExtPayload,
         });
         toast.success('Assignment updated');
       } else {
@@ -324,6 +333,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
           feedback_template: feedbackTemplate,
           drive_folder_url: driveFolderUrl,
           questionnaire_fields: submissionType === 'business_questionnaire' ? questionnaireFields : null,
+          allowed_extensions: allowedExtPayload,
         });
         toast.success('Assignment created');
       }
@@ -425,6 +435,30 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
               className="mt-1"
               placeholder="https://drive.google.com/..."
             />
+          </div>
+          <div>
+            <Label htmlFor="asgn-exts">Accepted file types (optional)</Label>
+            <Input
+              id="asgn-exts"
+              data-testid="assignment-allowed-extensions-input"
+              value={allowedExtensions}
+              onChange={(e) => setAllowedExtensions(e.target.value)}
+              className="mt-1"
+              placeholder={
+                submissionType === 'business_questionnaire'
+                  ? 'N/A — questionnaire has no file upload'
+                  : (submissionType === '60_second_pitch' ? 'e.g. mp4, mov, mp3, pdf, docx (leave blank for defaults)' :
+                     submissionType === '10_slide_pitch' ? 'e.g. pdf, pptx (leave blank for defaults)' :
+                     submissionType === 'case_activity' ? 'e.g. pdf, docx, txt (leave blank for defaults)' :
+                     'e.g. pdf, docx, mp4')
+              }
+              disabled={submissionType === 'business_questionnaire'}
+            />
+            <p className="text-xs text-[#666] mt-1">
+              Comma-separated list of file extensions students may upload. Leave blank to use the
+              defaults for this submission type. Example: <code>mp4, mov, pdf, docx</code> allows both
+              video and written submissions.
+            </p>
           </div>
           <FeedbackTemplateField
             value={feedbackTemplate}

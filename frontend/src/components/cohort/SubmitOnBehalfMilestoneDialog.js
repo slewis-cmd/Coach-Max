@@ -46,6 +46,11 @@ export function SubmitOnBehalfMilestoneDialog({
 
   const typeConfig = getSubmissionTypeConfig(assignment.submission_type);
   const isQuestionnaire = assignment.submission_type === 'business_questionnaire';
+  // Per-assignment allowed_extensions override wins over the type default.
+  const effectiveExtensions = (assignment.allowed_extensions && assignment.allowed_extensions.length > 0)
+    ? assignment.allowed_extensions
+    : (typeConfig?.extensions || ['pdf', 'docx']);
+  const acceptAttr = effectiveExtensions.map((e) => `.${e}`).join(',');
 
   const handleSubmit = async () => {
     if (!studentId) {
@@ -130,16 +135,14 @@ export function SubmitOnBehalfMilestoneDialog({
                   id="sob-file-upload"
                   data-testid="sob-file-input"
                   type="file"
-                  accept={typeConfig?.accept || '.pdf,.docx'}
+                  accept={acceptAttr}
                   className="hidden"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                 />
               </div>
-              {typeConfig && (
-                <p className="text-xs text-[#666] mt-1">
-                  Allowed: {typeConfig.extensions.map((e) => `.${e}`).join(', ')}
-                </p>
-              )}
+              <p className="text-xs text-[#666] mt-1">
+                Allowed: {effectiveExtensions.map((e) => `.${e}`).join(', ')}
+              </p>
             </div>
 
             <div className="flex items-start gap-2 p-3 bg-[#E1F0FF] rounded-lg">

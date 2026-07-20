@@ -781,6 +781,9 @@ class Assignment(BaseModel):
     feedback_template: Optional[str] = ""  # Default rubric across all milestones (milestone override wins)
     drive_folder_url: Optional[str] = ""  # Default drive folder (milestone override wins)
     questionnaire_fields: Optional[List[Dict[str, Any]]] = None  # for submission_type == 'business_questionnaire'
+    # Optional per-assignment override for accepted file extensions. Empty/null = use the
+    # submission_type's default from SUBMISSION_TYPE_CONFIG. Extensions stored lowercase, no dots.
+    allowed_extensions: Optional[List[str]] = None
     milestones: List[Dict[str, Any]] = []  # Embedded — see AssignmentMilestone shape below
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -807,6 +810,7 @@ class AssignmentCreate(BaseModel):
     feedback_template: Optional[str] = ""
     drive_folder_url: Optional[str] = ""
     questionnaire_fields: Optional[List[Dict[str, Any]]] = None
+    allowed_extensions: Optional[List[str]] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -816,6 +820,7 @@ class AssignmentUpdate(BaseModel):
     feedback_template: Optional[str] = None
     drive_folder_url: Optional[str] = None
     questionnaire_fields: Optional[List[Dict[str, Any]]] = None
+    allowed_extensions: Optional[List[str]] = None
     order: Optional[int] = None
 
 
@@ -859,6 +864,37 @@ SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
 }
 SUBMISSION_TYPE_IDS = list(SUBMISSION_TYPE_CONFIG.keys())
 DEFAULT_HOMEWORK_EXTENSIONS = ["pdf", "docx", "doc"]
+
+
+def _normalize_extensions(raw) -> Optional[List[str]]:
+    """Normalize a user-provided extension list. Accepts list or comma/space-separated string.
+    Returns cleaned lowercase list (no dots, deduped, ordered) or None if input is empty."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        parts = [p.strip() for p in raw.replace(";", ",").replace(" ", ",").split(",")]
+    elif isinstance(raw, list):
+        parts = [str(p).strip() for p in raw]
+    else:
+        return None
+    seen = []
+    for p in parts:
+        p = p.lstrip(".").lower()
+        if p and p not in seen:
+            seen.append(p)
+    return seen or None
+
+
+def _effective_allowed_extensions(assignment: dict, submission_type: str) -> List[str]:
+    """Return the allowed file extensions for an assignment. Per-assignment override wins
+    over the type default from SUBMISSION_TYPE_CONFIG."""
+    override = assignment.get("allowed_extensions") if assignment else None
+    if override:
+        return override
+    cfg = SUBMISSION_TYPE_CONFIG.get(submission_type)
+    if cfg and cfg.get("input_kind") == "file":
+        return cfg.get("extensions") or DEFAULT_HOMEWORK_EXTENSIONS
+    return DEFAULT_HOMEWORK_EXTENSIONS
 
 
 def _parse_questionnaire_fields(raw: Optional[str]) -> Optional[List[Dict[str, Any]]]:
@@ -2438,6 +2474,7 @@ async def create_custom_assignment(cohort_id: str, payload: AssignmentCreate, us
         feedback_template=(payload.feedback_template or "").strip(),
         drive_folder_url=_validate_drive_url(payload.drive_folder_url or ""),
         questionnaire_fields=payload.questionnaire_fields if payload.submission_type == "business_questionnaire" else None,
+        allowed_extensions=_normalize_extensions(payload.allowed_extensions),
         milestones=_build_default_milestones(payload.assignment_key or "custom", cohort.get("total_weeks", 14)),
     )
     await db.assignments.insert_one(asgn.dict())
@@ -2460,6 +2497,9 @@ async def update_assignment(assignment_id: str, payload: AssignmentUpdate, user:
             updates[field] = val
     if payload.drive_folder_url is not None:
         updates["drive_folder_url"] = _validate_drive_url(payload.drive_folder_url)
+    if payload.allowed_extensions is not None:
+        # Empty list explicitly clears the override → falls back to type default
+        updates["allowed_extensions"] = _normalize_extensions(payload.allowed_extensions)
     if updates:
         updates["updated_at"] = datetime.now(timezone.utc)
         await db.assignments.update_one({"assignment_id": assignment_id}, {"$set": updates})
@@ -2537,6 +2577,7 @@ async def resolve_assignment_submit_link(assignment_id: str, week_number: int, c
             "feedback_template": asgn.get("feedback_template"),
             "drive_folder_url": asgn.get("drive_folder_url"),
             "questionnaire_fields": asgn.get("questionnaire_fields") or [],
+            "allowed_extensions": _effective_allowed_extensions(asgn, asgn.get("submission_type") or ""),
         },
         "milestone": milestone,
     }
@@ -2953,11 +2994,7 @@ async def submit_milestone(
             raise HTTPException(status_code=400, detail="A file is required for this assignment")
         filename = file.filename or "unnamed"
         ext = filename.lower().split(".")[-1]
-        allowed_exts = (
-            SUBMISSION_TYPE_CONFIG[submission_type]["extensions"]
-            if submission_type in SUBMISSION_TYPE_CONFIG and SUBMISSION_TYPE_CONFIG[submission_type]["input_kind"] == "file"
-            else DEFAULT_HOMEWORK_EXTENSIONS
-        )
+        allowed_exts = _effective_allowed_extensions(asgn, submission_type)
         if ext not in allowed_exts:
             raise HTTPException(
                 status_code=400,
@@ -4351,11 +4388,9 @@ async def submit_homework(
             raise HTTPException(status_code=400, detail="A file is required for this assignment")
         filename = file.filename or "unnamed"
         ext = filename.lower().split(".")[-1]
-        allowed_exts = (
-            SUBMISSION_TYPE_CONFIG[submission_type]["extensions"]
-            if submission_type in SUBMISSION_TYPE_CONFIG and SUBMISSION_TYPE_CONFIG[submission_type]["input_kind"] == "file"
-            else DEFAULT_HOMEWORK_EXTENSIONS
-        )
+        # Legacy material-based submissions don't have an assignment record → helper falls
+        # back to the submission_type's default from SUBMISSION_TYPE_CONFIG.
+        allowed_exts = _effective_allowed_extensions({}, submission_type)
         if ext not in allowed_exts:
             raise HTTPException(
                 status_code=400,
@@ -4719,11 +4754,7 @@ async def submit_milestone_on_behalf(
             raise HTTPException(status_code=400, detail="A file is required for this assignment")
         filename = file.filename or "unnamed"
         ext = filename.lower().split(".")[-1]
-        allowed_exts = (
-            SUBMISSION_TYPE_CONFIG[submission_type]["extensions"]
-            if submission_type in SUBMISSION_TYPE_CONFIG and SUBMISSION_TYPE_CONFIG[submission_type]["input_kind"] == "file"
-            else DEFAULT_HOMEWORK_EXTENSIONS
-        )
+        allowed_exts = _effective_allowed_extensions(asgn, submission_type)
         if ext not in allowed_exts:
             raise HTTPException(
                 status_code=400,

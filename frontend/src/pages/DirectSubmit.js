@@ -380,8 +380,12 @@ export function AssignmentMilestoneSubmit() {
   const fields = assignment.questionnaire_fields || [];
   const driveUrl = milestone.drive_folder_url_override || assignment.drive_folder_url || '';
   const HeaderIcon = ICONS[config?.icon] || FileText;
-  const acceptAttr = config?.accept || '.pdf,.docx,.doc';
-  const extHint = config?.extensions?.length ? config.extensions.map(e => e.toUpperCase()).join(', ') : 'PDF or DOCX';
+  // Per-assignment allowed_extensions override wins over the submission_type's defaults.
+  const effectiveExtensions = (assignment.allowed_extensions && assignment.allowed_extensions.length > 0)
+    ? assignment.allowed_extensions
+    : (config?.extensions || ['pdf', 'docx', 'doc']);
+  const acceptAttr = effectiveExtensions.map((e) => `.${e}`).join(',');
+  const extHint = effectiveExtensions.map((e) => e.toUpperCase()).join(', ');
 
   const missingRequired = isQuestionnaire && fields.some(
     (f) => f.required && !(answers[f.id] || '').trim()
