@@ -637,16 +637,13 @@ Follow-up work needed to complete the vision:
 
 
 ### Format-Aware AI Review + Robust PDF Extraction (Completed - July 20, 2026)
-- [x] `extract_text_from_pdf`: added **pdfplumber** fallback when PyPDF2 returns <40 chars (fixes silent-empty extraction on Canva/Keynote/Google-Slides–exported slide decks where text lives in XObjects). Final utf-8 decode retained as last-resort.
-- [x] `extract_text_from_pdf`: added **Tesseract OCR** third-tier fallback for scanned or image-only PDFs. Uses `pypdfium2` to rasterize each page at 2× scale (~144 DPI) then `pytesseract` for OCR. Gracefully skips (logs warning, returns "") when the tesseract binary is not installed on the host, so PDF review never breaks.
-- [x] New helper `_submission_format_context(submission, assignment_title)` classifies each submission into: video, audio, slide_deck, document, writeup, questionnaire, other. Returns a natural-language descriptor ("your recording", "your slide deck", "your document", "your writeup", "your questionnaire answers") and a targeted guidance block.
-- [x] Both AI review paths — `_run_auto_ai_review_for_submission` (background auto-review) and `review_submission` (manual instructor-triggered) — now inject the format-aware `fmt_block` into the LLM system prompt AND surface `SUBMISSION FORMAT: <descriptor> (<kind>)` in the user prompt above the truncated submission text. This ensures the AI references the correct medium (e.g. "on your Problem slide" for Kawasaki decks, "in your recording" for the 60-Second Pitch) rather than defaulting to generic "document" phrasing.
-- [x] Added `/app/backend/tests/test_pdf_extraction_and_format_context.py` — 13 tests, all passing:
-  - Real fpdf2-generated PDF round-trip (PyPDF2 path)
-  - Image-only PDF round-trip via Tesseract OCR (verified recovers "KAWASAKI", "PROBLEM", "SOLUTION", "SHIFTSURE" from rasterized text)
-  - All 9 format-classification branches
-- [x] Regression verified via testing_agent (iteration_54): 39/40 relevant existing tests pass; no new regressions.
+- [x] `extract_text_from_pdf`: added **pdfplumber** fallback when PyPDF2 returns <40 chars (fixes silent-empty extraction on Canva/Keynote/Google-Slides–exported slide decks where text lives in XObjects).
+- [x] `extract_text_from_pdf`: added **Tesseract OCR** third-tier fallback for scanned or image-only PDFs (rasterizes via `pypdfium2` at 2× scale then OCRs each page). Gracefully skips when tesseract binary is unavailable so PDF review never breaks.
+- [x] **Critical bug fix**: `extract_text_from_file` and `extract_text_from_pdf/docx` NO LONGER fall back to `file_bytes.decode('utf-8')` for known binary formats (pdf/docx/doc). Previously, when all parsers returned empty, raw PDF headers (`%PDF-1.4`, `/Creator (Google)`, `/Title`, `/MediaBox`) leaked into the AI review prompt and Coach Max wrote feedback about PDF internals instead of the student's work (real bug found in production feedback). Now returns "" so the submission endpoint surfaces a clear "no readable content" error.
+- [x] New helper `_submission_format_context(submission, assignment_title)` classifies each submission into: video, audio, slide_deck, document, writeup, questionnaire, other. Returns a natural-language descriptor and targeted guidance block.
+- [x] Both AI review paths — `_run_auto_ai_review_for_submission` and `review_submission` — inject the format-aware `fmt_block` into the LLM system prompt AND surface `SUBMISSION FORMAT: <descriptor> (<kind>)` in the user prompt.
+- [x] `/app/backend/tests/test_pdf_extraction_and_format_context.py` — 15 tests, all passing, including two regressions guaranteeing raw PDF/DOCX binary can never leak into the review prompt.
 - [x] Added dependencies: `pdfplumber==0.11.10`, `pdfminer.six==20260107`, `pypdfium2==5.12.1`, `pytesseract==0.3.13` (pinned in `requirements.txt`).
-- [x] **System package requirement** for production: `tesseract-ocr` (installed via `apt-get install -y tesseract-ocr`). The Python code degrades gracefully when the binary is absent, but for OCR fallback to activate in production the platform image must include tesseract-ocr.
+- [x] **System package requirement** for production: `tesseract-ocr` (installed via `apt-get install -y tesseract-ocr`). Python code degrades gracefully without it.
 
 
