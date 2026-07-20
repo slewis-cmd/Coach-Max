@@ -634,3 +634,13 @@ Follow-up work needed to complete the vision:
 ├── pages/ (CohortDetail, InstructorDashboard, StudentDashboard, AdminManagement, etc.)
 └── context/AuthContext.js
 ```
+
+
+### Format-Aware AI Review + Robust PDF Extraction (Completed - July 20, 2026)
+- [x] `extract_text_from_pdf`: added **pdfplumber** fallback when PyPDF2 returns <40 chars (fixes silent-empty extraction on Canva/Keynote/Google-Slides–exported slide decks where text lives in XObjects). Final utf-8 decode retained as last-resort.
+- [x] New helper `_submission_format_context(submission, assignment_title)` classifies each submission into: video, audio, slide_deck, document, writeup, questionnaire, other. Returns a natural-language descriptor ("your recording", "your slide deck", "your document", "your writeup", "your questionnaire answers") and a targeted guidance block.
+- [x] Both AI review paths — `_run_auto_ai_review_for_submission` (background auto-review) and `review_submission` (manual instructor-triggered) — now inject the format-aware `fmt_block` into the LLM system prompt AND surface `SUBMISSION FORMAT: <descriptor> (<kind>)` in the user prompt above the truncated submission text. This ensures the AI references the correct medium (e.g. "on your Problem slide" for Kawasaki decks, "in your recording" for the 60-Second Pitch) rather than defaulting to generic "document" phrasing.
+- [x] Added `/app/backend/tests/test_pdf_extraction_and_format_context.py` — 12 tests, all passing (real fpdf2-generated PDF round-trip + all format-classification branches).
+- [x] Regression verified via testing_agent (iteration_54): 39/40 relevant existing tests pass; no new regressions.
+- [x] Added dependencies: `pdfplumber==0.11.10`, `pdfminer.six==20260107`, `pypdfium2==5.12.1` (pinned in `requirements.txt`).
+
