@@ -654,3 +654,10 @@ Follow-up work needed to complete the vision:
 - [x] `tesseract-ocr` system binary is optional — the vision fallback covers the same use cases and works everywhere.
 
 
+
+### Per-Assignment Allowed Extensions on Thinkific-Linked Direct Submit (Completed - July 20, 2026)
+- [x] **Bug**: `/api/submit-link/{material_id}` (the endpoint the Thinkific-embedded student links call) did NOT return the assignment's `allowed_extensions` override. DirectSubmit.js then fell back to the submission-type default (`.pdf,.docx`), so expanded file types set by the instructor were invisible on Thinkific links even though they worked in the milestone-based submit flow.
+- [x] **Backend fix**: endpoint now resolves the corresponding assignment via `(cohort_id, submission_type, is_active=True)` and returns `_effective_allowed_extensions(asgn, submission_type)`. When multiple assignments share the same submission_type in a cohort, prefers the one with a non-empty override.
+- [x] **Frontend fix**: DirectSubmit.js material-link branch now honors `info.allowed_extensions` (matching the milestone-branch behaviour), rendering the correct `accept="..."` attribute and updated extension hint on the upload input.
+- [x] Verified end-to-end via curl: creating a test material linked to an assignment with `allowed_extensions: ['mp4','mov','pdf']` now returns exactly those extensions instead of the type default.
+

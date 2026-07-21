@@ -3458,7 +3458,31 @@ async def get_submit_link_info(material_id: str):
         {"cohort_id": {"$in": cohort_ids}},
         {"_id": 0, "cohort_id": 1, "name": 1}
     ).to_list(20)
-    
+
+    # Resolve the per-assignment allowed_extensions override so the DirectSubmit
+    # page renders the correct <input accept="..."> attribute. Without this the
+    # student-facing Thinkific link only offers the submission-type default
+    # (.pdf/.docx) even when the instructor expanded the list on the assignment.
+    # If multiple assignments exist in the same cohort with the same
+    # submission_type, prefer the one that actually has a non-empty override.
+    submission_type = material.get("submission_type") or ""
+    asgn = None
+    if cohort_ids and submission_type:
+        query = {
+            "cohort_id": {"$in": cohort_ids},
+            "submission_type": submission_type,
+            "is_active": True,
+        }
+        asgn = await db.assignments.find_one(
+            {**query, "allowed_extensions": {"$exists": True, "$ne": None, "$not": {"$size": 0}}},
+            {"_id": 0, "allowed_extensions": 1, "submission_type": 1},
+        )
+        if not asgn:
+            asgn = await db.assignments.find_one(
+                query,
+                {"_id": 0, "allowed_extensions": 1, "submission_type": 1},
+            )
+
     return {
         "material_id": material_id,
         "title": material.get("title", ""),
@@ -3466,8 +3490,9 @@ async def get_submit_link_info(material_id: str):
         "file_name": material.get("file_name"),
         "description": material.get("description", ""),
         "drive_folder_url": material.get("drive_folder_url", ""),
-        "submission_type": material.get("submission_type"),
+        "submission_type": submission_type,
         "questionnaire_fields": material.get("questionnaire_fields") or [],
+        "allowed_extensions": _effective_allowed_extensions(asgn or {}, submission_type),
         "cohorts": cohorts
     }
 
@@ -4711,9 +4736,28 @@ async def submit_homework(
             raise HTTPException(status_code=400, detail="A file is required for this assignment")
         filename = file.filename or "unnamed"
         ext = filename.lower().split(".")[-1]
-        # Legacy material-based submissions don't have an assignment record → helper falls
-        # back to the submission_type's default from SUBMISSION_TYPE_CONFIG.
-        allowed_exts = _effective_allowed_extensions({}, submission_type)
+        # Legacy material-based submissions don't carry an assignment_id, but the
+        # instructor may still have configured a per-assignment allowed_extensions
+        # override on the Assignment sharing this cohort + submission_type. Look
+        # it up so Thinkific-linked uploads honour the same expanded file types
+        # as the milestone flow. Prefer an assignment that has a non-empty
+        # override (in case multiple exist for the pair).
+        submit_asgn = None
+        if submission_cohort_id and submission_type:
+            query = {
+                "cohort_id": submission_cohort_id,
+                "submission_type": submission_type,
+                "is_active": True,
+            }
+            submit_asgn = await db.assignments.find_one(
+                {**query, "allowed_extensions": {"$exists": True, "$ne": None, "$not": {"$size": 0}}},
+                {"_id": 0, "allowed_extensions": 1},
+            )
+            if not submit_asgn:
+                submit_asgn = await db.assignments.find_one(
+                    query, {"_id": 0, "allowed_extensions": 1}
+                )
+        allowed_exts = _effective_allowed_extensions(submit_asgn or {}, submission_type)
         if ext not in allowed_exts:
             raise HTTPException(
                 status_code=400,

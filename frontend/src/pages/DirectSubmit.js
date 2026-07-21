@@ -122,8 +122,15 @@ export default function DirectSubmit() {
   }
 
   const HeaderIcon = ICONS[config?.icon] || FileText;
-  const acceptAttr = config?.accept || '.pdf,.docx,.doc';
-  const extHint = config?.extensions?.length ? config.extensions.map(e => e.toUpperCase()).join(', ') : 'PDF or DOCX';
+  // Per-assignment allowed_extensions override (set on the linked Assignment)
+  // wins over the submission-type default from getSubmissionTypeConfig. This
+  // matches the milestone-flow behaviour at line ~384 so the Thinkific-linked
+  // page offers the same expanded file types the instructor configured.
+  const materialLinkExts = (info?.allowed_extensions && info.allowed_extensions.length > 0)
+    ? info.allowed_extensions
+    : (config?.extensions || ['pdf', 'docx', 'doc']);
+  const acceptAttr = materialLinkExts.map(e => '.' + e).join(',');
+  const extHint = materialLinkExts.map(e => e.toUpperCase()).join(', ');
 
   return (
     <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center p-6" data-testid="direct-submit-page">
