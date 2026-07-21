@@ -977,10 +977,14 @@ class Material(BaseModel):
 
 # --- Named homework submission types (mirror /app/frontend/src/config/submissionTypes.js) ---
 SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
-    "60_second_pitch":         {"label": "60 Second Pitch",        "extensions": ["mp4", "mov", "m4v", "mp3", "m4a", "wav"], "input_kind": "file"},
-    "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx"],                    "input_kind": "file"},
-    "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt"],             "input_kind": "file"},
-    "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                        "input_kind": "form"},
+    # Defaults widened Jul 20 2026: every file-based type now accepts written
+    # alternatives (pdf/doc/docx) so students can submit a writeup instead of
+    # the primary medium without instructors having to edit every assignment.
+    # Instructors can still narrow the list per-assignment via allowed_extensions.
+    "60_second_pitch":         {"label": "60 Second Pitch",        "extensions": ["mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav", "pdf", "doc", "docx", "txt"], "input_kind": "file"},
+    "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx", "doc", "docx"],                                           "input_kind": "file"},
+    "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf"],                                      "input_kind": "file"},
+    "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                                                              "input_kind": "form"},
 }
 SUBMISSION_TYPE_IDS = list(SUBMISSION_TYPE_CONFIG.keys())
 DEFAULT_HOMEWORK_EXTENSIONS = ["pdf", "docx", "doc"]

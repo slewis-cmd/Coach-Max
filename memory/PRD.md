@@ -659,5 +659,11 @@ Follow-up work needed to complete the vision:
 - [x] **Bug**: `/api/submit-link/{material_id}` (the endpoint the Thinkific-embedded student links call) did NOT return the assignment's `allowed_extensions` override. DirectSubmit.js then fell back to the submission-type default (`.pdf,.docx`), so expanded file types set by the instructor were invisible on Thinkific links even though they worked in the milestone-based submit flow.
 - [x] **Backend fix**: endpoint now resolves the corresponding assignment via `(cohort_id, submission_type, is_active=True)` and returns `_effective_allowed_extensions(asgn, submission_type)`. When multiple assignments share the same submission_type in a cohort, prefers the one with a non-empty override.
 - [x] **Frontend fix**: DirectSubmit.js material-link branch now honors `info.allowed_extensions` (matching the milestone-branch behaviour), rendering the correct `accept="..."` attribute and updated extension hint on the upload input.
-- [x] Verified end-to-end via curl: creating a test material linked to an assignment with `allowed_extensions: ['mp4','mov','pdf']` now returns exactly those extensions instead of the type default.
+- [x] **Second bug (July 21)**: `POST /api/materials/{material_id}/submit` (the actual upload) at line 4741 passed `{}` as the assignment, so it ignored per-assignment overrides too. Now uses the same `(cohort_id, submission_type)` lookup as the metadata endpoint. Verified via curl: material linked to an assignment with `['mp4','mov','pdf']` now accepts/rejects on those exact extensions.
+- [x] **Widened default submission-type extensions (July 21)**: to reduce ongoing per-assignment fiddling, every file-based type now accepts writeup alternatives out of the box:
+  - `60_second_pitch`: mp4, mov, m4v, webm, mp3, m4a, wav, pdf, doc, docx, txt (was: media-only)
+  - `10_slide_pitch`: pdf, ppt, pptx, doc, docx (was: pdf/ppt/pptx)
+  - `case_activity`: pdf, doc, docx, txt, md, rtf (was: pdf/doc/docx/txt)
+  - `business_questionnaire`: unchanged (form-only)
+- [x] The format-aware review prompt already handles the wider set — video → "your recording", pdf slide-deck → "your slide deck", docx → "your writeup" — so AI feedback quality is preserved across formats.
 
