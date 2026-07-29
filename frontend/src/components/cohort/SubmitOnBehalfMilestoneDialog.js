@@ -52,6 +52,14 @@ export function SubmitOnBehalfMilestoneDialog({
     : (typeConfig?.extensions || ['pdf', 'docx']);
   const acceptAttr = effectiveExtensions.map((e) => `.${e}`).join(',');
 
+  // Platform upload ceiling. Ingresses / CDNs (including Cloudflare Free)
+  // typically reject request bodies > ~100 MB before they reach FastAPI, so
+  // the backend never gets a chance to return a proper error. We surface a
+  // clear client-side warning + block so instructors don't burn time on an
+  // upload that can't succeed.
+  const MAX_UPLOAD_MB = 100;
+  const fileTooLarge = file && file.size > MAX_UPLOAD_MB * 1024 * 1024;
+
   const handleSubmit = async () => {
     if (!studentId) {
       toast.error('Please select a student');
@@ -59,6 +67,14 @@ export function SubmitOnBehalfMilestoneDialog({
     }
     if (!file) {
       toast.error('Please choose a file to submit');
+      return;
+    }
+    if (fileTooLarge) {
+      const mb = (file.size / 1024 / 1024).toFixed(0);
+      toast.error(
+        `File is ${mb} MB — our upload proxy caps at ${MAX_UPLOAD_MB} MB. `
+        + `Please compress the video (e.g. QuickTime → Export → 480p) or trim it, then retry.`
+      );
       return;
     }
     setSubmitting(true);
@@ -71,13 +87,28 @@ export function SubmitOnBehalfMilestoneDialog({
       const res = await axios.post(
         `${API_URL}/api/milestones/${milestone.milestone_id}/submit-on-behalf`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } },
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 },
       );
       toast.success(res.data?.message || 'Submitted. Coach Max is reviewing.');
       if (onSubmitted) onSubmitted(res.data);
       onOpenChange(false);
     } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Failed to submit on behalf');
+      // Surface the real cause rather than a generic "Failed to submit".
+      const detail = err?.response?.data?.detail;
+      const status = err?.response?.status;
+      let msg;
+      if (detail) {
+        msg = detail;
+      } else if (status === 413) {
+        msg = 'Upload rejected: file is too large for the proxy. Compress the video and retry.';
+      } else if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
+        msg = 'Upload timed out. This usually means the file is too large for the network — compress it and retry.';
+      } else if (!err?.response) {
+        msg = `Upload failed (network / proxy). ${err?.message || ''} — likely the file exceeds the upload proxy limit.`;
+      } else {
+        msg = `Failed to submit on behalf${status ? ` (HTTP ${status})` : ''}`;
+      }
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -141,8 +172,18 @@ export function SubmitOnBehalfMilestoneDialog({
                 />
               </div>
               <p className="text-xs text-[#666] mt-1">
-                Allowed: {effectiveExtensions.map((e) => `.${e}`).join(', ')}
+                Allowed: {effectiveExtensions.map((e) => `.${e}`).join(', ')} · Max file size: {MAX_UPLOAD_MB} MB
               </p>
+              {fileTooLarge && (
+                <p
+                  className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
+                  data-testid="sob-file-too-large-warning"
+                >
+                  This file is {(file.size / 1024 / 1024).toFixed(0)} MB — over the {MAX_UPLOAD_MB} MB
+                  upload cap. Compress the video (QuickTime → Export → 480p, or use HandBrake) and
+                  reselect it before submitting.
+                </p>
+              )}
             </div>
 
             <div className="flex items-start gap-2 p-3 bg-[#E1F0FF] rounded-lg">
@@ -162,7 +203,7 @@ export function SubmitOnBehalfMilestoneDialog({
           {!isQuestionnaire && (
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !studentId || !file}
+              disabled={submitting || !studentId || !file || fileTooLarge}
               className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
               data-testid="sob-submit-btn"
             >
