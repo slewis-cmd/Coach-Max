@@ -58,6 +58,7 @@ export default function MaterialLibrary() {
   });
   // Filter: show all | week-based | course-wide only
   const [filter, setFilter] = useState('all');
+  const [sortMode, setSortMode] = useState('week'); // 'week' | 'newest' | 'title'
   // Inline preview state
   const [previewMat, setPreviewMat] = useState(null);     // material being previewed (null when closed)
   const [previewText, setPreviewText] = useState('');     // DOCX extracted text
@@ -219,6 +220,55 @@ export default function MaterialLibrary() {
     });
   }, [materials, filter]);
 
+  // Sorted view. For "week" mode we keep the raw sorted array here; the JSX
+  // below then groups it into week-buckets with headers.
+  const sortedMaterials = useMemo(() => {
+    const arr = [...filteredMaterials];
+    if (sortMode === 'newest') {
+      arr.sort((a, b) => {
+        const at = new Date(a.created_at || 0).getTime();
+        const bt = new Date(b.created_at || 0).getTime();
+        return bt - at;
+      });
+      return arr;
+    }
+    if (sortMode === 'title') {
+      arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }));
+      return arr;
+    }
+    // Default: by week ascending. Course-wide (globals) sink to the bottom
+    // as "Course-Wide" so weekly modules stay visually contiguous at the top.
+    // Within a week, newest uploads appear first so a fresh upload is easy to spot.
+    arr.sort((a, b) => {
+      const aGlobal = a.is_global ? 1 : 0;
+      const bGlobal = b.is_global ? 1 : 0;
+      if (aGlobal !== bGlobal) return aGlobal - bGlobal;
+      const aw = a.week_number ?? 999;
+      const bw = b.week_number ?? 999;
+      if (aw !== bw) return aw - bw;
+      const at = new Date(a.created_at || 0).getTime();
+      const bt = new Date(b.created_at || 0).getTime();
+      return bt - at;
+    });
+    return arr;
+  }, [filteredMaterials, sortMode]);
+
+  // When grouping by week, bucket into { key, label, items[] } so the JSX
+  // can render a small header per module.
+  const weekGroups = useMemo(() => {
+    if (sortMode !== 'week') return null;
+    const buckets = new Map();
+    for (const m of sortedMaterials) {
+      const key = m.is_global ? 'global' : `w${m.week_number ?? 'none'}`;
+      const label = m.is_global
+        ? 'Course-Wide'
+        : (m.week_number != null ? `Week ${m.week_number}` : 'No Week Assigned');
+      if (!buckets.has(key)) buckets.set(key, { key, label, items: [] });
+      buckets.get(key).items.push(m);
+    }
+    return Array.from(buckets.values());
+  }, [sortedMaterials, sortMode]);
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-[#E1F0FF] flex items-center justify-center">
@@ -273,9 +323,9 @@ export default function MaterialLibrary() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 md:px-12 py-8">
-        {/* Filter tabs */}
+        {/* Filter tabs + sort selector */}
         {materials.length > 0 && (
-          <div className="mb-5 flex items-center gap-2" data-testid="library-filter">
+          <div className="mb-5 flex items-center gap-2 flex-wrap" data-testid="library-filter">
             {[
               { key: 'all', label: 'All' },
               { key: 'week', label: 'Weekly' },
@@ -295,6 +345,23 @@ export default function MaterialLibrary() {
                 {label}
               </button>
             ))}
+            <div className="ml-auto flex items-center gap-2">
+              <Label htmlFor="library-sort" className="text-sm text-[#666666]">Sort by</Label>
+              <Select value={sortMode} onValueChange={setSortMode}>
+                <SelectTrigger
+                  id="library-sort"
+                  className="h-9 w-[170px] bg-white border-[#B8D4E8]"
+                  data-testid="library-sort-trigger"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="week" data-testid="library-sort-week">Module (Week)</SelectItem>
+                  <SelectItem value="newest" data-testid="library-sort-newest">Newest first</SelectItem>
+                  <SelectItem value="title" data-testid="library-sort-title">Title A–Z</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
         {materials.length === 0 ? (
@@ -308,9 +375,46 @@ export default function MaterialLibrary() {
               </Button>
             </CardContent>
           </Card>
+        ) : sortMode === 'week' && weekGroups ? (
+          <div className="space-y-8" data-testid="library-grouped-by-week">
+            {weekGroups.map((group) => (
+              <section key={group.key} data-testid={`library-week-group-${group.key}`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <h2 className="text-sm font-medium text-[#22438E] uppercase tracking-wider">
+                    {group.label}
+                  </h2>
+                  <span className="text-xs text-[#666666]">
+                    {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
+                  </span>
+                  <div className="flex-1 h-px bg-[#B8D4E8]"></div>
+                </div>
+                <div className="space-y-4">
+                  {group.items.map((mat) => (
+                    <LibraryMaterialCard
+                      key={mat.material_id}
+                      mat={mat}
+                      previewLoading={previewLoading}
+                      previewMat={previewMat}
+                      typeIcon={typeIcon}
+                      typeBg={typeBg}
+                      typeLabel={typeLabel}
+                      apiUrl={API_URL}
+                      downloadFile={downloadFile}
+                      onPreview={handlePreview}
+                      onDuplicate={handleDuplicate}
+                      onEditFeedbackTemplate={handleEditFeedbackTemplate}
+                      onDelete={handleDelete}
+                      onUnassign={handleUnassign}
+                      onOpenAssign={setShowAssign}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         ) : (
           <div className="space-y-4">
-            {filteredMaterials.map((mat) => (
+            {sortedMaterials.map((mat) => (
               <LibraryMaterialCard
                 key={mat.material_id}
                 mat={mat}

@@ -667,3 +667,13 @@ Follow-up work needed to complete the vision:
   - `business_questionnaire`: unchanged (form-only)
 - [x] The format-aware review prompt already handles the wider set — video → "your recording", pdf slide-deck → "your slide deck", docx → "your writeup" — so AI feedback quality is preserved across formats.
 
+
+### Curriculum Library Sort & Group by Module (Completed - July 29, 2026)
+- [x] Added a **Sort by** selector on the Material Library toolbar with three options:
+  - **Module (Week)** — default. Groups materials by `week_number` (ascending). Course-Wide (globals) sink to the bottom in their own section. Within each week, newest uploads appear first so a fresh addition is easy to spot.
+  - **Newest first** — flat list by `created_at` desc.
+  - **Title A–Z** — flat alphabetical.
+- [x] When in Module (Week) mode, each week renders as a visual section: uppercase week label + item count + divider line, followed by the material cards. Uploading a new material for Week 3 now automatically appears grouped with the other Week 3 items.
+- [x] All existing filter tabs (All / Weekly / Course-Wide / Videos) continue to work; sort applies AFTER filtering.
+- [x] `data-testid` markers: `library-sort-trigger`, `library-sort-week`, `library-sort-newest`, `library-sort-title`, `library-grouped-by-week`, `library-week-group-*`.
+
