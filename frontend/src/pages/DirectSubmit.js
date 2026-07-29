@@ -13,6 +13,7 @@ import { Upload, CheckCircle, FileText, LogIn, FolderOpen, ListChecks, Mic, Pres
 import { toast } from 'sonner';
 import axios from 'axios';
 import { getSubmissionTypeConfig } from '../config/submissionTypes';
+import { MAX_UPLOAD_MB, isFileTooLarge, fileSizeMbLabel, humanUploadError, tooLargeMessage } from '../lib/uploadLimits';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -72,6 +73,7 @@ export default function DirectSubmit() {
       if (!validateAnswers()) return;
     } else {
       if (!file) { toast.error('Please select a file'); return; }
+      if (isFileTooLarge(file)) { toast.error(tooLargeMessage(file)); return; }
     }
 
     setSubmitting(true);
@@ -85,12 +87,12 @@ export default function DirectSubmit() {
       await axios.post(
         `${API_URL}/api/materials/${materialId}/submit?cohort_id=${encodeURIComponent(selectedCohort)}`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 }
       );
       setSubmitted(true);
       toast.success('Homework submitted successfully!');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Submission failed');
+      toast.error(humanUploadError(error, 'Submission failed'));
     } finally {
       setSubmitting(false);
     }
@@ -248,11 +250,20 @@ export default function DirectSubmit() {
                     <span className="text-sm font-medium text-[#000]">
                       {file ? file.name : 'Click to select your file'}
                     </span>
-                    <span className="text-xs text-[#666]">{extHint}</span>
+                    <span className="text-xs text-[#666]">{extHint} · Max {MAX_UPLOAD_MB} MB</span>
                   </label>
                   <input id="direct-submit-file" type="file" accept={acceptAttr}
                     className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)}
                     data-testid="direct-submit-file-input" />
+                  {isFileTooLarge(file) && (
+                    <p
+                      className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
+                      data-testid="direct-submit-too-large-warning"
+                    >
+                      Your file is {fileSizeMbLabel(file)} MB — over our {MAX_UPLOAD_MB} MB limit.
+                      Please compress the video (Mac: QuickTime → Export → 480p; iPhone: pick Compress in Share; or use HandBrake&apos;s Web preset), then re-select the smaller file.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -260,7 +271,7 @@ export default function DirectSubmit() {
                 onClick={handleSubmit}
                 disabled={
                   submitting ||
-                  (isQuestionnaire ? (fields.length === 0 || missingRequired) : !file)
+                  (isQuestionnaire ? (fields.length === 0 || missingRequired) : (!file || isFileTooLarge(file)))
                 }
                 className="bg-[#22438E] text-white hover:bg-[#1A3A7A] w-full"
                 data-testid="direct-submit-btn"
@@ -408,6 +419,7 @@ export function AssignmentMilestoneSubmit() {
       }
     } else {
       if (!file) { toast.error('Please select a file'); return; }
+      if (isFileTooLarge(file)) { toast.error(tooLargeMessage(file)); return; }
     }
     setSubmitting(true);
     try {
@@ -423,12 +435,12 @@ export function AssignmentMilestoneSubmit() {
       });
       // Milestone-scoped submit endpoint (no material_id required)
       await axios.post(`${API_URL}/api/milestones/${milestone.milestone_id}/submit?${params.toString()}`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000,
       });
       setSubmitted(true);
       toast.success('Milestone submitted!');
     } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Submission failed');
+      toast.error(humanUploadError(err, 'Submission failed'));
     } finally {
       setSubmitting(false);
     }
@@ -533,17 +545,26 @@ export function AssignmentMilestoneSubmit() {
                   <span className="text-sm font-medium text-[#000]">
                     {file ? file.name : 'Click to select your file'}
                   </span>
-                  <span className="text-xs text-[#666]">{extHint}</span>
+                  <span className="text-xs text-[#666]">{extHint} · Max {MAX_UPLOAD_MB} MB</span>
                 </label>
                 <input id="milestone-file" type="file" accept={acceptAttr}
                   className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)}
                   data-testid="milestone-file-input" />
+                {isFileTooLarge(file) && (
+                  <p
+                    className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
+                    data-testid="milestone-file-too-large-warning"
+                  >
+                    Your file is {fileSizeMbLabel(file)} MB — over our {MAX_UPLOAD_MB} MB limit.
+                    Please compress the video (Mac: QuickTime → Export → 480p; iPhone: pick Compress in Share; or use HandBrake&apos;s Web preset), then re-select the smaller file.
+                  </p>
+                )}
               </div>
             )}
 
             <Button
               onClick={handleSubmit}
-              disabled={submitting || (isQuestionnaire ? (fields.length === 0 || missingRequired) : !file)}
+              disabled={submitting || (isQuestionnaire ? (fields.length === 0 || missingRequired) : (!file || isFileTooLarge(file)))}
               className="bg-[#22438E] text-white hover:bg-[#1A3A7A] w-full"
               data-testid="milestone-submit-btn"
             >

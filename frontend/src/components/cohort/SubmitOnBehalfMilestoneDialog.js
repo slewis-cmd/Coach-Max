@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../ui/select';
 import { getSubmissionTypeConfig } from '../../config/submissionTypes';
+import { MAX_UPLOAD_MB, isFileTooLarge, fileSizeMbLabel, humanUploadError, tooLargeMessage } from '../../lib/uploadLimits';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -57,8 +58,7 @@ export function SubmitOnBehalfMilestoneDialog({
   // the backend never gets a chance to return a proper error. We surface a
   // clear client-side warning + block so instructors don't burn time on an
   // upload that can't succeed.
-  const MAX_UPLOAD_MB = 100;
-  const fileTooLarge = file && file.size > MAX_UPLOAD_MB * 1024 * 1024;
+  const fileTooLarge = isFileTooLarge(file);
 
   const handleSubmit = async () => {
     if (!studentId) {
@@ -70,11 +70,7 @@ export function SubmitOnBehalfMilestoneDialog({
       return;
     }
     if (fileTooLarge) {
-      const mb = (file.size / 1024 / 1024).toFixed(0);
-      toast.error(
-        `File is ${mb} MB — our upload proxy caps at ${MAX_UPLOAD_MB} MB. `
-        + `Please compress the video (e.g. QuickTime → Export → 480p) or trim it, then retry.`
-      );
+      toast.error(tooLargeMessage(file));
       return;
     }
     setSubmitting(true);
@@ -93,22 +89,7 @@ export function SubmitOnBehalfMilestoneDialog({
       if (onSubmitted) onSubmitted(res.data);
       onOpenChange(false);
     } catch (err) {
-      // Surface the real cause rather than a generic "Failed to submit".
-      const detail = err?.response?.data?.detail;
-      const status = err?.response?.status;
-      let msg;
-      if (detail) {
-        msg = detail;
-      } else if (status === 413) {
-        msg = 'Upload rejected: file is too large for the proxy. Compress the video and retry.';
-      } else if (err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')) {
-        msg = 'Upload timed out. This usually means the file is too large for the network — compress it and retry.';
-      } else if (!err?.response) {
-        msg = `Upload failed (network / proxy). ${err?.message || ''} — likely the file exceeds the upload proxy limit.`;
-      } else {
-        msg = `Failed to submit on behalf${status ? ` (HTTP ${status})` : ''}`;
-      }
-      toast.error(msg);
+      toast.error(humanUploadError(err, 'Failed to submit on behalf'));
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +160,7 @@ export function SubmitOnBehalfMilestoneDialog({
                   className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
                   data-testid="sob-file-too-large-warning"
                 >
-                  This file is {(file.size / 1024 / 1024).toFixed(0)} MB — over the {MAX_UPLOAD_MB} MB
+                  This file is {fileSizeMbLabel(file)} MB — over the {MAX_UPLOAD_MB} MB
                   upload cap. Compress the video (QuickTime → Export → 480p, or use HandBrake) and
                   reselect it before submitting.
                 </p>

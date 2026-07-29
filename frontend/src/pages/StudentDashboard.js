@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import axios from 'axios';
 import { downloadFile } from '../utils/download';
+import { MAX_UPLOAD_MB, isFileTooLarge, fileSizeMbLabel, humanUploadError, tooLargeMessage } from '../lib/uploadLimits';
 import { CoachMaxChat } from '../components/student/CoachMaxChat';
 import { StatusBadge } from '../components/student/StatusBadge';
 import { HomeworkTrackRow } from '../components/student/HomeworkTrackRow';
@@ -109,6 +110,10 @@ export default function StudentDashboard() {
       toast.error('Please select a file');
       return;
     }
+    if (isFileTooLarge(uploadFile)) {
+      toast.error(tooLargeMessage(uploadFile));
+      return;
+    }
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -116,7 +121,7 @@ export default function StudentDashboard() {
       await axios.post(
         `${API_URL}/api/materials/${uploadTarget.material_id}/submit?cohort_id=${encodeURIComponent(uploadTarget.cohort_id)}`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 }
       );
       toast.success('Homework submitted! Your instructor will review it soon.');
       setShowUpload(false);
@@ -124,7 +129,7 @@ export default function StudentDashboard() {
       setUploadFile(null);
       fetchDashboard();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to submit homework');
+      toast.error(humanUploadError(error, 'Failed to submit homework'));
     } finally {
       setSubmitting(false);
     }
@@ -404,7 +409,7 @@ export default function StudentDashboard() {
                   <>
                     <Upload className="w-10 h-10 text-[#94B8D9] mx-auto mb-2" />
                     <p className="text-sm text-[#666666]">Click to upload your homework</p>
-                    <p className="text-xs text-[#94B8D9] mt-1">PDF or DOCX only</p>
+                    <p className="text-xs text-[#94B8D9] mt-1">PDF or DOCX &middot; Max {MAX_UPLOAD_MB} MB</p>
                   </>
                 )}
               </label>
@@ -417,6 +422,15 @@ export default function StudentDashboard() {
               className="hidden"
               onChange={(e) => setUploadFile(e.target.files[0])}
             />
+            {isFileTooLarge(uploadFile) && (
+              <p
+                className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
+                data-testid="student-homework-too-large-warning"
+              >
+                Your file is {fileSizeMbLabel(uploadFile)} MB — over our {MAX_UPLOAD_MB} MB limit.
+                Please compress it (Mac: QuickTime → Export → 480p; iPhone: pick Compress in Share; HandBrake Web preset) and re-select the smaller file.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUpload(false)}>
@@ -425,7 +439,7 @@ export default function StudentDashboard() {
             <Button
               data-testid="submit-homework-btn"
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || isFileTooLarge(uploadFile)}
               className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
             >
               {submitting ? 'Submitting...' : 'Submit'}
