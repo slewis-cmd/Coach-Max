@@ -677,3 +677,14 @@ Follow-up work needed to complete the vision:
 - [x] All existing filter tabs (All / Weekly / Course-Wide / Videos) continue to work; sort applies AFTER filtering.
 - [x] `data-testid` markers: `library-sort-trigger`, `library-sort-week`, `library-sort-newest`, `library-sort-title`, `library-grouped-by-week`, `library-week-group-*`.
 
+
+### Spreadsheet (Excel / CSV) Submission Support (Completed - Aug 2026)
+- [x] **Backend**: added `extract_text_from_spreadsheet(bytes, ext)` supporting `.xlsx` (via openpyxl), `.xls` (via xlrd), and `.csv` (utf-8). Renders each sheet as a labelled section with `### Sheet: <name>` header and pipe-separated rows so the LLM can reason about cells + tabs.
+- [x] **Backend**: `extract_text_from_file` now dispatches `.xlsx / .xls / .csv` to the new extractor. Returns `""` on failure — never raw bytes.
+- [x] **Backend**: `_submission_format_context` classifies spreadsheets as `kind="spreadsheet"` with descriptor `"your spreadsheet"` and guidance asking Coach Max to cite specific tabs and rows in feedback (e.g. "in your Assumptions tab, row 4").
+- [x] **Backend**: The Case Activity submission type's default extensions widened to include `xlsx, xls, csv` so instructors don't have to configure it per assignment.
+- [x] **Frontend**: `case_activity` `SUBMISSION_TYPES` entry updated with matching `accept` string + description mentioning spreadsheet templates.
+- [x] **Google Sheets**: students download → File → Download → Microsoft Excel (.xlsx) from Sheets, then upload as usual. No new UI needed today.
+- [x] **Dependencies**: `openpyxl==3.1.5`, `xlrd==2.0.2` pinned in `requirements.txt`.
+- [x] **Tests**: `/app/backend/tests/test_spreadsheet_extraction.py` — 7 tests, all passing (real xlsx round-trip, csv round-trip, garbage-safety regression, format-context classification for xlsx/xls/csv).
+

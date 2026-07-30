@@ -473,6 +473,23 @@ def _submission_format_context(submission: dict, assignment_title: str = "") -> 
             ),
         }
 
+    # 4b) Spreadsheets (Excel, CSV, Google Sheets downloaded as .xlsx)
+    if ext in {"xlsx", "xls", "csv"}:
+        return {
+            "ext": ext,
+            "kind": "spreadsheet",
+            "descriptor": "your spreadsheet",
+            "guidance": (
+                "The student submitted a spreadsheet; the content below is a text rendering of the "
+                "cells, with each sheet introduced by a '### Sheet: <name>' header and rows shown as "
+                "pipe-separated values ('col1 | col2 | col3'). "
+                "Refer to it as \"your spreadsheet\" or \"your workbook\" — NOT a document, deck, or "
+                "recording. When possible, cite specific tabs and cells the same way you'd say it in "
+                "conversation (e.g. \"in your Assumptions tab, row 4\" or \"in the Customers sheet\"). "
+                "Note that if the workbook contained formulas we're seeing their computed values."
+            ),
+        }
+
     # 5) Plain text / markdown / notes
     if ext in {"txt", "md", "rtf"} or ext == "":
         return {
@@ -980,10 +997,12 @@ SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
     # Defaults widened Jul 20 2026: every file-based type now accepts written
     # alternatives (pdf/doc/docx) so students can submit a writeup instead of
     # the primary medium without instructors having to edit every assignment.
-    # Instructors can still narrow the list per-assignment via allowed_extensions.
+    # Spreadsheets (xlsx/xls/csv) added Aug 2026 for template-driven exercises
+    # (business model canvas, financials, etc.). Instructors can still narrow
+    # the list per-assignment via allowed_extensions.
     "60_second_pitch":         {"label": "60 Second Pitch",        "extensions": ["mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav", "pdf", "doc", "docx", "txt"], "input_kind": "file"},
     "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx", "doc", "docx"],                                           "input_kind": "file"},
-    "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf"],                                      "input_kind": "file"},
+    "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf", "xlsx", "xls", "csv"],               "input_kind": "file"},
     "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                                                              "input_kind": "form"},
 }
 SUBMISSION_TYPE_IDS = list(SUBMISSION_TYPE_CONFIG.keys())
@@ -2337,6 +2356,61 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
         # decoding it dumps zip-header garbage into the AI review prompt.
         return ""
 
+
+def extract_text_from_spreadsheet(file_bytes: bytes, ext: str) -> str:
+    """Extract cell contents from an Excel workbook or CSV as a plain-text /
+    markdown-ish rendering the LLM can reason about.
+
+    Handles .xlsx (openpyxl), .xls (xlrd), and .csv (utf-8 decode).
+    Returns "" on failure — NEVER raw file bytes, so we don't poison the
+    AI review prompt with binary garbage.
+    """
+    ext = (ext or "").lower().lstrip(".")
+
+    if ext == "csv":
+        try:
+            return file_bytes.decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            logger.error(f"CSV extraction error: {e}")
+            return ""
+
+    # Excel branch — render each sheet as its own labelled section.
+    try:
+        if ext == "xlsx":
+            from openpyxl import load_workbook
+            wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+            parts: List[str] = []
+            for sheet in wb.sheetnames:
+                ws = wb[sheet]
+                parts.append(f"### Sheet: {sheet}")
+                for row in ws.iter_rows(values_only=True):
+                    # Skip fully-empty rows so we don't waste tokens.
+                    if not any(c not in (None, "") for c in row):
+                        continue
+                    cells = ["" if c is None else str(c) for c in row]
+                    parts.append(" | ".join(cells))
+                parts.append("")  # blank line between sheets
+            wb.close()
+            return "\n".join(parts).strip()
+        if ext == "xls":
+            import xlrd
+            book = xlrd.open_workbook(file_contents=file_bytes)
+            parts: List[str] = []
+            for sheet in book.sheets():
+                parts.append(f"### Sheet: {sheet.name}")
+                for r in range(sheet.nrows):
+                    row = sheet.row_values(r)
+                    if not any(str(c).strip() for c in row):
+                        continue
+                    parts.append(" | ".join("" if c is None else str(c) for c in row))
+                parts.append("")
+            return "\n".join(parts).strip()
+    except Exception as e:
+        logger.error(f"Spreadsheet extraction error for .{ext}: {e}")
+
+    return ""
+
+
 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
     """Extract text from file based on extension.
 
@@ -2352,6 +2426,8 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
         return extract_text_from_pdf(file_bytes)
     if ext in ["docx", "doc"]:
         return extract_text_from_docx(file_bytes)
+    if ext in ["xlsx", "xls", "csv"]:
+        return extract_text_from_spreadsheet(file_bytes, ext)
 
     # Plain-text / unknown extensions: utf-8 decode is safe.
     try:

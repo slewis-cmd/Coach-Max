@@ -21,6 +21,7 @@ dnspython==2.8.0
 ecdsa==0.19.1
 email-validator==2.3.0
 emergentintegrations==0.1.1
+et_xmlfile==2.0.0
 fastapi==0.110.1
 fastuuid==0.14.0
 filelock==3.25.0
@@ -69,6 +70,7 @@ mypy_extensions==1.1.0
 numpy==2.4.2
 oauthlib==3.3.1
 openai==1.99.9
+openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.1
 passlib==1.7.4
@@ -131,5 +133,6 @@ urllib3==2.6.3
 uvicorn==0.25.0
 watchfiles==1.1.1
 websockets==16.0
+xlrd==2.0.2
 yarl==1.23.0
 zipp==3.23.0
