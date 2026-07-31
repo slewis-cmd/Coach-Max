@@ -688,3 +688,13 @@ Follow-up work needed to complete the vision:
 - [x] **Dependencies**: `openpyxl==3.1.5`, `xlrd==2.0.2` pinned in `requirements.txt`.
 - [x] **Tests**: `/app/backend/tests/test_spreadsheet_extraction.py` — 7 tests, all passing (real xlsx round-trip, csv round-trip, garbage-safety regression, format-context classification for xlsx/xls/csv).
 
+
+### Spreadsheet Submission Type + Generic Homework Fix (Completed - Aug 2026, Round 2)
+- [x] **Bug**: The **"Generic Homework (any file)"** option in the submission-type dropdown was misleading — internally it mapped to `submission_type=""` and fell back to a narrow `DEFAULT_HOMEWORK_EXTENSIONS = ["pdf","docx","doc"]`. The OS file picker then grayed out .xlsx (and every other type). The label promised "any file" but delivered "PDF/Word only".
+- [x] **Fix**: `DEFAULT_HOMEWORK_EXTENSIONS` widened to the full "any reasonable file" set — pdf, doc, docx, txt, md, rtf, xlsx, xls, csv, ppt, pptx, mp4, mov, m4v, webm, mp3, m4a, wav. Now the label matches behaviour.
+- [x] **New 5th submission type — "Spreadsheet / Template"** (`spreadsheet_analysis`): accepts only xlsx/xls/csv by default. Instructors pick this when they want Coach Max to specifically expect a spreadsheet (business model canvas, financial model, etc.) and to phrase feedback accordingly ("in your Assumptions tab, row 4").
+- [x] Frontend `SUBMISSION_TYPES` updated with matching entry (accept string, description, extensions).
+- [x] DirectSubmit + SubmitOnBehalfMilestoneDialog fallback lists widened from `['pdf','docx','doc']` to the same "any reasonable file" set so the OS picker never grays out valid types.
+- [x] Updated two stale regression tests that were asserting the old narrow 60_second_pitch defaults (pre-Jul 20 widening). Now assert that intentional widening lets .pdf through and truly-unsupported extensions like .zip get rejected.
+- [x] **Tests**: 48/48 passing across `test_spreadsheet_extraction.py`, `test_pdf_extraction_and_format_context.py`, and `test_allowed_extensions.py`.
+

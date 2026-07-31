@@ -311,8 +311,10 @@ class TestMilestoneSubmitOverride:
         cid = _create_cohort_with_student(seed["tokens"]["instructor"], seed["ids"]["student"], "no_over")
         asgn = self._create_asgn(seed, cid, "60_second_pitch", extensions=None)
         mid = asgn["milestones"][0]["milestone_id"]
-        # .pdf should be REJECTED because 60sec default has no pdf
-        files = {"file": ("pitch.pdf", io.BytesIO(b"pdf"), "application/pdf")}
+        # 60_second_pitch defaults were widened Jul 20 2026 to include written
+        # alternatives (pdf/doc/docx/txt), so .pdf is now ACCEPTED by default.
+        # A truly-unsupported extension like .zip must still be rejected.
+        files = {"file": ("pitch.zip", io.BytesIO(b"zipbytes"), "application/zip")}
         r = requests.post(
             f"{BASE_URL}/api/milestones/{mid}/submit",
             params={"cohort_id": cid, "assignment_id": asgn["assignment_id"]},
@@ -320,7 +322,7 @@ class TestMilestoneSubmitOverride:
             headers=_auth(seed["tokens"]["student"]), timeout=15,
         )
         assert r.status_code == 400
-        # Error reflects the TYPE DEFAULT (has .mov)
+        # Error reflects the TYPE DEFAULT (has .mov/.mp4)
         assert ".mov" in r.text or ".mp4" in r.text
 
 
@@ -393,7 +395,7 @@ class TestSubmitOnBehalfOverride:
 # 7) Legacy /api/materials/{id}/submit still uses SUBMISSION_TYPE_CONFIG
 # ===================================================================
 class TestLegacyMaterialSubmitFallback:
-    def test_legacy_material_pdf_rejected_when_type_is_60sec(self, seed):
+    def test_legacy_material_rejects_unsupported_when_type_is_60sec(self, seed):
         cid = _create_cohort_with_student(seed["tokens"]["instructor"], seed["ids"]["student"], "legacy")
         mat_id = f"mat_{uuid.uuid4().hex[:10]}"
         db.materials.insert_one({
@@ -407,12 +409,14 @@ class TestLegacyMaterialSubmitFallback:
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         db.cohorts.update_one({"cohort_id": cid}, {"$addToSet": {"released_weeks": 1}})
-        files = {"file": ("try.pdf", io.BytesIO(b"pdf"), "application/pdf")}
+        # 60_second_pitch defaults now include pdf/doc/docx/txt after Jul 20
+        # widening, so .pdf is accepted. A truly-unsupported extension (.zip)
+        # must still be rejected by the legacy material endpoint.
+        files = {"file": ("try.zip", io.BytesIO(b"zipbytes"), "application/zip")}
         r = requests.post(
             f"{BASE_URL}/api/materials/{mat_id}/submit",
             files=files, headers=_auth(seed["tokens"]["student"]), timeout=15,
         )
-        # 60sec type default rejects .pdf
         assert r.status_code == 400
         assert ".mp4" in r.text or ".mov" in r.text
 

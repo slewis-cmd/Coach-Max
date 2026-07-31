@@ -125,12 +125,18 @@ export default function DirectSubmit() {
 
   const HeaderIcon = ICONS[config?.icon] || FileText;
   // Per-assignment allowed_extensions override (set on the linked Assignment)
-  // wins over the submission-type default from getSubmissionTypeConfig. This
-  // matches the milestone-flow behaviour at line ~384 so the Thinkific-linked
-  // page offers the same expanded file types the instructor configured.
+  // wins over the submission-type default from getSubmissionTypeConfig. For
+  // Generic Homework (empty submission_type, no config), fall back to the
+  // broad "any file" set so the OS picker doesn't gray out spreadsheets, etc.
+  const GENERIC_HOMEWORK_EXTENSIONS = [
+    'pdf', 'doc', 'docx', 'txt', 'md', 'rtf',
+    'xlsx', 'xls', 'csv',
+    'ppt', 'pptx',
+    'mp4', 'mov', 'm4v', 'webm', 'mp3', 'm4a', 'wav',
+  ];
   const materialLinkExts = (info?.allowed_extensions && info.allowed_extensions.length > 0)
     ? info.allowed_extensions
-    : (config?.extensions || ['pdf', 'docx', 'doc']);
+    : (config?.extensions || GENERIC_HOMEWORK_EXTENSIONS);
   const acceptAttr = materialLinkExts.map(e => '.' + e).join(',');
   const extHint = materialLinkExts.map(e => e.toUpperCase()).join(', ');
 

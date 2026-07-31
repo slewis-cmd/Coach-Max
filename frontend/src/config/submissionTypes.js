@@ -33,6 +33,16 @@ export const SUBMISSION_TYPES = [
     icon: 'FileText',
   },
   {
+    id: 'spreadsheet_analysis',
+    label: 'Spreadsheet / Template',
+    shortLabel: 'Sheet',
+    description: 'Excel workbook, CSV, or a Google Sheets template downloaded as .xlsx. Coach Max reads the cells and references specific tabs and rows in feedback.',
+    accept: 'application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,text/csv,.csv',
+    extensions: ['xlsx', 'xls', 'csv'],
+    inputKind: 'file',
+    icon: 'FileText',
+  },
+  {
     id: 'business_questionnaire',
     label: 'Your Business Questionnaire',
     shortLabel: 'Questionnaire',

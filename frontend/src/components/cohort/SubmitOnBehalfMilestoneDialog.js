@@ -48,9 +48,17 @@ export function SubmitOnBehalfMilestoneDialog({
   const typeConfig = getSubmissionTypeConfig(assignment.submission_type);
   const isQuestionnaire = assignment.submission_type === 'business_questionnaire';
   // Per-assignment allowed_extensions override wins over the type default.
+  // For Generic Homework (empty submission_type), fall back to the broad
+  // "any-file" set so the OS file picker doesn't gray out spreadsheets, etc.
+  const GENERIC_HOMEWORK_EXTENSIONS = [
+    'pdf', 'doc', 'docx', 'txt', 'md', 'rtf',
+    'xlsx', 'xls', 'csv',
+    'ppt', 'pptx',
+    'mp4', 'mov', 'm4v', 'webm', 'mp3', 'm4a', 'wav',
+  ];
   const effectiveExtensions = (assignment.allowed_extensions && assignment.allowed_extensions.length > 0)
     ? assignment.allowed_extensions
-    : (typeConfig?.extensions || ['pdf', 'docx']);
+    : (typeConfig?.extensions || GENERIC_HOMEWORK_EXTENSIONS);
   const acceptAttr = effectiveExtensions.map((e) => `.${e}`).join(',');
 
   // Platform upload ceiling. Ingresses / CDNs (including Cloudflare Free)

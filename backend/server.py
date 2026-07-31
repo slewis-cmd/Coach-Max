@@ -1003,10 +1003,25 @@ SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
     "60_second_pitch":         {"label": "60 Second Pitch",        "extensions": ["mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav", "pdf", "doc", "docx", "txt"], "input_kind": "file"},
     "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx", "doc", "docx"],                                           "input_kind": "file"},
     "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf", "xlsx", "xls", "csv"],               "input_kind": "file"},
+    "spreadsheet_analysis":    {"label": "Spreadsheet / Template", "extensions": ["xlsx", "xls", "csv"],                                                          "input_kind": "file"},
     "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                                                              "input_kind": "form"},
 }
 SUBMISSION_TYPE_IDS = list(SUBMISSION_TYPE_CONFIG.keys())
-DEFAULT_HOMEWORK_EXTENSIONS = ["pdf", "docx", "doc"]
+
+# "Generic Homework (any file)" in the UI maps to submission_type = "". Historically
+# this fell back to a very narrow set (pdf/doc/docx) which contradicted the label.
+# The widened list below actually lives up to "any file" — every extension we know
+# how to extract or transcribe. Instructors can still narrow per-assignment.
+DEFAULT_HOMEWORK_EXTENSIONS = [
+    # Documents & writeups
+    "pdf", "doc", "docx", "txt", "md", "rtf",
+    # Spreadsheets
+    "xlsx", "xls", "csv",
+    # Slide decks
+    "ppt", "pptx",
+    # Video / audio (transcribed for pitches, etc.)
+    "mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav",
+]
 
 
 def _normalize_extensions(raw) -> Optional[List[str]]:
