@@ -2863,7 +2863,49 @@ async def list_assignments(cohort_id: str, user: dict = Depends(get_current_user
         await _seed_default_assignments_for_cohort(cohort_id, cohort.get("total_weeks", 14))
 
     docs = await db.assignments.find({"cohort_id": cohort_id}, {"_id": 0}).sort("order", 1).to_list(length=100)
+
+    # Backfill questionnaire_fields from a linked homework material when the
+    # assignment's own field list is empty. Instructors historically edit
+    # questionnaire questions in TWO different UIs (legacy Material Library +
+    # new Assignments tab), each of which persists to a DIFFERENT doc. Without
+    # this merge, edits made in the Material Library are invisible in the
+    # Assignments tab / on-behalf dialog, and users see "no questions yet".
+    await _merge_material_questionnaire_fields(docs, cohort_id)
     return docs
+
+
+async def _merge_material_questionnaire_fields(assignments: List[Dict[str, Any]], cohort_id: str) -> None:
+    """In-place: for each business_questionnaire assignment with empty
+    questionnaire_fields, look up any linked homework material in the same
+    cohort with populated fields and copy them onto the assignment dict
+    (view-only merge — does not persist).
+    """
+    needs_merge = [
+        a for a in assignments
+        if a.get("submission_type") == "business_questionnaire"
+        and not (a.get("questionnaire_fields") or [])
+    ]
+    if not needs_merge:
+        return
+    # One DB call to grab all candidate materials, then map by nothing more
+    # specific than "same cohort + business_questionnaire type" — that's the
+    # only linkage the legacy schema provides.
+    materials = await db.materials.find(
+        {
+            "cohort_id": cohort_id,
+            "material_type": "homework",
+            "submission_type": "business_questionnaire",
+            "questionnaire_fields": {"$exists": True, "$ne": None, "$not": {"$size": 0}},
+        },
+        {"_id": 0, "questionnaire_fields": 1, "week_number": 1},
+    ).to_list(length=100)
+    if not materials:
+        return
+    # Prefer any material with fields; if we have multiple, later ones don't
+    # override earlier ones — the first one wins.
+    fallback_fields = materials[0].get("questionnaire_fields") or []
+    for a in needs_merge:
+        a["questionnaire_fields"] = fallback_fields
 
 
 @api_router.post("/cohorts/{cohort_id}/assignments")
@@ -2877,6 +2919,23 @@ async def create_custom_assignment(cohort_id: str, payload: AssignmentCreate, us
     if payload.submission_type not in SUBMISSION_TYPE_IDS:
         raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
 
+    # If instructor creates a business_questionnaire without providing fields,
+    # backfill from an existing homework material in the same cohort so the new
+    # assignment "inherits" the questions they set up in the legacy Material UI.
+    resolved_qf = payload.questionnaire_fields
+    if payload.submission_type == "business_questionnaire" and not (resolved_qf or []):
+        mat_with_fields = await db.materials.find_one(
+            {
+                "cohort_id": cohort_id,
+                "material_type": "homework",
+                "submission_type": "business_questionnaire",
+                "questionnaire_fields": {"$exists": True, "$ne": None, "$not": {"$size": 0}},
+            },
+            {"_id": 0, "questionnaire_fields": 1},
+        )
+        if mat_with_fields:
+            resolved_qf = mat_with_fields.get("questionnaire_fields") or resolved_qf
+
     max_order = await db.assignments.count_documents({"cohort_id": cohort_id})
     asgn = Assignment(
         cohort_id=cohort_id,
@@ -2887,7 +2946,7 @@ async def create_custom_assignment(cohort_id: str, payload: AssignmentCreate, us
         order=max_order,
         feedback_template=(payload.feedback_template or "").strip(),
         drive_folder_url=_validate_drive_url(payload.drive_folder_url or ""),
-        questionnaire_fields=payload.questionnaire_fields if payload.submission_type == "business_questionnaire" else None,
+        questionnaire_fields=resolved_qf if payload.submission_type == "business_questionnaire" else None,
         allowed_extensions=_normalize_extensions(payload.allowed_extensions),
         milestones=_build_default_milestones(payload.assignment_key or "custom", cohort.get("total_weeks", 14)),
     )
@@ -2918,6 +2977,10 @@ async def update_assignment(assignment_id: str, payload: AssignmentUpdate, user:
         updates["updated_at"] = datetime.now(timezone.utc)
         await db.assignments.update_one({"assignment_id": assignment_id}, {"$set": updates})
     updated = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    # Merge material questionnaire_fields fallback so the refreshed UI matches
+    # what the list endpoint returns.
+    if updated:
+        await _merge_material_questionnaire_fields([updated], updated.get("cohort_id", ""))
     return updated
 
 
