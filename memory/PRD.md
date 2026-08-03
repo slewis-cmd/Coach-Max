@@ -698,3 +698,12 @@ Follow-up work needed to complete the vision:
 - [x] Updated two stale regression tests that were asserting the old narrow 60_second_pitch defaults (pre-Jul 20 widening). Now assert that intentional widening lets .pdf through and truly-unsupported extensions like .zip get rejected.
 - [x] **Tests**: 48/48 passing across `test_spreadsheet_extraction.py`, `test_pdf_extraction_and_format_context.py`, and `test_allowed_extensions.py`.
 
+
+### Auto-Review on Thinkific-Submitted Homework (Completed - Aug 2026)
+- [x] **Root cause**: only 3 of 4 submission endpoints kicked off `_run_auto_ai_review_for_submission`. The most common path in production — `POST /api/materials/{material_id}/submit` (the endpoint the Thinkific student link hits) — did NOT trigger auto-review, so submissions sat in `status="pending"` until an instructor manually clicked "Generate AI Feedback". This was the "intermediate step" the user asked to remove.
+- [x] **Fix**: added `asyncio.create_task(_run_auto_ai_review_for_submission(...))` immediately after the submission is inserted/updated. Pulls the feedback template from either the material or the linked assignment (via the same `(cohort_id, submission_type)` lookup used for extension validation), so per-assignment custom prompts are honoured.
+- [x] Hoisted `submit_asgn = None` above the questionnaire/file branch so both paths can reference it. Widened its projection to include `feedback_template`.
+- [x] After redeploy, Thinkific-linked student submissions will automatically show AI feedback in "draft" state (or "review_failed" with a red banner if extraction/LLM fails). Instructors no longer need to click "Generate AI Feedback" for the common case.
+- [x] **Kawasaki 10-Slide Pitch Deck** submission type widened to also accept `xlsx, xls, csv` for supporting spreadsheet models alongside the deck.
+- [x] Tests: 53/53 passing across all affected suites.
+

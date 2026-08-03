@@ -4798,6 +4798,10 @@ async def submit_homework(
 
     submission_type = material.get("submission_type")
     is_questionnaire = submission_type == "business_questionnaire"
+    # `submit_asgn` is resolved in the file branch (for per-assignment extension
+    # overrides) and reused later to pull the feedback_template into auto-review.
+    # Initialize here so it's defined on every branch (incl. questionnaire).
+    submit_asgn = None
 
     if is_questionnaire:
         # Parse + validate answers against material's questionnaire_fields
@@ -4837,7 +4841,6 @@ async def submit_homework(
         # it up so Thinkific-linked uploads honour the same expanded file types
         # as the milestone flow. Prefer an assignment that has a non-empty
         # override (in case multiple exist for the pair).
-        submit_asgn = None
         if submission_cohort_id and submission_type:
             query = {
                 "cohort_id": submission_cohort_id,
@@ -4846,11 +4849,11 @@ async def submit_homework(
             }
             submit_asgn = await db.assignments.find_one(
                 {**query, "allowed_extensions": {"$exists": True, "$ne": None, "$not": {"$size": 0}}},
-                {"_id": 0, "allowed_extensions": 1},
+                {"_id": 0, "allowed_extensions": 1, "feedback_template": 1},
             )
             if not submit_asgn:
                 submit_asgn = await db.assignments.find_one(
-                    query, {"_id": 0, "allowed_extensions": 1}
+                    query, {"_id": 0, "allowed_extensions": 1, "feedback_template": 1}
                 )
         allowed_exts = _effective_allowed_extensions(submit_asgn or {}, submission_type)
         if ext not in allowed_exts:
@@ -4912,7 +4915,24 @@ async def submit_homework(
         doc["resubmission_count"] = 0
         await db.submissions.insert_one(doc)
         is_resubmission = False
-    
+
+    # Kick off AI review immediately so instructors don't have to click
+    # "Generate AI Feedback". The task runs in the background; the submission
+    # status will flip from "pending" → "draft" (or "review_failed") when done.
+    # Uses the material's `feedback_template` when set, else falls back to the
+    # linked assignment's template if we found one during ext validation.
+    _template = material.get("feedback_template") or (submit_asgn or {}).get("feedback_template")
+    asyncio.create_task(_run_auto_ai_review_for_submission(
+        submission_id,
+        week_number=material.get("week_number") or 1,
+        title=material.get("title") or "Homework",
+        description=material.get("description"),
+        feedback_template=_template,
+        cohort_id=submission_cohort_id,
+        student_id=user["user_id"],
+        assignment_id=assignment_id,
+    ))
+
     # Send email notification to instructors
     instructor_ids = cohort.get("instructor_ids", [])
     if not instructor_ids and cohort.get("instructor_id"):
