@@ -3560,6 +3560,9 @@ async def get_submit_link_info(material_id: str):
     # (.pdf/.docx) even when the instructor expanded the list on the assignment.
     # If multiple assignments exist in the same cohort with the same
     # submission_type, prefer the one that actually has a non-empty override.
+    # We ALSO pull questionnaire_fields from the assignment so students see the
+    # up-to-date questionnaire even when instructors edit it via the Assignments
+    # tab (which saves to the assignment doc, not the material doc).
     submission_type = material.get("submission_type") or ""
     asgn = None
     if cohort_ids and submission_type:
@@ -3568,15 +3571,31 @@ async def get_submit_link_info(material_id: str):
             "submission_type": submission_type,
             "is_active": True,
         }
+        # Prefer an assignment with actual content (extensions OR questionnaire_fields).
         asgn = await db.assignments.find_one(
-            {**query, "allowed_extensions": {"$exists": True, "$ne": None, "$not": {"$size": 0}}},
-            {"_id": 0, "allowed_extensions": 1, "submission_type": 1},
+            {
+                **query,
+                "$or": [
+                    {"allowed_extensions": {"$exists": True, "$ne": None, "$not": {"$size": 0}}},
+                    {"questionnaire_fields": {"$exists": True, "$ne": None, "$not": {"$size": 0}}},
+                ],
+            },
+            {"_id": 0, "allowed_extensions": 1, "questionnaire_fields": 1, "submission_type": 1},
         )
         if not asgn:
             asgn = await db.assignments.find_one(
                 query,
-                {"_id": 0, "allowed_extensions": 1, "submission_type": 1},
+                {"_id": 0, "allowed_extensions": 1, "questionnaire_fields": 1, "submission_type": 1},
             )
+
+    # Effective questionnaire_fields: prefer the material's (backwards compatibility
+    # for legacy material-first flow), fall back to the linked assignment's fields
+    # when the material has none. Fixes: instructor edited fields via the
+    # Assignments tab, but student saw "no questions yet" because /submit-link/
+    # was only reading the material doc.
+    material_qf = material.get("questionnaire_fields") or []
+    assignment_qf = (asgn or {}).get("questionnaire_fields") or []
+    effective_qf = material_qf if material_qf else assignment_qf
 
     return {
         "material_id": material_id,
@@ -3586,7 +3605,7 @@ async def get_submit_link_info(material_id: str):
         "description": material.get("description", ""),
         "drive_folder_url": material.get("drive_folder_url", ""),
         "submission_type": submission_type,
-        "questionnaire_fields": material.get("questionnaire_fields") or [],
+        "questionnaire_fields": effective_qf,
         "allowed_extensions": _effective_allowed_extensions(asgn or {}, submission_type),
         "cohorts": cohorts
     }
@@ -4812,7 +4831,23 @@ async def submit_homework(
         if not isinstance(answers_raw, dict):
             raise HTTPException(status_code=400, detail="questionnaire_answers must be an object")
 
-        fields = material.get("questionnaire_fields") or []
+        # Pull questionnaire_fields from the material first, fall back to the
+        # linked assignment if the material has none — matches the resolution
+        # used by /submit-link/{material_id}, so what the student sees on the
+        # page is exactly what the backend validates against.
+        material_qf = material.get("questionnaire_fields") or []
+        if not material_qf and submission_cohort_id and submission_type:
+            qf_asgn = await db.assignments.find_one(
+                {
+                    "cohort_id": submission_cohort_id,
+                    "submission_type": submission_type,
+                    "is_active": True,
+                    "questionnaire_fields": {"$exists": True, "$ne": None, "$not": {"$size": 0}},
+                },
+                {"_id": 0, "questionnaire_fields": 1},
+            )
+            material_qf = (qf_asgn or {}).get("questionnaire_fields") or []
+        fields = material_qf
         answers: Dict[str, str] = {}
         for f in fields:
             fid = f.get("id")
@@ -5489,9 +5524,23 @@ async def submit_on_behalf(
             if sub_is_questionnaire:
                 stored = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0, "questionnaire_answers": 1})
                 stored_answers = (stored or {}).get("questionnaire_answers") or {}
+                # Fall back to the linked assignment's questionnaire_fields when the
+                # material has none — same resolution as /submit-link/{material_id}.
+                qf = material.get("questionnaire_fields") or []
+                if not qf:
+                    linked = await db.assignments.find_one(
+                        {
+                            "cohort_id": submission_cohort_id,
+                            "submission_type": "business_questionnaire",
+                            "is_active": True,
+                            "questionnaire_fields": {"$exists": True, "$ne": None, "$not": {"$size": 0}},
+                        },
+                        {"_id": 0, "questionnaire_fields": 1},
+                    )
+                    qf = (linked or {}).get("questionnaire_fields") or []
                 submission_text = "\n\n".join(
                     f"Q: {f.get('label')}\nA: {stored_answers.get(f.get('id'), '') or '(no answer)'}"
-                    for f in (material.get("questionnaire_fields") or [])
+                    for f in qf
                 )
             else:
                 submission_text = extract_text_from_file(content, filename)
