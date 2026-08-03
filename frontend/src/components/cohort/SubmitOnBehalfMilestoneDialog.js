@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { Upload, Sparkles } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../ui/dialog';
@@ -37,6 +39,8 @@ export function SubmitOnBehalfMilestoneDialog({
   // When no specific milestone is passed, let the instructor pick one from the
   // assignment's milestone list inside the dialog.
   const [pickedMilestoneId, setPickedMilestoneId] = useState('');
+  // Questionnaire answers keyed by field id, when submitting a business_questionnaire on behalf.
+  const [answers, setAnswers] = useState({});
 
   useEffect(() => {
     if (!open) {
@@ -44,6 +48,7 @@ export function SubmitOnBehalfMilestoneDialog({
       setFile(null);
       setSubmitting(false);
       setPickedMilestoneId('');
+      setAnswers({});
     } else if (!milestone) {
       // Auto-select first non-questionnaire milestone for convenience
       const first = (assignment?.milestones || []).find(m => m);
@@ -82,6 +87,11 @@ export function SubmitOnBehalfMilestoneDialog({
   // upload that can't succeed.
   const fileTooLarge = isFileTooLarge(file);
 
+  const questionnaireFields = isQuestionnaire ? (assignment.questionnaire_fields || []) : [];
+  const missingRequiredAnswer = isQuestionnaire && questionnaireFields.some(
+    (f) => f.required && !(answers[f.id] || '').trim()
+  );
+
   const handleSubmit = async () => {
     if (!studentId) {
       toast.error('Please select a student');
@@ -91,18 +101,35 @@ export function SubmitOnBehalfMilestoneDialog({
       toast.error('Please pick which milestone to submit for');
       return;
     }
-    if (!file) {
-      toast.error('Please choose a file to submit');
-      return;
-    }
-    if (fileTooLarge) {
-      toast.error(tooLargeMessage(file));
-      return;
+    if (isQuestionnaire) {
+      if (questionnaireFields.length === 0) {
+        toast.error('This questionnaire has no questions configured yet. Ask the instructor to add fields before submitting.');
+        return;
+      }
+      for (const f of questionnaireFields) {
+        if (f.required && !(answers[f.id] || '').trim()) {
+          toast.error(`Please answer: ${f.label}`);
+          return;
+        }
+      }
+    } else {
+      if (!file) {
+        toast.error('Please choose a file to submit');
+        return;
+      }
+      if (fileTooLarge) {
+        toast.error(tooLargeMessage(file));
+        return;
+      }
     }
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      if (isQuestionnaire) {
+        formData.append('questionnaire_answers', JSON.stringify(answers));
+      } else {
+        formData.append('file', file);
+      }
       formData.append('student_id', studentId);
       formData.append('assignment_id', assignment.assignment_id);
       formData.append('cohort_id', cohortId);
@@ -134,111 +161,152 @@ export function SubmitOnBehalfMilestoneDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isQuestionnaire ? (
-          <div className="p-4 bg-[#FEF3C7] border border-[#F59E0B] rounded-lg text-sm text-[#78350F]">
-            The Business Questionnaire must be filled in by the student themselves — instructors cannot submit questionnaires on behalf of students.
-          </div>
-        ) : (
-          <div className="space-y-4 py-2">
-            {/* Milestone picker — shown only when the dialog was opened without a
-                specific milestone (e.g. from the assignment-header quick action). */}
-            {!milestone && (assignment.milestones || []).length > 0 && (
-              <div>
-                <Label htmlFor="sob-milestone">Milestone</Label>
-                <Select value={pickedMilestoneId} onValueChange={setPickedMilestoneId}>
-                  <SelectTrigger className="mt-1" data-testid="sob-milestone-select">
-                    <SelectValue placeholder="Select a milestone..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(assignment.milestones || []).map(m => (
-                      <SelectItem key={m.milestone_id} value={m.milestone_id}>
-                        Week {m.week_number} — {m.title || `Week ${m.week_number}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+        <div className="space-y-4 py-2">
+          {/* Milestone picker — shown only when the dialog was opened without a
+              specific milestone (e.g. from the assignment-header quick action). */}
+          {!milestone && (assignment.milestones || []).length > 0 && (
             <div>
-              <Label htmlFor="sob-student">Student</Label>
-              <Select value={studentId} onValueChange={setStudentId}>
-                <SelectTrigger className="mt-1" data-testid="sob-student-select">
-                  <SelectValue placeholder="Select a student..." />
+              <Label htmlFor="sob-milestone">Milestone</Label>
+              <Select value={pickedMilestoneId} onValueChange={setPickedMilestoneId}>
+                <SelectTrigger className="mt-1" data-testid="sob-milestone-select">
+                  <SelectValue placeholder="Select a milestone..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {(students || []).length === 0 ? (
-                    <SelectItem value="__none" disabled>No students in this cohort</SelectItem>
-                  ) : (
-                    (students || []).map((s) => (
-                      <SelectItem key={s.user_id} value={s.user_id} data-testid={`sob-student-option-${s.user_id}`}>
-                        {s.name || s.email} <span className="text-xs text-[#666]">· {s.email}</span>
-                      </SelectItem>
-                    ))
-                  )}
+                  {(assignment.milestones || []).map((m) => (
+                    <SelectItem key={m.milestone_id} value={m.milestone_id}>
+                      Week {m.week_number} — {m.title || `Week ${m.week_number}`}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+          )}
 
-            <div>
-              <Label>File</Label>
-              <div className="mt-1">
-                <label
-                  htmlFor="sob-file-upload"
-                  className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#B8D4E8] rounded-lg cursor-pointer hover:border-[#22438E] transition-colors"
-                >
-                  <Upload className="w-5 h-5 text-[#666]" />
-                  <span className="text-sm text-[#333]">
-                    {file ? file.name : 'Click to select file'}
-                  </span>
-                </label>
-                <input
-                  id="sob-file-upload"
-                  data-testid="sob-file-input"
-                  type="file"
-                  accept={acceptAttr}
-                  className="hidden"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                />
-              </div>
-              <p className="text-xs text-[#666] mt-1">
-                Allowed: {effectiveExtensions.map((e) => `.${e}`).join(', ')} · Max file size: {MAX_UPLOAD_MB} MB
-              </p>
-              {fileTooLarge && (
-                <p
-                  className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
-                  data-testid="sob-file-too-large-warning"
-                >
-                  This file is {fileSizeMbLabel(file)} MB — over the {MAX_UPLOAD_MB} MB
-                  upload cap. Compress the video (QuickTime → Export → 480p, or use HandBrake) and
-                  reselect it before submitting.
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-start gap-2 p-3 bg-[#E1F0FF] rounded-lg">
-              <Sparkles className="w-4 h-4 text-[#22438E] flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-[#22438E]">
-                Coach Max will run an AI review automatically after upload. You&apos;ll be able to review and edit
-                the feedback before it&apos;s sent to the student.
-              </p>
-            </div>
+          <div>
+            <Label htmlFor="sob-student">Student</Label>
+            <Select value={studentId} onValueChange={setStudentId}>
+              <SelectTrigger className="mt-1" data-testid="sob-student-select">
+                <SelectValue placeholder="Select a student..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(students || []).length === 0 ? (
+                  <SelectItem value="__none" disabled>No students in this cohort</SelectItem>
+                ) : (
+                  (students || []).map((s) => (
+                    <SelectItem key={s.user_id} value={s.user_id} data-testid={`sob-student-option-${s.user_id}`}>
+                      {s.name || s.email} <span className="text-xs text-[#666]">· {s.email}</span>
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+
+          {isQuestionnaire ? (
+            /* Questionnaire form — instructor types the student's answers
+               (typically pasted from an email they sent). */
+            questionnaireFields.length === 0 ? (
+              <div className="p-3 bg-[#FEF3C7] border border-[#F59E0B] rounded-lg text-sm text-[#78350F]">
+                This questionnaire has no questions configured yet. Edit the assignment to add fields before submitting.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1" data-testid="sob-questionnaire-form">
+                {questionnaireFields.map((f, idx) => (
+                  <div key={f.id} data-testid={`sob-questionnaire-field-${f.id}`}>
+                    <Label className="text-sm font-medium text-[#000]">
+                      {idx + 1}. {f.label}
+                      {f.required && <span className="text-red-600 ml-1">*</span>}
+                    </Label>
+                    {f.type === 'longtext' ? (
+                      <Textarea
+                        value={answers[f.id] || ''}
+                        onChange={(e) => setAnswers((a) => ({ ...a, [f.id]: e.target.value }))}
+                        placeholder={f.placeholder || 'Paste the student\u2019s answer here'}
+                        className="mt-1"
+                        rows={4}
+                        maxLength={5000}
+                      />
+                    ) : (
+                      <Input
+                        value={answers[f.id] || ''}
+                        onChange={(e) => setAnswers((a) => ({ ...a, [f.id]: e.target.value }))}
+                        placeholder={f.placeholder || 'Paste the student\u2019s answer here'}
+                        className="mt-1"
+                        maxLength={5000}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            <>
+              <div>
+                <Label>File</Label>
+                <div className="mt-1">
+                  <label
+                    htmlFor="sob-file-upload"
+                    className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-[#B8D4E8] rounded-lg cursor-pointer hover:border-[#22438E] transition-colors"
+                  >
+                    <Upload className="w-5 h-5 text-[#666]" />
+                    <span className="text-sm text-[#333]">
+                      {file ? file.name : 'Click to select file'}
+                    </span>
+                  </label>
+                  <input
+                    id="sob-file-upload"
+                    data-testid="sob-file-input"
+                    type="file"
+                    accept={acceptAttr}
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+                <p className="text-xs text-[#666] mt-1">
+                  Allowed: {effectiveExtensions.map((e) => `.${e}`).join(', ')} · Max file size: {MAX_UPLOAD_MB} MB
+                </p>
+                {fileTooLarge && (
+                  <p
+                    className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mt-2"
+                    data-testid="sob-file-too-large-warning"
+                  >
+                    This file is {fileSizeMbLabel(file)} MB — over the {MAX_UPLOAD_MB} MB
+                    upload cap. Compress the video (QuickTime → Export → 480p, or use HandBrake) and
+                    reselect it before submitting.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="flex items-start gap-2 p-3 bg-[#E1F0FF] rounded-lg">
+            <Sparkles className="w-4 h-4 text-[#22438E] flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-[#22438E]">
+              Coach Max will run an AI review automatically after {isQuestionnaire ? 'submit' : 'upload'}. You&apos;ll be able to review and edit
+              the feedback before it&apos;s sent to the student.
+            </p>
+          </div>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
-          {!isQuestionnaire && (
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting || !studentId || !file || fileTooLarge || !effectiveMilestone}
-              className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
-              data-testid="sob-submit-btn"
-            >
-              {submitting ? 'Submitting...' : 'Submit & Auto-Review'}
-            </Button>
-          )}
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              submitting
+              || !studentId
+              || !effectiveMilestone
+              || (isQuestionnaire
+                ? (questionnaireFields.length === 0 || missingRequiredAnswer)
+                : (!file || fileTooLarge))
+            }
+            className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
+            data-testid="sob-submit-btn"
+          >
+            {submitting ? 'Submitting...' : 'Submit & Auto-Review'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
