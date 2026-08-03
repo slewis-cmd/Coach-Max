@@ -1001,7 +1001,7 @@ SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
     # (business model canvas, financials, etc.). Instructors can still narrow
     # the list per-assignment via allowed_extensions.
     "60_second_pitch":         {"label": "60 Second Pitch",        "extensions": ["mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav", "pdf", "doc", "docx", "txt"], "input_kind": "file"},
-    "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx", "doc", "docx"],                                           "input_kind": "file"},
+    "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx", "doc", "docx", "xlsx", "xls", "csv"],                    "input_kind": "file"},
     "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf", "xlsx", "xls", "csv"],               "input_kind": "file"},
     "spreadsheet_analysis":    {"label": "Spreadsheet / Template", "extensions": ["xlsx", "xls", "csv"],                                                          "input_kind": "file"},
     "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                                                              "input_kind": "form"},
