@@ -1010,7 +1010,7 @@ SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
     "10_slide_pitch":          {"label": "10 Slide Pitch Deck",    "extensions": ["pdf", "ppt", "pptx", "doc", "docx", "xlsx", "xls", "csv"],                    "input_kind": "file"},
     "case_activity":           {"label": "The Case Activity",      "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf", "xlsx", "xls", "csv"],               "input_kind": "file"},
     "spreadsheet_analysis":    {"label": "Spreadsheet / Template", "extensions": ["xlsx", "xls", "csv"],                                                          "input_kind": "file"},
-    "business_questionnaire":  {"label": "Business Questionnaire", "extensions": [],                                                                              "input_kind": "form"},
+    "business_questionnaire":  {"label": "Business Questionnaire", "extensions": ["pdf", "doc", "docx", "txt", "md", "rtf"],                                     "input_kind": "file"},
 }
 SUBMISSION_TYPE_IDS = list(SUBMISSION_TYPE_CONFIG.keys())
 
@@ -3044,6 +3044,77 @@ async def update_milestone(assignment_id: str, milestone_id: str, payload: Miles
         {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}}
     )
     return {"assignment_id": assignment_id, "milestone_id": milestone_id, "message": "Milestone updated"}
+
+
+@api_router.post("/assignments/{assignment_id}/milestones/{milestone_id}/context-document")
+async def upload_milestone_context_document(
+    assignment_id: str,
+    milestone_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Upload the source/context document for a milestone. For Business
+    Questionnaire assignments this is the doc containing the questions +
+    context that Coach Max reads before analyzing student answers.
+    """
+    if user.get("role") not in ("super_admin", "instructor"):
+        raise HTTPException(status_code=403, detail="Only instructors can upload context documents")
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    idx = next((i for i, m in enumerate(asgn.get("milestones") or []) if m.get("milestone_id") == milestone_id), -1)
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    fname = (file.filename or "context").strip()
+    ext = fname.lower().rsplit(".", 1)[-1] if "." in fname else ""
+    if ext not in {"pdf", "doc", "docx", "txt", "md", "rtf"}:
+        raise HTTPException(status_code=400, detail="Context document must be a .pdf, .doc, .docx, .txt, .md, or .rtf")
+
+    content = await file.read()
+    gridfs_id = await save_bytes_to_gridfs(content, fname)
+    # Pre-extract text once, cached on the milestone so Coach Max doesn't
+    # re-parse the doc on every review.
+    extracted_text = extract_text_from_file(content, fname) or ""
+
+    milestones = asgn["milestones"]
+    milestones[idx] = {
+        **milestones[idx],
+        "context_document": {
+            "gridfs_id": gridfs_id,
+            "file_name": fname,
+            "extracted_text": extracted_text[:20000],  # cap to keep doc size sane
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    await db.assignments.update_one(
+        {"assignment_id": assignment_id},
+        {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"message": "Context document uploaded", "file_name": fname, "extracted_chars": len(extracted_text)}
+
+
+@api_router.delete("/assignments/{assignment_id}/milestones/{milestone_id}/context-document")
+async def delete_milestone_context_document(
+    assignment_id: str,
+    milestone_id: str,
+    user: dict = Depends(get_current_user),
+):
+    if user.get("role") not in ("super_admin", "instructor"):
+        raise HTTPException(status_code=403, detail="Only instructors can remove context documents")
+    asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0})
+    if not asgn:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    idx = next((i for i, m in enumerate(asgn.get("milestones") or []) if m.get("milestone_id") == milestone_id), -1)
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    milestones = asgn["milestones"]
+    milestones[idx].pop("context_document", None)
+    await db.assignments.update_one(
+        {"assignment_id": assignment_id},
+        {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"message": "Context document removed"}
 
 
 @api_router.get("/submit-link/a/{assignment_id}/w/{week_number}")
@@ -5192,6 +5263,24 @@ async def _run_auto_ai_review_for_submission(
                 context_text += f"\n\n--- {mat.get('material_type', '').upper()}: {mat.get('title', '')} ---\n{(mat_text or '')[:5000]}"
             except Exception:
                 pass
+
+        # If this milestone has a context/source document (uploaded by the
+        # instructor — typically the Business Questionnaire with the questions
+        # + rubric), include its extracted text so Coach Max reads the
+        # question sheet alongside the student's answers.
+        if assignment_id:
+            _asgn = await db.assignments.find_one({"assignment_id": assignment_id}, {"_id": 0, "milestones": 1})
+            _ms_ctx = None
+            if _asgn:
+                for _m in (_asgn.get("milestones") or []):
+                    if _m.get("milestone_id") == submission.get("milestone_id"):
+                        _ms_ctx = (_m.get("context_document") or {}).get("extracted_text") or ""
+                        break
+            if _ms_ctx:
+                context_text = (
+                    f"\n\n--- SOURCE DOCUMENT (questions + rubric provided by the instructor for this milestone) ---\n{_ms_ctx[:8000]}\n"
+                    + context_text
+                )
 
         # Cumulative context from prior weeks + prior same-assignment submissions
         cumulative_ctx = await build_cumulative_context(

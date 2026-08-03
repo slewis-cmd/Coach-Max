@@ -642,6 +642,85 @@ function MilestoneEditDialog({ open, milestoneEditing, onOpenChange, onSaved }) 
             Final capstone (the combined whole-deck / final submission)
           </label>
 
+          {/* Context document — the instructor-uploaded source that Coach Max
+              reads before analyzing student submissions. Perfect for a
+              Business Questionnaire where the doc contains the questions +
+              context, or for a Case Activity where it's the case brief. */}
+          <div className="border-t border-[#E5E7EB] pt-4 mt-2">
+            <Label className="text-base">Source Document (Coach Max Context)</Label>
+            <p className="text-xs text-[#666] mt-0.5 mb-2">
+              Upload a Word/PDF that Coach Max should read before reviewing student submissions —
+              e.g. the questionnaire with questions and instructions, or the case brief. Optional
+              but strongly recommended for questionnaires so Coach Max knows what to look for.
+            </p>
+            {form.context_document ? (
+              <div
+                className="flex items-center justify-between p-2 bg-[#E1F0FF] border border-[#B8D4E8] rounded-lg text-sm"
+                data-testid="milestone-context-doc-current"
+              >
+                <span className="truncate flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#22438E] flex-shrink-0" />
+                  <span className="truncate">{form.context_document.file_name}</span>
+                  <span className="text-xs text-[#666]">({form.context_document.extracted_text?.length || 0} chars extracted)</span>
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-600 hover:text-red-700 h-7 text-xs flex-shrink-0"
+                  onClick={async () => {
+                    try {
+                      await axios.delete(
+                        `${API_URL}/api/assignments/${milestoneEditing.assignment.assignment_id}/milestones/${milestoneEditing.milestone.milestone_id}/context-document`
+                      );
+                      setForm({ ...form, context_document: null });
+                      toast.success('Source document removed');
+                    } catch (err) {
+                      toast.error(err?.response?.data?.detail || 'Failed to remove document');
+                    }
+                  }}
+                  data-testid="milestone-context-doc-remove"
+                >Remove</Button>
+              </div>
+            ) : (
+              <label
+                htmlFor="milestone-context-doc-input"
+                className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-[#B8D4E8] rounded-lg cursor-pointer hover:border-[#22438E] transition-colors text-sm"
+              >
+                <Upload className="w-4 h-4 text-[#666]" />
+                <span className="text-[#333]">Click to upload PDF / DOCX / TXT</span>
+              </label>
+            )}
+            <input
+              id="milestone-context-doc-input"
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md,.rtf"
+              className="hidden"
+              data-testid="milestone-context-doc-input"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 100 * 1024 * 1024) {
+                  toast.error('Source document must be under 100 MB');
+                  return;
+                }
+                try {
+                  const fd = new FormData();
+                  fd.append('file', file);
+                  const res = await axios.post(
+                    `${API_URL}/api/assignments/${milestoneEditing.assignment.assignment_id}/milestones/${milestoneEditing.milestone.milestone_id}/context-document`,
+                    fd, { headers: { 'Content-Type': 'multipart/form-data' } }
+                  );
+                  toast.success(`Source document saved — ${res.data.extracted_chars} chars extracted`);
+                  setForm({ ...form, context_document: {
+                    file_name: res.data.file_name, extracted_text: 'a'.repeat(res.data.extracted_chars),
+                  }});
+                } catch (err) {
+                  toast.error(err?.response?.data?.detail || 'Failed to upload source document');
+                }
+              }}
+            />
+          </div>
+
           {/* Questionnaire fields editor — only for Business Questionnaire assignments */}
           {isQuestionnaireAssignment && (
             <div className="border-t border-[#E5E7EB] pt-4 mt-2">
