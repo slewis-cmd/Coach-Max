@@ -969,6 +969,12 @@ class MilestonePayload(BaseModel):
     drive_folder_url_override: Optional[str] = ""
     is_final_capstone: Optional[bool] = False
     due_date: Optional[str] = None
+    # Per-milestone questionnaire fields for Business Questionnaire assignments.
+    # Each week has its own set of questions; storing per-milestone lets a
+    # 14-week questionnaire hold 14 distinct question lists inside the same
+    # assignment doc. If omitted on update, the milestone's existing fields are
+    # preserved (see update_milestone).
+    questionnaire_fields: Optional[List[Dict[str, Any]]] = None
 
 
 # ==================== END ASSIGNMENTS ====================
@@ -2876,20 +2882,23 @@ async def list_assignments(cohort_id: str, user: dict = Depends(get_current_user
 
 async def _merge_material_questionnaire_fields(assignments: List[Dict[str, Any]], cohort_id: str) -> None:
     """In-place: for each business_questionnaire assignment with empty
-    questionnaire_fields, look up any linked homework material in the same
-    cohort with populated fields and copy them onto the assignment dict
-    (view-only merge — does not persist).
+    assignment-level questionnaire_fields AND at least one milestone missing
+    its own questionnaire_fields, look up any linked homework material in the
+    same cohort with populated fields and use those as the fallback. Milestone-
+    level questionnaire_fields (set via the milestone editor) always win.
     """
-    needs_merge = [
-        a for a in assignments
-        if a.get("submission_type") == "business_questionnaire"
-        and not (a.get("questionnaire_fields") or [])
-    ]
-    if not needs_merge:
+    for a in assignments:
+        if a.get("submission_type") != "business_questionnaire":
+            continue
+        # If ALL milestones already have their own questionnaire_fields, nothing
+        # to backfill — the milestone editor is now the source of truth.
+        milestones = a.get("milestones") or []
+        all_have_own = milestones and all(m.get("questionnaire_fields") for m in milestones)
+        if all_have_own:
+            continue
+        break  # at least one assignment needs backfill; fetch materials once
+    else:
         return
-    # One DB call to grab all candidate materials, then map by nothing more
-    # specific than "same cohort + business_questionnaire type" — that's the
-    # only linkage the legacy schema provides.
     materials = await db.materials.find(
         {
             "cohort_id": cohort_id,
@@ -2901,11 +2910,13 @@ async def _merge_material_questionnaire_fields(assignments: List[Dict[str, Any]]
     ).to_list(length=100)
     if not materials:
         return
-    # Prefer any material with fields; if we have multiple, later ones don't
-    # override earlier ones — the first one wins.
     fallback_fields = materials[0].get("questionnaire_fields") or []
-    for a in needs_merge:
-        a["questionnaire_fields"] = fallback_fields
+    for a in assignments:
+        if a.get("submission_type") != "business_questionnaire":
+            continue
+        # Backfill assignment-level fallback (used by legacy readers)
+        if not (a.get("questionnaire_fields") or []):
+            a["questionnaire_fields"] = fallback_fields
 
 
 @api_router.post("/cohorts/{cohort_id}/assignments")
@@ -3024,6 +3035,10 @@ async def update_milestone(assignment_id: str, milestone_id: str, payload: Miles
         "is_final_capstone": bool(payload.is_final_capstone),
         "due_date": payload.due_date,
     }
+    # Persist questionnaire_fields when the payload includes them (None = leave
+    # existing untouched; empty list = intentional clear).
+    if payload.questionnaire_fields is not None:
+        milestones[idx]["questionnaire_fields"] = payload.questionnaire_fields
     await db.assignments.update_one(
         {"assignment_id": assignment_id},
         {"$set": {"milestones": milestones, "updated_at": datetime.now(timezone.utc)}}
@@ -3042,6 +3057,20 @@ async def resolve_assignment_submit_link(assignment_id: str, week_number: int, c
     milestone = next((m for m in (asgn.get("milestones") or []) if m.get("week_number") == week_number), None)
     if not milestone:
         raise HTTPException(status_code=404, detail=f"No milestone for week {week_number} on this assignment")
+    # Milestone-level questionnaire_fields win. Fall back to the assignment's,
+    # then to a linked homework material (legacy compatibility).
+    effective_qf = milestone.get("questionnaire_fields") or asgn.get("questionnaire_fields") or []
+    if not effective_qf and asgn.get("submission_type") == "business_questionnaire":
+        mat = await db.materials.find_one(
+            {
+                "cohort_id": asgn["cohort_id"],
+                "material_type": "homework",
+                "submission_type": "business_questionnaire",
+                "questionnaire_fields": {"$exists": True, "$ne": None, "$not": {"$size": 0}},
+            },
+            {"_id": 0, "questionnaire_fields": 1},
+        )
+        effective_qf = (mat or {}).get("questionnaire_fields") or []
     return {
         "assignment_id": assignment_id,
         "milestone_id": milestone["milestone_id"],
@@ -3053,10 +3082,10 @@ async def resolve_assignment_submit_link(assignment_id: str, week_number: int, c
             "submission_type": asgn.get("submission_type"),
             "feedback_template": asgn.get("feedback_template"),
             "drive_folder_url": asgn.get("drive_folder_url"),
-            "questionnaire_fields": asgn.get("questionnaire_fields") or [],
+            "questionnaire_fields": effective_qf,
             "allowed_extensions": _effective_allowed_extensions(asgn, asgn.get("submission_type") or ""),
         },
-        "milestone": milestone,
+        "milestone": {**milestone, "questionnaire_fields": effective_qf},
     }
 
 
@@ -3454,7 +3483,9 @@ async def submit_milestone(
             raise HTTPException(status_code=400, detail="questionnaire_answers must be valid JSON")
         if not isinstance(answers_raw, dict):
             raise HTTPException(status_code=400, detail="questionnaire_answers must be an object")
-        fields = asgn.get("questionnaire_fields") or []
+        # Milestone-level fields win over assignment-level so each week can have
+        # its own question set inside the same assignment.
+        fields = milestone.get("questionnaire_fields") or asgn.get("questionnaire_fields") or []
         answers: Dict[str, str] = {}
         for f in fields:
             fid = f.get("id")
@@ -5350,7 +5381,8 @@ async def submit_milestone_on_behalf(
             raise HTTPException(status_code=400, detail="questionnaire_answers must be valid JSON")
         if not isinstance(answers_raw, dict):
             raise HTTPException(status_code=400, detail="questionnaire_answers must be an object")
-        fields = asgn.get("questionnaire_fields") or []
+        # Milestone-level fields win (per new spec).
+        fields = milestone.get("questionnaire_fields") or asgn.get("questionnaire_fields") or []
         answers: Dict[str, str] = {}
         for f in fields:
             fid = f.get("id")

@@ -497,26 +497,81 @@ function MilestoneEditDialog({ open, milestoneEditing, onOpenChange, onSaved }) 
 
   useEffect(() => {
     if (open && milestoneEditing?.milestone) {
-      setForm({ ...milestoneEditing.milestone });
+      // Seed a fresh form snapshot. Prefer the milestone's own questionnaire_fields
+      // (new source of truth); fall back to the assignment's fields as a starting
+      // point so instructors can inherit and then tweak per week.
+      const seed = { ...milestoneEditing.milestone };
+      if (!(seed.questionnaire_fields && seed.questionnaire_fields.length)) {
+        seed.questionnaire_fields = (milestoneEditing.assignment?.questionnaire_fields) || [];
+      }
+      setForm(seed);
     }
   }, [open, milestoneEditing]);
 
   if (!milestoneEditing || !form) return null;
 
+  const isQuestionnaireAssignment =
+    milestoneEditing.assignment?.submission_type === 'business_questionnaire';
+
+  const addField = () => {
+    const newField = {
+      id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      label: '',
+      type: 'longtext',
+      required: false,
+      placeholder: '',
+    };
+    setForm({ ...form, questionnaire_fields: [...(form.questionnaire_fields || []), newField] });
+  };
+  const updateField = (idx, patch) => {
+    const next = [...(form.questionnaire_fields || [])];
+    next[idx] = { ...next[idx], ...patch };
+    setForm({ ...form, questionnaire_fields: next });
+  };
+  const removeField = (idx) => {
+    const next = [...(form.questionnaire_fields || [])];
+    next.splice(idx, 1);
+    setForm({ ...form, questionnaire_fields: next });
+  };
+  const moveField = (idx, delta) => {
+    const next = [...(form.questionnaire_fields || [])];
+    const target = idx + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setForm({ ...form, questionnaire_fields: next });
+  };
+
   const handleSave = async () => {
+    if (isQuestionnaireAssignment) {
+      const bad = (form.questionnaire_fields || []).find(f => !(f.label || '').trim());
+      if (bad) {
+        toast.error('Every question needs a label. Delete blank rows or add a question.');
+        return;
+      }
+    }
     setSaving(true);
     try {
+      const payload = {
+        week_number: form.week_number,
+        title: form.title || '',
+        description: form.description || '',
+        feedback_template_override: form.feedback_template_override || '',
+        drive_folder_url_override: form.drive_folder_url_override || '',
+        is_final_capstone: !!form.is_final_capstone,
+        due_date: form.due_date || null,
+      };
+      if (isQuestionnaireAssignment) {
+        payload.questionnaire_fields = (form.questionnaire_fields || []).map(f => ({
+          id: f.id,
+          label: (f.label || '').trim(),
+          type: f.type || 'longtext',
+          required: !!f.required,
+          placeholder: (f.placeholder || '').trim(),
+        }));
+      }
       await axios.put(
         `${API_URL}/api/assignments/${milestoneEditing.assignment.assignment_id}/milestones/${milestoneEditing.milestone.milestone_id}`,
-        {
-          week_number: form.week_number,
-          title: form.title || '',
-          description: form.description || '',
-          feedback_template_override: form.feedback_template_override || '',
-          drive_folder_url_override: form.drive_folder_url_override || '',
-          is_final_capstone: !!form.is_final_capstone,
-          due_date: form.due_date || null,
-        }
+        payload
       );
       toast.success('Milestone updated');
       onSaved();
@@ -529,14 +584,14 @@ function MilestoneEditDialog({ open, milestoneEditing, onOpenChange, onSaved }) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl" data-testid="milestone-edit-dialog">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col" data-testid="milestone-edit-dialog">
         <DialogHeader>
           <DialogTitle>Edit Milestone — Week {form.week_number}</DialogTitle>
           <DialogDescription>
             Milestone-specific overrides. Leave blank to inherit from the assignment.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2">
+        <div className="space-y-3 py-2 overflow-y-auto pr-1">
           <div>
             <Label>Title</Label>
             <Input
@@ -586,6 +641,92 @@ function MilestoneEditDialog({ open, milestoneEditing, onOpenChange, onSaved }) 
             />
             Final capstone (the combined whole-deck / final submission)
           </label>
+
+          {/* Questionnaire fields editor — only for Business Questionnaire assignments */}
+          {isQuestionnaireAssignment && (
+            <div className="border-t border-[#E5E7EB] pt-4 mt-2">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <Label className="text-base">Questionnaire Questions</Label>
+                  <p className="text-xs text-[#666] mt-0.5">
+                    These questions will be shown to students for this week. Coach Max will review their answers.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={addField}
+                  data-testid="milestone-add-question-btn"
+                >
+                  + Add Question
+                </Button>
+              </div>
+              {(form.questionnaire_fields || []).length === 0 && (
+                <p className="text-sm text-[#666] italic p-3 bg-[#F9FAFB] border border-dashed border-[#B8D4E8] rounded-lg">
+                  No questions yet. Click Add Question above to create the first one for this week.
+                </p>
+              )}
+              <div className="space-y-3">
+                {(form.questionnaire_fields || []).map((f, idx) => (
+                  <div
+                    key={f.id}
+                    className="border border-[#E5E7EB] rounded-lg p-3 space-y-2 bg-white"
+                    data-testid={`milestone-question-${idx}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-[#666]">Q{idx + 1}</span>
+                      <div className="ml-auto flex items-center gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => moveField(idx, -1)}
+                          disabled={idx === 0} className="h-7 px-2 text-xs" title="Move up">↑</Button>
+                        <Button size="sm" variant="ghost" onClick={() => moveField(idx, 1)}
+                          disabled={idx === (form.questionnaire_fields.length - 1)}
+                          className="h-7 px-2 text-xs" title="Move down">↓</Button>
+                        <Button size="sm" variant="ghost" onClick={() => removeField(idx)}
+                          className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
+                          title="Delete question"
+                          data-testid={`milestone-remove-question-${idx}`}>Remove</Button>
+                      </div>
+                    </div>
+                    <Input
+                      value={f.label || ''}
+                      onChange={(e) => updateField(idx, { label: e.target.value })}
+                      placeholder="Question label — e.g. What problem is your business solving?"
+                      data-testid={`milestone-question-label-${idx}`}
+                    />
+                    <div className="flex items-center gap-3 text-sm">
+                      <label className="flex items-center gap-1.5 text-xs">
+                        <span className="text-[#666]">Input type:</span>
+                        <select
+                          value={f.type || 'longtext'}
+                          onChange={(e) => updateField(idx, { type: e.target.value })}
+                          className="border border-[#B8D4E8] rounded px-2 py-1 text-xs bg-white"
+                          data-testid={`milestone-question-type-${idx}`}
+                        >
+                          <option value="longtext">Paragraph</option>
+                          <option value="shorttext">Short answer</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={!!f.required}
+                          onChange={(e) => updateField(idx, { required: e.target.checked })}
+                          data-testid={`milestone-question-required-${idx}`}
+                        />
+                        <span className="text-[#666]">Required</span>
+                      </label>
+                    </div>
+                    <Input
+                      value={f.placeholder || ''}
+                      onChange={(e) => updateField(idx, { placeholder: e.target.value })}
+                      placeholder="Placeholder hint (optional)"
+                      className="text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="milestone-cancel-btn">Cancel</Button>
