@@ -149,6 +149,17 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
                 </button>
                 {isInstructor && (
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    {asgn.submission_type !== 'business_questionnaire' && (
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => setSubmitOnBehalfTarget({ assignment: asgn, milestone: null })}
+                        className="text-[#22438E] hover:bg-[#E1F0FF] h-8 text-xs"
+                        title="Submit for a student on their behalf — pick which milestone in the next step"
+                        data-testid={`submit-on-behalf-assignment-${asgn.assignment_id}`}
+                      >
+                        <Upload className="w-3.5 h-3.5 mr-1" /> Submit for student
+                      </Button>
+                    )}
                     <Button
                       variant="ghost" size="icon"
                       onClick={async () => {

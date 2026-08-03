@@ -34,16 +34,30 @@ export function SubmitOnBehalfMilestoneDialog({
   const [studentId, setStudentId] = useState('');
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // When no specific milestone is passed, let the instructor pick one from the
+  // assignment's milestone list inside the dialog.
+  const [pickedMilestoneId, setPickedMilestoneId] = useState('');
 
   useEffect(() => {
     if (!open) {
       setStudentId('');
       setFile(null);
       setSubmitting(false);
+      setPickedMilestoneId('');
+    } else if (!milestone) {
+      // Auto-select first non-questionnaire milestone for convenience
+      const first = (assignment?.milestones || []).find(m => m);
+      setPickedMilestoneId(first?.milestone_id || '');
     }
-  }, [open]);
+  }, [open, milestone, assignment]);
 
-  if (!assignment || !milestone) return null;
+  if (!assignment) return null;
+
+  // Effective milestone = the one passed in OR the one picked inside the dialog.
+  const effectiveMilestone =
+    milestone
+    || (assignment.milestones || []).find(m => m.milestone_id === pickedMilestoneId)
+    || null;
 
   const typeConfig = getSubmissionTypeConfig(assignment.submission_type);
   const isQuestionnaire = assignment.submission_type === 'business_questionnaire';
@@ -73,6 +87,10 @@ export function SubmitOnBehalfMilestoneDialog({
       toast.error('Please select a student');
       return;
     }
+    if (!effectiveMilestone) {
+      toast.error('Please pick which milestone to submit for');
+      return;
+    }
     if (!file) {
       toast.error('Please choose a file to submit');
       return;
@@ -89,7 +107,7 @@ export function SubmitOnBehalfMilestoneDialog({
       formData.append('assignment_id', assignment.assignment_id);
       formData.append('cohort_id', cohortId);
       const res = await axios.post(
-        `${API_URL}/api/milestones/${milestone.milestone_id}/submit-on-behalf`,
+        `${API_URL}/api/milestones/${effectiveMilestone.milestone_id}/submit-on-behalf`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 },
       );
@@ -109,7 +127,10 @@ export function SubmitOnBehalfMilestoneDialog({
         <DialogHeader>
           <DialogTitle className="font-normal text-2xl">Submit on behalf of a student</DialogTitle>
           <DialogDescription>
-            <strong>{assignment.title}</strong> · Week {milestone.week_number}: {milestone.title || `Week ${milestone.week_number}`}
+            <strong>{assignment.title}</strong>
+            {milestone && (
+              <> · Week {milestone.week_number}: {milestone.title || `Week ${milestone.week_number}`}</>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -119,6 +140,25 @@ export function SubmitOnBehalfMilestoneDialog({
           </div>
         ) : (
           <div className="space-y-4 py-2">
+            {/* Milestone picker — shown only when the dialog was opened without a
+                specific milestone (e.g. from the assignment-header quick action). */}
+            {!milestone && (assignment.milestones || []).length > 0 && (
+              <div>
+                <Label htmlFor="sob-milestone">Milestone</Label>
+                <Select value={pickedMilestoneId} onValueChange={setPickedMilestoneId}>
+                  <SelectTrigger className="mt-1" data-testid="sob-milestone-select">
+                    <SelectValue placeholder="Select a milestone..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(assignment.milestones || []).map(m => (
+                      <SelectItem key={m.milestone_id} value={m.milestone_id}>
+                        Week {m.week_number} — {m.title || `Week ${m.week_number}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label htmlFor="sob-student">Student</Label>
               <Select value={studentId} onValueChange={setStudentId}>
@@ -192,7 +232,7 @@ export function SubmitOnBehalfMilestoneDialog({
           {!isQuestionnaire && (
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !studentId || !file || fileTooLarge}
+              disabled={submitting || !studentId || !file || fileTooLarge || !effectiveMilestone}
               className="bg-[#22438E] text-white hover:bg-[#1A3A7A]"
               data-testid="sob-submit-btn"
             >
