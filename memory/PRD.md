@@ -724,3 +724,11 @@ Feedback that the grading felt harsh for early-stage first-time founders. Shippe
 - [x] **"Best attempt counts" callout** on Venture Path page + "X pts to <NextTier>" nudge chips on each locked module. Chart gained three reference lines (Bronze/Silver/Gold) instead of just one.
 - [x] Backwards-compat: `parse_readiness_score()` accepts both "Progress Score: NN/100" (new) and "Readiness Score: NN/100" (legacy) so historical submissions keep working. DB field name `readiness_score` unchanged.
 - [x] **Tests**: 19/19 pytest cases pass (`test_venture_path.py`). Frontend e2e verified via seeded student session (iteration_56).
+
+### Founder Progress Score Badge on Feedback (Completed - Feb 2026)
+User feedback: "Where does the Founder Progress Score show up? The only thing I see is a numeric score at the bottom of the Business Questionnaire."
+- [x] **Root cause**: the AI response's trailing machine-readable `Progress Score: NN/100` line was leaking into the rendered feedback text (whitespace-pre-wrap) with no formatting or context.
+- [x] **Fix**: created shared helpers `/app/frontend/src/lib/progressScore.js` (`stripProgressScoreLine`, `tierFromScore` — accepts both new "Progress Score" and legacy "Readiness Score" labels) and a `ProgressScoreBadge` component (`/app/frontend/src/components/submission/ProgressScoreBadge.js`) showing a tier-coloured pill (Bronze/Silver/Gold/Strong Start), numeric score, tier label, and link to `/venture-path`.
+- [x] Wired into every feedback surface: SubmissionDetail (`FeedbackDisplay`), CoachMaxPage collapsible summary, and the exported/emailed PDF (server-side strip + branded "Founder Progress Score" section above the feedback body).
+- [x] Old raw score line no longer appears anywhere; older submissions with the legacy "Readiness Score" label are stripped just as cleanly.
+- [x] **Tests**: 25/25 pass (`test_venture_path.py` 19/19 + new `test_score_display.py` 6/6) covering PDF strip + badge insertion, and frontend Playwright confirmed badges appear on both SubmissionDetail and CoachMaxPage across Silver/Gold/no-score/legacy scenarios (iteration_57).
