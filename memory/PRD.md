@@ -716,3 +716,11 @@ Follow-up work needed to complete the vision:
 - [x] `/venture-path` route + `VenturePath.js` page: badge grid (locked/unlocked states), progress bar, Recharts line chart of score trend with `y=80` badge-threshold reference line.
 - [x] Student dashboard header now includes a "Venture Path" nav link (`data-testid=venture-path-nav-link`).
 - [x] **Tests**: 7/7 pytest cases passing (`/app/backend/tests/test_venture_path.py`). Frontend renders correctly with seeded student session (iteration_55).
+
+### Encouraging Gamification for First-Time Founders (Completed - Feb 2026)
+Feedback that the grading felt harsh for early-stage first-time founders. Shipped three coordinated changes:
+- [x] **Renamed & re-toned score**: "Investor Ready Score" → "Founder Progress Score". Coach Max's rubric now opens with a mandate to lead with a genuine win, frame growth areas as next steps, and score generously. New bands: 1-49 "Strong Start", 50-69 "Building Momentum", 70-84 "Traction Mode", 85-100 "Investor-Ready". Prompt explicitly instructs that first attempts should typically land 50-75.
+- [x] **Tiered badges (Bronze/Silver/Gold)** replacing the all-or-nothing unlock at 80. Bronze at 50, Silver at 70, Gold at 85. Every module now shows visible progress on nearly every submission. Backend response gained `tier`, `next_tier`, `points_to_next`, and top-level `gold_count`/`silver_count`/`bronze_count`.
+- [x] **"Best attempt counts" callout** on Venture Path page + "X pts to <NextTier>" nudge chips on each locked module. Chart gained three reference lines (Bronze/Silver/Gold) instead of just one.
+- [x] Backwards-compat: `parse_readiness_score()` accepts both "Progress Score: NN/100" (new) and "Readiness Score: NN/100" (legacy) so historical submissions keep working. DB field name `readiness_score` unchanged.
+- [x] **Tests**: 19/19 pytest cases pass (`test_venture_path.py`). Frontend e2e verified via seeded student session (iteration_56).

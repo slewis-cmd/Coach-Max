@@ -4362,9 +4362,10 @@ async def preview_material_text(material_id: str, user: dict = Depends(get_curre
 @api_router.get("/student/venture-path")
 async def get_student_venture_path(user: dict = Depends(get_current_user)):
     """Gamification endpoint: returns the student's Venture Path — a list of
-    6 module badges (locked/unlocked) plus a score trend series suitable for
-    charting. A badge unlocks the moment ANY submission whose milestone falls
-    in that module scores >= 80.
+    6 module badges (each with a Bronze/Silver/Gold tier or 'none') plus a
+    score trend series suitable for charting. Tiers unlock at Bronze=50,
+    Silver=70, Gold=85 based on the student's BEST submission whose milestone
+    week_number matches the module number.
     """
     if user.get("role") != "student":
         raise HTTPException(status_code=403, detail="Students only")
