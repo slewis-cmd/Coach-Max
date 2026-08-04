@@ -1,0 +1,27 @@
+{
+  "summary": "Verified the Founder Progress Score display refactor (iteration_57 follow-up to iter_56). Backend: re-ran /app/backend/tests/test_venture_path.py (19/19 pass — parse_readiness_score + tier thresholds still correct for both 'Progress Score' and legacy 'Readiness Score' labels). Added /app/backend/tests/test_score_display.py (6 new tests, 6/6 pass) covering POST /api/submissions/{id}/export-pdf: PDF contains 'Founder Progress Score: NN/100' + tier label ('Silver - Traction Mode', 'Gold - Investor-Ready', 'Bronze - Building Momentum'); trailing 'Progress Score: NN/100' and legacy 'Readiness Score: NN/100' lines are stripped from the feedback body; when readiness_score is null the badge header is omitted and the body still renders. Frontend (Playwright against REACT_APP_BACKEND_URL): seeded 4 submissions (silver 72 w/ new label, gold 90, no-score, legacy 78 w/ Readiness Score label) and asserted SubmissionDetail + CoachMaxPage: (a) data-testid='founder-progress-score-badge' present when score set, (b) value '72/100' / '90/100' / '78/100' correct, (c) tier chip 'Silver · Traction Mode' / 'Gold · Investor-Ready', (d) link 'View Venture Path' -> /venture-path, (e) feedback body no longer contains 'Progress Score:' or 'Readiness Score:' line, (f) badge does NOT render when readiness_score is null but feedback text still displays, (g) CoachMaxPage collapsible 'View your feedback' summary renders the badge and stripped body. Screenshots confirm the visual layout.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_venture_path.py",
+    "/app/backend/tests/test_score_display.py",
+    "/app/test_reports/pytest/iter57_vp.xml",
+    "/app/test_reports/pytest/iter57_score.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 7981 lines — long-standing recommendation to split into routers still stands (carried over from iter_56).",
+    "In server.py export_feedback_pdf, the strip-line regex is inlined and duplicates the frontend's SCORE_LINE_RE in /app/frontend/src/lib/progressScore.js. Consider extracting a shared helper (e.g. reuse parse_readiness_score's regex or a new strip_score_line() function) so both parse + strip pathways stay in lockstep as labels evolve.",
+    "The frontend ProgressScoreBadge tier styles are hardcoded in progressScore.js as raw Tailwind hex utility strings (bg-[#FEF3C7] etc.) — same colors also appear in server.py PDF generation as tuple literals. Would benefit from a single design-token constant to avoid drift."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_score_display.py (new)"
+  ],
+  "success_rate": {"backend": "100% (25/25 across both files)", "frontend": "100% (5/5 scenarios visually + programmatically verified)"},
+  "test_credentials": "Per /app/memory/test_credentials.md pattern — seeded ephemeral TEST_ instructor+student users, sessions, cohort, assignment, submissions. All cleaned up after run.",
+  "seed_data_creation": "Fixtures in test_score_display.py create + tear down TEST_-prefixed instructor/student/cohort/assignment. For the frontend playwright run, seed data was created inline via pymongo and cleaned up post-run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_score_display.py runs against the live backend and requires REACT_APP_BACKEND_URL + MONGO_URL + DB_NAME env vars (same pattern as test_venture_path.py). It uses pdfplumber (already installed) to parse the returned PDF bytes. If you're extending this: (1) the strip regex is inlined in export_feedback_pdf at server.py ~L6906, and duplicated in /app/frontend/src/lib/progressScore.js — keep them in sync. (2) tier thresholds are Bronze>=50, Silver>=70, Gold>=85; 'none' < 50 renders as 'Strong Start'. (3) Frontend session-token pattern: set localStorage.thinkific_session_token then navigate to /submission/:id or /coach-max/:id.",
+  "rca of the issue": "N/A — implementation matches spec; no bugs found."
+}

@@ -6,6 +6,8 @@ import { Button } from '../components/ui/button';
 import { MessageCircle, ArrowLeft, FileText, Send, Globe, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { stripProgressScoreLine } from '../lib/progressScore';
+import { ProgressScoreBadge } from '../components/submission/ProgressScoreBadge';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -129,7 +131,8 @@ export default function CoachMaxPage() {
 
   if (!submission) return null;
 
-  const feedback = submission.instructor_feedback || submission.ai_feedback || '';
+  const feedback = stripProgressScoreLine(submission.instructor_feedback || submission.ai_feedback || '');
+  const readinessScore = submission.readiness_score;
   const weekNum = submission.material?.week_number || '?';
   const materialTitle = submission.material?.title || 'Homework';
 
@@ -175,7 +178,8 @@ export default function CoachMaxPage() {
               {chatLang === 'es' ? 'Ver tu retroalimentacion' : 'View your feedback'}
             </summary>
             <Card className="mt-2 bg-[#F0FDF4] border-[#BBF7D0]">
-              <CardContent className="p-4">
+              <CardContent className="p-4 space-y-3">
+                {readinessScore ? <ProgressScoreBadge score={readinessScore} /> : null}
                 <p className="text-sm text-[#166534] whitespace-pre-wrap leading-relaxed">{feedback}</p>
               </CardContent>
             </Card>

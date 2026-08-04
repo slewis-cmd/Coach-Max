@@ -6901,6 +6901,15 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     feedback = submission.get("instructor_feedback") or submission.get("ai_feedback")
     if not feedback:
         raise HTTPException(status_code=400, detail="No feedback available. Generate AI feedback first.")
+    # Strip the trailing machine-readable "Progress Score: NN/100" line — we render
+    # it as a proper header section below instead of leaking raw text into the PDF.
+    feedback = _re_scoring.sub(
+        r"\s*(?:Progress|Readiness)\s*Score\s*:\s*\d{1,3}\s*(?:/\s*100)?\s*$",
+        "",
+        feedback,
+        flags=_re_scoring.IGNORECASE | _re_scoring.MULTILINE,
+    ).rstrip()
+    readiness_score = submission.get("readiness_score")
     
     student = await db.users.find_one({"user_id": submission["student_id"]}, {"_id": 0})
     material = await db.materials.find_one({"material_id": submission["material_id"]}, {"_id": 0}) if submission.get("material_id") else None
@@ -6983,7 +6992,29 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     pdf.set_draw_color(184, 212, 232)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(8)
-    
+
+    # Founder Progress Score section (only if we parsed a score for this submission).
+    if readiness_score:
+        if readiness_score >= 85:
+            tier_label, tier_name, fill_rgb, text_rgb = "Gold", "Investor-Ready", (254, 243, 199), (120, 53, 15)
+        elif readiness_score >= 70:
+            tier_label, tier_name, fill_rgb, text_rgb = "Silver", "Traction Mode", (241, 245, 249), (51, 65, 85)
+        elif readiness_score >= 50:
+            tier_label, tier_name, fill_rgb, text_rgb = "Bronze", "Building Momentum", (255, 237, 213), (124, 45, 18)
+        else:
+            tier_label, tier_name, fill_rgb, text_rgb = "Strong Start", "Strong Start", (239, 246, 255), (34, 67, 142)
+        y_before_score = pdf.get_y()
+        pdf.set_fill_color(*fill_rgb)
+        pdf.set_draw_color(*fill_rgb)
+        pdf.rect(10, y_before_score, 190, 20, "DF")
+        pdf.set_y(y_before_score + 4)
+        pdf.set_text_color(*text_rgb)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(CW, 6, f"Founder Progress Score: {readiness_score}/100", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(CW, 6, safe_text(f"{tier_label} - {tier_name}"), align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
+
     # Feedback section
     pdf.set_text_color(34, 67, 142)
     pdf.set_font("Helvetica", "B", 13)

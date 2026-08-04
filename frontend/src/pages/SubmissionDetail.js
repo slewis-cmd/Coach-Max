@@ -555,6 +555,7 @@ export default function SubmissionDetail() {
               <FeedbackDisplay
                 isSent={isSent}
                 currentFeedback={currentFeedback}
+                readinessScore={submission.readiness_score}
                 audioUrl={audioUrl}
                 audioRef={audioRef}
                 generatingAudio={generatingAudio}

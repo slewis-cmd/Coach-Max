@@ -2,20 +2,30 @@ import React from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Volume2, Download } from 'lucide-react';
+import { ProgressScoreBadge } from './ProgressScoreBadge';
+import { stripProgressScoreLine } from '../../lib/progressScore';
 
 export function FeedbackDisplay({
   isSent,
   currentFeedback,
+  readinessScore,
   audioUrl,
   audioRef,
   generatingAudio,
   onGenerateAudio,
 }) {
+  const cleanFeedback = stripProgressScoreLine(currentFeedback);
   return (
     <Card className={isSent ? 'bg-[#F0FDF4] border-[#B8D4E8]' : 'bg-[#F0F9FF] border-[#BAE6FD]'}>
       <CardContent className="p-8">
+        {readinessScore ? (
+          <div className="mb-6">
+            <ProgressScoreBadge score={readinessScore} />
+          </div>
+        ) : null}
+
         <div className="feedback-letter text-[#166534] whitespace-pre-wrap leading-relaxed">
-          {currentFeedback}
+          {cleanFeedback}
         </div>
 
         {/* Audio Player */}
