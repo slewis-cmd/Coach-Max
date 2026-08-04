@@ -1001,23 +1001,32 @@ class Material(BaseModel):
 
 import re as _re_scoring
 INVESTOR_SCORE_INSTRUCTION = (
-    "\n\nAT THE VERY END of your response, on its own line, output the student's "
-    "Investor Ready Score for this submission as a single integer between 1 and 100 "
-    "in this EXACT format (no other words on that line):\n"
-    "Readiness Score: <int>/100\n"
-    "Base the score on: clarity, evidence, structure, market fit, and progress since prior weeks. "
-    "1-40 = major gaps; 41-70 = solid foundation with clear next steps; 71-89 = investor-ready "
-    "with polish needed; 90-100 = investor-ready as-is."
+    "\n\nThese are FIRST-TIME early-stage founders — your job is to encourage momentum, "
+    "not to grade like a VC. Open your feedback by naming a specific, genuine win before "
+    "any growth area. Frame growth areas as the next step, never as a failure. Assume "
+    "good faith and celebrate progress.\n\n"
+    "AT THE VERY END of your response, on its own line, output the student's Founder "
+    "Progress Score for this submission as a single integer between 1 and 100 in this "
+    "EXACT format (no other words on that line):\n"
+    "Progress Score: <int>/100\n"
+    "Score generously — reward effort, clarity, and forward motion. Use these bands:\n"
+    "  1-49  = Strong Start — the founder is finding their footing.\n"
+    "  50-69 = Building Momentum — a real foundation is taking shape.\n"
+    "  70-84 = Traction Mode — the founder is thinking like a builder.\n"
+    "  85-100 = Investor-Ready — polished and ready for the pitch room.\n"
+    "Most first-time founders on a first attempt should land in the 50-75 range. Only "
+    "score below 50 when the submission is essentially blank or off-topic."
 )
 
 
 def parse_readiness_score(feedback_text: str) -> Optional[int]:
-    """Pull the trailing 'Readiness Score: NN/100' line out of the AI response.
-    Returns an int 1..100 or None if the line is missing/malformed."""
+    """Pull the trailing 'Progress Score: NN/100' (or legacy 'Readiness Score') line out
+    of the AI response. Returns an int 1..100 or None if the line is missing/malformed.
+    Accepts both labels for backwards compatibility with previously stored submissions."""
     if not feedback_text:
         return None
     m = _re_scoring.search(
-        r"Readiness\s*Score\s*:\s*(\d{1,3})\s*(?:/\s*100)?",
+        r"(?:Progress|Readiness)\s*Score\s*:\s*(\d{1,3})\s*(?:/\s*100)?",
         feedback_text,
         _re_scoring.IGNORECASE,
     )
@@ -1030,8 +1039,26 @@ def parse_readiness_score(feedback_text: str) -> Optional[int]:
     return max(1, min(100, val))
 
 
-# Investor Ready Score → Venture Path badges. Each entry unlocks when the student
-# scores >= 80 on any submission whose milestone.week_number == module.
+# Tiered badge thresholds — Bronze/Silver/Gold. Chosen so that first-time founders
+# see visible progress on nearly every submission instead of an all-or-nothing unlock.
+BADGE_TIERS = [
+    ("gold",   85),
+    ("silver", 70),
+    ("bronze", 50),
+]
+
+
+def badge_tier_for(score: int) -> str:
+    """Map a 0..100 score to 'none' | 'bronze' | 'silver' | 'gold'."""
+    for tier, threshold in BADGE_TIERS:
+        if score >= threshold:
+            return tier
+    return "none"
+
+
+# Founder Progress Score → Venture Path badges. Each module now supports three
+# tiers (bronze 50 / silver 70 / gold 85) so early-stage founders see visible
+# progress on nearly every submission.
 VENTURE_PATH_MODULES: List[Dict[str, Any]] = [
     {"module": 1, "name": "Problem-Solution Fit", "icon": "compass", "tagline": "You've defined the pain worth solving."},
     {"module": 2, "name": "Market Master",         "icon": "map",     "tagline": "You've sized the opportunity."},
@@ -4382,18 +4409,39 @@ async def get_student_venture_path(user: dict = Depends(get_current_user)):
     for m in VENTURE_PATH_MODULES:
         n = m["module"]
         best = best_by_module.get(n, 0)
+        tier = badge_tier_for(best)
+        # Compute the score needed to reach the next tier (for "12 points to Silver"
+        # style nudges in the UI). None once the student is already Gold.
+        next_tier = None
+        points_to_next = None
+        if tier == "none":
+            next_tier, next_threshold = "bronze", 50
+        elif tier == "bronze":
+            next_tier, next_threshold = "silver", 70
+        elif tier == "silver":
+            next_tier, next_threshold = "gold", 85
+        else:
+            next_threshold = None
+        if next_threshold is not None:
+            points_to_next = max(0, next_threshold - best)
         modules_out.append({
             **m,
             "best_score": best,
-            "unlocked": best >= 80,
+            "tier": tier,                    # 'none' | 'bronze' | 'silver' | 'gold'
+            "unlocked": tier != "none",     # kept for backwards compat with older clients
             "attempted": best > 0,
+            "next_tier": next_tier,
+            "points_to_next": points_to_next,
         })
 
     overall_best = max([m["best_score"] for m in modules_out] + [0])
     return {
         "modules": modules_out,
         "trend": trend,
-        "unlocked_count": sum(1 for m in modules_out if m["unlocked"]),
+        "unlocked_count": sum(1 for m in modules_out if m["tier"] != "none"),
+        "gold_count":   sum(1 for m in modules_out if m["tier"] == "gold"),
+        "silver_count": sum(1 for m in modules_out if m["tier"] == "silver"),
+        "bronze_count": sum(1 for m in modules_out if m["tier"] == "bronze"),
         "total_modules": len(VENTURE_PATH_MODULES),
         "overall_best_score": overall_best,
     }
