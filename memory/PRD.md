@@ -707,3 +707,12 @@ Follow-up work needed to complete the vision:
 - [x] **Kawasaki 10-Slide Pitch Deck** submission type widened to also accept `xlsx, xls, csv` for supporting spreadsheet models alongside the deck.
 - [x] Tests: 53/53 passing across all affected suites.
 
+
+### Venture Path Gamification (Completed - Feb 2026)
+- [x] **Investor Ready Score**: Coach Max prompt appended with strict instruction to output `Readiness Score: <int>/100` on the last line. `parse_readiness_score()` extracts and clamps to 1..100.
+- [x] Score is persisted to `submissions.readiness_score` in both auto-review and manual-review write paths (`server.py` lines ~5951 and ~6676).
+- [x] **New endpoint** `GET /api/student/venture-path` returns `{ modules[6], trend[], unlocked_count, total_modules, overall_best_score }`. A badge unlocks the moment any submission for a milestone in that module's week scores >= 80. Students-only (403 for instructors).
+- [x] **6 module badges**: Problem-Solution Fit, Market Master, Value Architect, Customer Whisperer, Business Model Builder, Investor Ready. Each has icon + tagline.
+- [x] `/venture-path` route + `VenturePath.js` page: badge grid (locked/unlocked states), progress bar, Recharts line chart of score trend with `y=80` badge-threshold reference line.
+- [x] Student dashboard header now includes a "Venture Path" nav link (`data-testid=venture-path-nav-link`).
+- [x] **Tests**: 7/7 pytest cases passing (`/app/backend/tests/test_venture_path.py`). Frontend renders correctly with seeded student session (iteration_55).
