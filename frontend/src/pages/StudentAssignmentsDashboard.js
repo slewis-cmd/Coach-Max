@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import {
   ChevronDown, ChevronRight, Star, CheckCircle2, Circle, Clock, MessageCircle,
-  Mic, Presentation, FileText, ListChecks, ArrowRight, LogOut, User
+  Mic, Presentation, FileText, ListChecks, ArrowRight, LogOut, User, Trophy
 } from 'lucide-react';
 import { SUBMISSION_TYPE_BY_ID } from '../config/submissionTypes';
 import { useBranding } from '../context/BrandingContext';
@@ -76,6 +76,14 @@ export default function StudentAssignmentsDashboard() {
             <h1 className="text-lg font-medium text-[#000]">{branding?.app_name || 'The Boost Pad'}</h1>
           </div>
           <div className="flex items-center gap-3 text-sm">
+            <Link
+              to="/venture-path"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#E1F0FF] hover:bg-[#B8D4E8] text-[#22438E] text-xs font-medium transition-colors"
+              data-testid="venture-path-nav-link"
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              Venture Path
+            </Link>
             <span className="text-[#333] hidden sm:inline">{user?.name}</span>
             <div className="w-8 h-8 rounded-full bg-[#E1F0FF] flex items-center justify-center">
               <User className="w-4 h-4 text-[#22438E]" />
