@@ -11,6 +11,7 @@ import RoleSelection from "./pages/RoleSelection";
 import InstructorDashboard from "./pages/InstructorDashboard";
 import CohortDetail from "./pages/CohortDetail";
 import Submissions from "./pages/Submissions";
+import VenturePath from "./pages/VenturePath";
 import SubmissionDetail from "./pages/SubmissionDetail";
 import ProgressTracking from "./pages/ProgressTracking";
 import MaterialLibrary from "./pages/MaterialLibrary";
@@ -134,6 +135,11 @@ const AppRouter = () => {
       <Route path="/progress" element={
         <ProtectedRoute>
           <ProgressTracking />
+        </ProtectedRoute>
+      } />
+      <Route path="/venture-path" element={
+        <ProtectedRoute>
+          <VenturePath />
         </ProtectedRoute>
       } />
       <Route path="/library" element={

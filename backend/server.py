@@ -998,6 +998,50 @@ class Material(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+
+import re as _re_scoring
+INVESTOR_SCORE_INSTRUCTION = (
+    "\n\nAT THE VERY END of your response, on its own line, output the student's "
+    "Investor Ready Score for this submission as a single integer between 1 and 100 "
+    "in this EXACT format (no other words on that line):\n"
+    "Readiness Score: <int>/100\n"
+    "Base the score on: clarity, evidence, structure, market fit, and progress since prior weeks. "
+    "1-40 = major gaps; 41-70 = solid foundation with clear next steps; 71-89 = investor-ready "
+    "with polish needed; 90-100 = investor-ready as-is."
+)
+
+
+def parse_readiness_score(feedback_text: str) -> Optional[int]:
+    """Pull the trailing 'Readiness Score: NN/100' line out of the AI response.
+    Returns an int 1..100 or None if the line is missing/malformed."""
+    if not feedback_text:
+        return None
+    m = _re_scoring.search(
+        r"Readiness\s*Score\s*:\s*(\d{1,3})\s*(?:/\s*100)?",
+        feedback_text,
+        _re_scoring.IGNORECASE,
+    )
+    if not m:
+        return None
+    try:
+        val = int(m.group(1))
+    except ValueError:
+        return None
+    return max(1, min(100, val))
+
+
+# Investor Ready Score → Venture Path badges. Each entry unlocks when the student
+# scores >= 80 on any submission whose milestone.week_number == module.
+VENTURE_PATH_MODULES: List[Dict[str, Any]] = [
+    {"module": 1, "name": "Problem-Solution Fit", "icon": "compass", "tagline": "You've defined the pain worth solving."},
+    {"module": 2, "name": "Market Master",         "icon": "map",     "tagline": "You've sized the opportunity."},
+    {"module": 3, "name": "Value Architect",       "icon": "layers",  "tagline": "Your value proposition holds up."},
+    {"module": 4, "name": "Customer Whisperer",    "icon": "message", "tagline": "You know exactly who you serve."},
+    {"module": 5, "name": "Business Model Builder","icon": "gear",    "tagline": "You've engineered how you'll win."},
+    {"module": 6, "name": "Investor Ready",        "icon": "rocket",  "tagline": "You can walk into any pitch room."},
+]
+
+
 # --- Named homework submission types (mirror /app/frontend/src/config/submissionTypes.js) ---
 SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
     # Defaults widened Jul 20 2026: every file-based type now accepts written
@@ -1126,6 +1170,8 @@ class Submission(BaseModel):
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     reviewed_at: Optional[datetime] = None
     sent_at: Optional[datetime] = None  # When feedback was sent to student
+    # Gamification — Investor Ready Score, parsed from Coach Max's feedback (1..100)
+    readiness_score: Optional[int] = None
 
 
 class Rubric(BaseModel):
@@ -4286,6 +4332,74 @@ async def preview_material_text(material_id: str, user: dict = Depends(get_curre
 
 # ==================== STUDENT DASHBOARD ENDPOINT ====================
 
+@api_router.get("/student/venture-path")
+async def get_student_venture_path(user: dict = Depends(get_current_user)):
+    """Gamification endpoint: returns the student's Venture Path — a list of
+    6 module badges (locked/unlocked) plus a score trend series suitable for
+    charting. A badge unlocks the moment ANY submission whose milestone falls
+    in that module scores >= 80.
+    """
+    if user.get("role") != "student":
+        raise HTTPException(status_code=403, detail="Students only")
+
+    # Pull every scored submission for this student.
+    subs_cursor = db.submissions.find(
+        {"student_id": user["user_id"], "readiness_score": {"$exists": True, "$ne": None}},
+        {"_id": 0, "submission_id": 1, "readiness_score": 1, "milestone_id": 1,
+         "assignment_id": 1, "cohort_id": 1, "submitted_at": 1, "reviewed_at": 1, "title": 1},
+    ).sort("submitted_at", 1)
+    subs = await subs_cursor.to_list(length=500)
+
+    # Map milestone_id -> week_number by looking up the parent assignments.
+    assignment_ids = list({s.get("assignment_id") for s in subs if s.get("assignment_id")})
+    ms_to_week: Dict[str, int] = {}
+    if assignment_ids:
+        async for a in db.assignments.find(
+            {"assignment_id": {"$in": assignment_ids}},
+            {"_id": 0, "milestones": 1},
+        ):
+            for m in (a.get("milestones") or []):
+                ms_to_week[m.get("milestone_id")] = m.get("week_number") or 0
+
+    # Best score per module (module == week_number, capped at 6 for badges)
+    best_by_module: Dict[int, int] = {}
+    trend: List[Dict[str, Any]] = []
+    for s in subs:
+        wk = ms_to_week.get(s.get("milestone_id"), 0)
+        sc = int(s.get("readiness_score") or 0)
+        if wk >= 1:
+            if sc > best_by_module.get(wk, 0):
+                best_by_module[wk] = sc
+        trend.append({
+            "submission_id": s.get("submission_id"),
+            "week": wk,
+            "score": sc,
+            "date": s.get("reviewed_at") or s.get("submitted_at"),
+            "title": s.get("title") or f"Week {wk}",
+        })
+
+    modules_out = []
+    for m in VENTURE_PATH_MODULES:
+        n = m["module"]
+        best = best_by_module.get(n, 0)
+        modules_out.append({
+            **m,
+            "best_score": best,
+            "unlocked": best >= 80,
+            "attempted": best > 0,
+        })
+
+    overall_best = max([m["best_score"] for m in modules_out] + [0])
+    return {
+        "modules": modules_out,
+        "trend": trend,
+        "unlocked_count": sum(1 for m in modules_out if m["unlocked"]),
+        "total_modules": len(VENTURE_PATH_MODULES),
+        "overall_best_score": overall_best,
+    }
+
+
+
 @api_router.get("/student/assignments-dashboard")
 async def get_student_assignments_dashboard(user: dict = Depends(get_current_user)):
     """Assignment-first student dashboard (Phase 2 model). Returns per-cohort data with
@@ -5350,7 +5464,7 @@ A brief encouraging opening sentence acknowledging their effort.
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 
-A brief closing sentence with encouragement and motivation to keep going.{lang_instr}"""
+A brief closing sentence with encouragement and motivation to keep going.{lang_instr}""" + INVESTOR_SCORE_INSTRUCTION
 
         chat = LlmChat(
             api_key=api_key,
@@ -5809,7 +5923,7 @@ A brief encouraging opening sentence acknowledging their effort.
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 
-A brief closing sentence with encouragement and motivation to keep going.{auto_lang_instr}"""
+A brief closing sentence with encouragement and motivation to keep going.{auto_lang_instr}""" + INVESTOR_SCORE_INSTRUCTION
             chat = LlmChat(
                 api_key=api_key,
                 session_id=f"review_{submission_id}",
@@ -5833,15 +5947,12 @@ STUDENT SUBMISSION:
 Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""
 
             feedback = await chat.send_message(UserMessage(text=prompt))
-            
-            await db.submissions.update_one(
-                {"submission_id": submission_id},
-                {"$set": {
-                    "ai_feedback": feedback,
-                    "status": "draft",
-                    "reviewed_at": datetime.now(timezone.utc).isoformat()
-                }}
-            )
+
+            _sc = parse_readiness_score(feedback)
+            _upd = {"ai_feedback": feedback, "status": "draft", "reviewed_at": datetime.now(timezone.utc).isoformat()}
+            if _sc is not None:
+                _upd["readiness_score"] = _sc
+            await db.submissions.update_one({"submission_id": submission_id}, {"$set": _upd})
             logger.info(f"Auto AI review completed for {submission_id}")
         except Exception as e:
             logger.error(f"Auto AI review failed for {submission_id}: {e}")
@@ -6529,7 +6640,7 @@ A brief encouraging opening sentence acknowledging their effort.
 - [constructive suggestion framed positively with guidance]
 - [constructive suggestion framed positively with guidance]
 
-A brief closing sentence with encouragement and motivation to keep going.{lang_instr}"""
+A brief closing sentence with encouragement and motivation to keep going.{lang_instr}""" + INVESTOR_SCORE_INSTRUCTION
     try:
         chat = LlmChat(
             api_key=api_key,
@@ -6562,14 +6673,18 @@ Provide feedback with exactly 3 bullet points under "What You Did Well:" and exa
         raise HTTPException(status_code=500, detail=f"AI review failed: {str(e)}")
     
     # Save feedback as DRAFT (Human-in-the-loop: instructor must review before sending)
+    _score = parse_readiness_score(feedback)
+    _update = {
+        "ai_feedback": feedback,
+        "status": "draft",
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "ai_feedback_error": None,
+    }
+    if _score is not None:
+        _update["readiness_score"] = _score
     await db.submissions.update_one(
         {"submission_id": submission_id},
-        {"$set": {
-            "ai_feedback": feedback,
-            "status": "draft",  # Changed from "reviewed" to "draft"
-            "reviewed_at": datetime.now(timezone.utc).isoformat(),
-            "ai_feedback_error": None,  # clear any prior failure on successful retry
-        }}
+        {"$set": _update}
     )
 
     # Self-paced mode: if the cohort has auto_send_feedback enabled, skip the review
