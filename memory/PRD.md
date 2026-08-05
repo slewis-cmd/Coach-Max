@@ -732,3 +732,8 @@ User feedback: "Where does the Founder Progress Score show up? The only thing I 
 - [x] Wired into every feedback surface: SubmissionDetail (`FeedbackDisplay`), CoachMaxPage collapsible summary, and the exported/emailed PDF (server-side strip + branded "Founder Progress Score" section above the feedback body).
 - [x] Old raw score line no longer appears anywhere; older submissions with the legacy "Readiness Score" label are stripped just as cleanly.
 - [x] **Tests**: 25/25 pass (`test_venture_path.py` 19/19 + new `test_score_display.py` 6/6) covering PDF strip + badge insertion, and frontend Playwright confirmed badges appear on both SubmissionDetail and CoachMaxPage across Silver/Gold/no-score/legacy scenarios (iteration_57).
+
+### Auto-Review Score Persistence + Historical Backfill (Completed - Feb 2026)
+- [x] **Root cause of missing badges**: `_run_auto_ai_review_for_submission` (server.py ~L5541) — the most common review path in production, hit by every Thinkific-linked submission — persisted `ai_feedback` but never parsed/stored `readiness_score`. Sibling paths at ~L6003 and ~L6733 did it correctly, but this one dropped it. Result: badge silently absent on every auto-reviewed submission.
+- [x] **Fix**: added `parse_readiness_score(feedback)` + `readiness_score` to the `$set` block, mirroring the sibling write paths.
+- [x] **One-off backfill** at startup: scans submissions with `readiness_score` missing/null AND feedback text containing "Progress Score:" or "Readiness Score:", parses from the stored text, and back-fills the field. Runs once per boot after production redeploy — no manual step. Verified against synthetic new-label + legacy-label rows.

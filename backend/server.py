@@ -5539,15 +5539,23 @@ STUDENT SUBMISSION ({fmt_ctx['descriptor']}):
 Provide feedback with exactly 3 bullet points under "What You Did Well:" and exactly 3 bullet points under "Areas for Growth:". Use specific examples from their submission. When possible, reference how this builds on earlier weeks."""
 
         feedback = await chat.send_message(UserMessage(text=prompt))
+        _upd_auto: Dict[str, Any] = {
+            "ai_feedback": feedback,
+            "status": "draft",
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        # Persist Founder Progress Score so the badge renders. Mirrors the sibling
+        # write paths at ~L6003 and ~L6733. Without this the auto-review path
+        # (the most common one — every Thinkific-linked submission) never
+        # populates readiness_score and the badge silently disappears.
+        _auto_score = parse_readiness_score(feedback)
+        if _auto_score is not None:
+            _upd_auto["readiness_score"] = _auto_score
         await db.submissions.update_one(
             {"submission_id": submission_id},
-            {"$set": {
-                "ai_feedback": feedback,
-                "status": "draft",
-                "reviewed_at": datetime.now(timezone.utc).isoformat(),
-            }},
+            {"$set": _upd_auto},
         )
-        logger.info(f"Auto AI review completed for {submission_id}")
+        logger.info(f"Auto AI review completed for {submission_id} (score={_auto_score})")
 
         # Self-paced mode: auto-send if the cohort is configured that way
         cohort_doc = await db.cohorts.find_one({"cohort_id": cohort_id}, {"_id": 0})
@@ -7993,6 +8001,42 @@ async def migrate_instructor_ids():
         )
     if cohorts_to_migrate:
         logger.info(f"Migrated {len(cohorts_to_migrate)} cohorts to instructor_ids")
+
+    # One-off backfill: existing submissions whose ai_feedback contains a
+    # "Progress Score" or "Readiness Score" line but readiness_score is null.
+    # This fixes historical submissions written by the auto-review path before
+    # the score-parsing bug was fixed (feedback text has the score line but the
+    # field was never populated, so the badge never renders).
+    try:
+        backfill_cursor = db.submissions.find(
+            {
+                "$and": [
+                    {"$or": [{"readiness_score": {"$exists": False}}, {"readiness_score": None}]},
+                    {"$or": [
+                        {"ai_feedback": {"$regex": r"Progress\s*Score\s*:\s*\d", "$options": "i"}},
+                        {"ai_feedback": {"$regex": r"Readiness\s*Score\s*:\s*\d", "$options": "i"}},
+                        {"instructor_feedback": {"$regex": r"Progress\s*Score\s*:\s*\d", "$options": "i"}},
+                        {"instructor_feedback": {"$regex": r"Readiness\s*Score\s*:\s*\d", "$options": "i"}},
+                    ]},
+                ]
+            },
+            {"_id": 0, "submission_id": 1, "ai_feedback": 1, "instructor_feedback": 1},
+        )
+        backfilled = 0
+        async for sub in backfill_cursor:
+            text = sub.get("instructor_feedback") or sub.get("ai_feedback") or ""
+            score = parse_readiness_score(text)
+            if score is not None:
+                await db.submissions.update_one(
+                    {"submission_id": sub["submission_id"]},
+                    {"$set": {"readiness_score": score}},
+                )
+                backfilled += 1
+        if backfilled:
+            logger.info(f"Backfilled readiness_score on {backfilled} historical submissions")
+    except Exception as e:
+        logger.error(f"readiness_score backfill failed: {type(e).__name__}: {e}")
+
     # Start weekly digest scheduler
     asyncio.create_task(weekly_digest_scheduler())
 
