@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { MessageCircle, ArrowLeft, FileText, Send, Globe, Volume2 } from 'lucide-react';
+import { MessageCircle, ArrowLeft, FileText, Send, Globe, Volume2, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { stripProgressScoreLine } from '../lib/progressScore';
@@ -153,18 +153,28 @@ export default function CoachMaxPage() {
               <p className="text-xs text-[#666666]">Week {weekNum} — {materialTitle}</p>
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-1.5" data-testid="chat-language-toggle">
-            <Globe className="w-3.5 h-3.5 text-[#666666]" />
+          <div className="ml-auto flex items-center gap-2">
             <button
-              onClick={() => setChatLang('en')}
-              className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${chatLang === 'en' ? 'bg-[#22438E] text-white' : 'text-[#333] hover:bg-[#D0E6F9]'}`}
-              data-testid="chat-lang-en"
-            >EN</button>
-            <button
-              onClick={() => setChatLang('es')}
-              className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${chatLang === 'es' ? 'bg-[#22438E] text-white' : 'text-[#333] hover:bg-[#D0E6F9]'}`}
-              data-testid="chat-lang-es"
-            >ES</button>
+              onClick={() => navigate('/venture-path')}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#E1F0FF] hover:bg-[#B8D4E8] text-[#22438E] text-xs font-medium transition-colors"
+              data-testid="coach-max-venture-path-link"
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              Venture Path
+            </button>
+            <div className="flex items-center gap-1.5" data-testid="chat-language-toggle">
+              <Globe className="w-3.5 h-3.5 text-[#666666]" />
+              <button
+                onClick={() => setChatLang('en')}
+                className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${chatLang === 'en' ? 'bg-[#22438E] text-white' : 'text-[#333] hover:bg-[#D0E6F9]'}`}
+                data-testid="chat-lang-en"
+              >EN</button>
+              <button
+                onClick={() => setChatLang('es')}
+                className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${chatLang === 'es' ? 'bg-[#22438E] text-white' : 'text-[#333] hover:bg-[#D0E6F9]'}`}
+                data-testid="chat-lang-es"
+              >ES</button>
+            </div>
           </div>
         </div>
       </header>

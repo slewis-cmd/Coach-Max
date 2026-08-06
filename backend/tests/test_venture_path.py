@@ -346,3 +346,150 @@ def test_best_attempt_wins_when_multiple_submissions(mongo):
         assert data["overall_best_score"] == 72
     finally:
         _cleanup_student(mongo, ctx)
+
+
+# ==================== INSTRUCTOR ENDPOINT TESTS ====================
+
+def _get_instructor_vp(student_id, token=None):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    return requests.get(
+        f"{BASE_URL}/api/instructor/students/{student_id}/venture-path",
+        headers=headers, timeout=30,
+    )
+
+
+@pytest.fixture(scope="module")
+def super_admin_token(mongo):
+    """Seed a super_admin session for tests."""
+    suffix = uuid.uuid4().hex[:8]
+    user_id = f"TEST_sa_{suffix}"
+    token = f"TEST_satok_{suffix}"
+    mongo.users.insert_one({
+        "user_id": user_id,
+        "email": f"TEST_sa_{suffix}@example.com",
+        "name": "TEST Super Admin",
+        "role": "super_admin",
+    })
+    mongo.user_sessions.insert_one({
+        "session_token": token, "user_id": user_id,
+        "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+    })
+    yield token
+    mongo.users.delete_many({"user_id": user_id})
+    mongo.user_sessions.delete_many({"user_id": user_id})
+
+
+def _seed_instructor(mongo, cohort_id=None, use_legacy_field=False):
+    suffix = uuid.uuid4().hex[:8]
+    user_id = f"TEST_inst_{suffix}"
+    token = f"TEST_itok_{suffix}"
+    mongo.users.insert_one({
+        "user_id": user_id, "email": f"TEST_inst_{suffix}@example.com",
+        "name": "TEST Instructor", "role": "instructor",
+    })
+    mongo.user_sessions.insert_one({
+        "session_token": token, "user_id": user_id,
+        "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+    })
+    if cohort_id:
+        if use_legacy_field:
+            mongo.cohorts.update_one({"cohort_id": cohort_id}, {"$set": {"instructor_id": user_id}})
+        else:
+            mongo.cohorts.update_one({"cohort_id": cohort_id}, {"$addToSet": {"instructor_ids": user_id}})
+    return {"user_id": user_id, "token": token}
+
+
+def _cleanup_instructor(mongo, ictx):
+    mongo.users.delete_many({"user_id": ictx["user_id"]})
+    mongo.user_sessions.delete_many({"user_id": ictx["user_id"]})
+
+
+class TestInstructorVenturePathAuth:
+    def test_no_auth_returns_401(self, student_ctx):
+        r = _get_instructor_vp(student_ctx["user_id"])
+        assert r.status_code == 401, r.text
+
+    def test_student_role_forbidden(self, student_ctx):
+        # A student calling the instructor endpoint (even for themselves) → 403
+        r = _get_instructor_vp(student_ctx["user_id"], token=student_ctx["token"])
+        assert r.status_code == 403, r.text
+
+    def test_instructor_not_managing_cohort_forbidden(self, mongo, student_ctx):
+        ictx = _seed_instructor(mongo, cohort_id=None)
+        try:
+            r = _get_instructor_vp(student_ctx["user_id"], token=ictx["token"])
+            assert r.status_code == 403, r.text
+        finally:
+            _cleanup_instructor(mongo, ictx)
+
+    def test_instructor_managing_cohort_allowed(self, mongo, student_ctx):
+        ictx = _seed_instructor(mongo, cohort_id=student_ctx["cohort_id"])
+        try:
+            r = _get_instructor_vp(student_ctx["user_id"], token=ictx["token"])
+            assert r.status_code == 200, r.text
+        finally:
+            _cleanup_instructor(mongo, ictx)
+            mongo.cohorts.update_one(
+                {"cohort_id": student_ctx["cohort_id"]},
+                {"$pull": {"instructor_ids": ictx["user_id"]}},
+            )
+
+    def test_instructor_legacy_instructor_id_field_allowed(self, mongo, student_ctx):
+        ictx = _seed_instructor(mongo, cohort_id=student_ctx["cohort_id"], use_legacy_field=True)
+        try:
+            r = _get_instructor_vp(student_ctx["user_id"], token=ictx["token"])
+            assert r.status_code == 200, r.text
+        finally:
+            _cleanup_instructor(mongo, ictx)
+            mongo.cohorts.update_one(
+                {"cohort_id": student_ctx["cohort_id"]},
+                {"$unset": {"instructor_id": ""}},
+            )
+
+    def test_super_admin_bypasses_cohort_check(self, student_ctx, super_admin_token):
+        r = _get_instructor_vp(student_ctx["user_id"], token=super_admin_token)
+        assert r.status_code == 200, r.text
+
+    def test_student_not_found_returns_404(self, super_admin_token):
+        r = _get_instructor_vp("TEST_does_not_exist_xyz", token=super_admin_token)
+        assert r.status_code == 404, r.text
+
+
+class TestInstructorVenturePathShape:
+    def test_response_shape_matches_student_plus_student_field(self, student_ctx, super_admin_token):
+        r = _get_instructor_vp(student_ctx["user_id"], token=super_admin_token)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        # Same top-level keys as /student/venture-path
+        expected_keys = {"modules", "trend", "unlocked_count", "total_modules",
+                         "overall_best_score", "gold_count", "silver_count", "bronze_count"}
+        assert expected_keys.issubset(set(data.keys()))
+        # Plus a student field with name/email/picture
+        assert "student" in data
+        assert set(data["student"].keys()) >= {"name", "email"}
+        assert data["student"]["name"] == "Test Student"
+        assert data["student"]["email"].startswith("TEST_")
+
+
+class TestInstructorVenturePathScoreMath:
+    def test_week3_score_72_gives_silver(self, mongo, super_admin_token):
+        """Seed a fresh student, insert readiness_score=72 on week-3 milestone,
+        call the instructor endpoint as super_admin, verify module_3.tier=silver
+        best_score=72, unlocked_count=1, silver_count=1, plus student.name/email."""
+        ctx = _seed_student(mongo)
+        try:
+            _insert_sub(mongo, ctx, week=3, score=72)
+            r = _get_instructor_vp(ctx["user_id"], token=super_admin_token)
+            assert r.status_code == 200, r.text
+            data = r.json()
+            m3 = next(m for m in data["modules"] if m["module"] == 3)
+            assert m3["tier"] == "silver"
+            assert m3["best_score"] == 72
+            assert data["unlocked_count"] == 1
+            assert data["silver_count"] == 1
+            assert data["gold_count"] == 0
+            assert data["bronze_count"] == 0
+            assert data["student"]["name"] == "Test Student"
+            assert data["student"]["email"].startswith("TEST_")
+        finally:
+            _cleanup_student(mongo, ctx)

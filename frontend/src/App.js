@@ -142,6 +142,11 @@ const AppRouter = () => {
           <VenturePath />
         </ProtectedRoute>
       } />
+      <Route path="/venture-path/student/:studentId" element={
+        <ProtectedRoute>
+          <VenturePath />
+        </ProtectedRoute>
+      } />
       <Route path="/library" element={
         <ProtectedRoute>
           <MaterialLibrary />

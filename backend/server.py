@@ -4369,10 +4369,48 @@ async def get_student_venture_path(user: dict = Depends(get_current_user)):
     """
     if user.get("role") != "student":
         raise HTTPException(status_code=403, detail="Students only")
+    return await _compute_venture_path_for_student(user["user_id"])
 
+
+@api_router.get("/instructor/students/{student_id}/venture-path")
+async def get_student_venture_path_for_instructor(student_id: str, user: dict = Depends(get_current_user)):
+    """Same shape as /student/venture-path but for instructors/super admins so
+    they can inspect a specific student's progress from the cohort dashboard.
+    Access is gated by shared-cohort membership: instructor must manage at
+    least one cohort the student belongs to (super_admin bypasses the check).
+    """
+    if user.get("role") not in ("instructor", "super_admin"):
+        raise HTTPException(status_code=403, detail="Instructor access required")
+    if user.get("role") != "super_admin":
+        # Must share at least one cohort where the caller is an instructor.
+        shared = await db.cohorts.find_one(
+            {
+                "student_ids": student_id,
+                "$or": [
+                    {"instructor_ids": user["user_id"]},
+                    {"instructor_id": user["user_id"]},
+                ],
+            },
+            {"_id": 0, "cohort_id": 1},
+        )
+        if not shared:
+            raise HTTPException(status_code=403, detail="You do not manage this student's cohort")
+    student = await db.users.find_one({"user_id": student_id}, {"_id": 0, "name": 1, "email": 1, "picture": 1})
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    data = await _compute_venture_path_for_student(student_id)
+    data["student"] = student
+    return data
+
+
+async def _compute_venture_path_for_student(student_id: str) -> Dict[str, Any]:
+    """Shared Venture Path computation used by both the self-service student
+    endpoint and the instructor 'view a specific student' endpoint. Returns
+    the response payload — the endpoint layer decides who's allowed to see it.
+    """
     # Pull every scored submission for this student.
     subs_cursor = db.submissions.find(
-        {"student_id": user["user_id"], "readiness_score": {"$exists": True, "$ne": None}},
+        {"student_id": student_id, "readiness_score": {"$exists": True, "$ne": None}},
         {"_id": 0, "submission_id": 1, "readiness_score": 1, "milestone_id": 1,
          "assignment_id": 1, "cohort_id": 1, "submitted_at": 1, "reviewed_at": 1, "title": 1},
     ).sort("submitted_at", 1)

@@ -20,7 +20,8 @@ import {
   Download,
   AlertTriangle,
   Eye,
-  EyeOff
+  EyeOff,
+  Trophy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -561,6 +562,21 @@ export default function SubmissionDetail() {
                 generatingAudio={generatingAudio}
                 onGenerateAudio={handleGenerateAudio}
               />
+            )}
+            {/* Student CTA: after every piece of feedback, offer a fast route to
+                the gamification dashboard so they can see where this score sits
+                in the bigger picture. Only shown for students. */}
+            {!isInstructor && currentFeedback && (
+              <div className="mt-4">
+                <Link
+                  to="/venture-path"
+                  className="inline-flex items-center gap-2 bg-[#22438E] text-white hover:bg-[#1A3A7A] transition-colors px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm"
+                  data-testid="feedback-view-venture-path-btn"
+                >
+                  <Trophy className="w-4 h-4" />
+                  View your Venture Path
+                </Link>
+              </div>
             )}
           </div>
         ) : (

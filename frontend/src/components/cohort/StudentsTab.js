@@ -1,9 +1,11 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
-import { Users, X, Mail } from 'lucide-react';
+import { Users, X, Mail, Trophy } from 'lucide-react';
 
 export function StudentsTab({ cohort, invitingAll, onInviteAll, onAddStudent, onRemoveStudent }) {
+  const navigate = useNavigate();
   return (
     <>
       {cohort?.students?.length > 0 && (
@@ -46,11 +48,24 @@ export function StudentsTab({ cohort, invitingAll, onInviteAll, onAddStudent, on
                     <p className="text-sm text-[#666666]">{student.email}</p>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon"
-                  onClick={() => onRemoveStudent(student.user_id, student.name)}
-                  className="text-red-500 hover:text-red-600 hover:bg-red-50">
-                  <X className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/venture-path/student/${student.user_id}`)}
+                    className="text-[#22438E] hover:bg-[#E1F0FF]"
+                    title={`View ${student.name}'s Venture Path`}
+                    data-testid={`view-venture-path-${student.user_id}`}
+                  >
+                    <Trophy className="w-4 h-4 mr-1.5" />
+                    <span className="hidden sm:inline">Venture Path</span>
+                  </Button>
+                  <Button variant="ghost" size="icon"
+                    onClick={() => onRemoveStudent(student.user_id, student.name)}
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

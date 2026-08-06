@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
 import {
@@ -54,17 +54,22 @@ export default function VenturePath() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { studentId } = useParams();
+  const isInstructorView = Boolean(studentId);
 
   const fetchPath = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/student/venture-path`);
+      const url = isInstructorView
+        ? `${API_URL}/api/instructor/students/${studentId}/venture-path`
+        : `${API_URL}/api/student/venture-path`;
+      const res = await axios.get(url);
       setData(res.data);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Could not load Venture Path');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isInstructorView, studentId]);
 
   useEffect(() => { fetchPath(); }, [fetchPath]);
 
@@ -75,7 +80,7 @@ export default function VenturePath() {
 
   const {
     modules, trend, unlocked_count, total_modules, overall_best_score,
-    gold_count = 0, silver_count = 0, bronze_count = 0,
+    gold_count = 0, silver_count = 0, bronze_count = 0, student = null,
   } = data;
   const chartData = trend.map((t, i) => ({
     name: t.title || `Wk ${t.week}`,
@@ -83,6 +88,13 @@ export default function VenturePath() {
     score: t.score,
     idx: i + 1,
   }));
+
+  const headline = isInstructorView && student
+    ? `${student.name}'s Venture Path`
+    : 'Your Venture Path';
+  const subhead = isInstructorView && student
+    ? `${student.email} — showing best score per module.`
+    : null;
 
   return (
     <div className="max-w-6xl mx-auto px-6 md:px-12 py-8" data-testid="venture-path-page">
@@ -96,25 +108,35 @@ export default function VenturePath() {
       </div>
 
       <div className="mb-6">
-        <h1 className="text-3xl md:text-4xl font-normal text-[#000] mb-2">Your Venture Path</h1>
+        <h1 className="text-3xl md:text-4xl font-normal text-[#000] mb-2" data-testid="venture-path-headline">{headline}</h1>
+        {subhead ? (
+          <p className="text-sm text-[#666] mb-2" data-testid="venture-path-subhead">{subhead}</p>
+        ) : null}
         <p className="text-[#333] max-w-3xl">
-          Every submission earns a <strong>Founder Progress Score</strong> from Coach Max.
-          Each module unlocks three tiers as you grow: <span className="text-[#7C2D12] font-medium">Bronze</span> at 50,
-          {' '}<span className="text-[#334155] font-medium">Silver</span> at 70, and
-          {' '}<span className="text-[#78350F] font-medium">Gold</span> at 85.
+          {isInstructorView
+            ? 'Coach Max scores every submission from 1–100. Tiers unlock at Bronze 50, Silver 70, and Gold 85 per module.'
+            : (
+              <>Every submission earns a <strong>Founder Progress Score</strong> from Coach Max.
+              Each module unlocks three tiers as you grow: <span className="text-[#7C2D12] font-medium">Bronze</span> at 50,
+              {' '}<span className="text-[#334155] font-medium">Silver</span> at 70, and
+              {' '}<span className="text-[#78350F] font-medium">Gold</span> at 85.</>
+            )
+          }
         </p>
       </div>
 
-      {/* Best-of-many-attempts reassurance */}
-      <div
-        className="flex items-start gap-2 bg-[#EFF6FF] border border-[#B8D4E8] rounded-lg p-3 mb-6 text-sm text-[#22438E]"
-        data-testid="venture-path-best-attempt-note"
-      >
-        <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
-        <span>
-          Only your <strong>best attempt</strong> counts toward each badge. Resubmit any milestone as many times as you like — your highest score is the one we celebrate.
-        </span>
-      </div>
+      {/* Best-of-many-attempts reassurance (student view only) */}
+      {!isInstructorView && (
+        <div
+          className="flex items-start gap-2 bg-[#EFF6FF] border border-[#B8D4E8] rounded-lg p-3 mb-6 text-sm text-[#22438E]"
+          data-testid="venture-path-best-attempt-note"
+        >
+          <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>
+            Only your <strong>best attempt</strong> counts toward each badge. Resubmit any milestone as many times as you like — your highest score is the one we celebrate.
+          </span>
+        </div>
+      )}
 
       {/* Progress summary */}
       <Card className="bg-white border-[#B8D4E8] mb-6" data-testid="venture-path-summary">
