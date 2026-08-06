@@ -726,9 +726,12 @@ async def _prior_attempts_on_same_milestone_section(
     q: Dict[str, Any] = {"student_id": student_id, "milestone_id": milestone_id}
     if exclude_submission_id:
         q["submission_id"] = {"$ne": exclude_submission_id}
-    prior = await db.submissions.find(q, {"_id": 0}).sort("submitted_at", 1).to_list(20)
+    # Newest-first so slice below keeps the most recent attempts, then reverse
+    # for chronological display in the prompt.
+    prior = await db.submissions.find(q, {"_id": 0}).sort("submitted_at", -1).to_list(20)
     if not prior:
         return ""
+    prior = list(reversed(prior[:3]))  # cap at 3 most recent so we don't starve other context
     body = ""
     for i, s in enumerate(prior, start=1):
         prior_score = s.get("readiness_score")
