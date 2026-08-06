@@ -737,3 +737,11 @@ User feedback: "Where does the Founder Progress Score show up? The only thing I 
 - [x] **Root cause of missing badges**: `_run_auto_ai_review_for_submission` (server.py ~L5541) — the most common review path in production, hit by every Thinkific-linked submission — persisted `ai_feedback` but never parsed/stored `readiness_score`. Sibling paths at ~L6003 and ~L6733 did it correctly, but this one dropped it. Result: badge silently absent on every auto-reviewed submission.
 - [x] **Fix**: added `parse_readiness_score(feedback)` + `readiness_score` to the `$set` block, mirroring the sibling write paths.
 - [x] **One-off backfill** at startup: scans submissions with `readiness_score` missing/null AND feedback text containing "Progress Score:" or "Readiness Score:", parses from the stored text, and back-fills the field. Runs once per boot after production redeploy — no manual step. Verified against synthetic new-label + legacy-label rows.
+
+### Venture Path Navigation Fixes (Completed - Feb 2026)
+User: "(1) Admin can't see a specific student's Venture Path from cohort management. (2) Student feedback page has no 'View Venture Path' button."
+- [x] **Backend**: extracted shared helper `_compute_venture_path_for_student(user_id)`; added `GET /api/instructor/students/{student_id}/venture-path` with cohort-manager access check (super_admin bypasses; instructors must share a cohort with the student). Response mirrors student endpoint + adds `student: {name, email, picture}`.
+- [x] **Instructor route**: `/venture-path/student/:studentId` reuses VenturePath.js in instructor mode — swaps headline to "<name>'s Venture Path", shows email subhead, hides the student-only "best attempt counts" callout.
+- [x] **Cohort → student navigation**: new Trophy button on each row of StudentsTab (`data-testid='view-venture-path-<user_id>'`) opens their Venture Path.
+- [x] **Feedback CTA**: prominent "View your Venture Path" button (`data-testid='feedback-view-venture-path-btn'`) below the FeedbackDisplay card on SubmissionDetail for students; also added a Trophy Link in the CoachMaxPage header (`data-testid='coach-max-venture-path-link'`).
+- [x] **Tests**: extended `test_venture_path.py` from 19 → 28 cases; all pass. Frontend Playwright validated all 7 UX flows (iteration_58).

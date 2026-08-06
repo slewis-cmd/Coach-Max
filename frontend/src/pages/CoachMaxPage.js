@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -154,14 +154,14 @@ export default function CoachMaxPage() {
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => navigate('/venture-path')}
+            <Link
+              to="/venture-path"
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#E1F0FF] hover:bg-[#B8D4E8] text-[#22438E] text-xs font-medium transition-colors"
               data-testid="coach-max-venture-path-link"
             >
               <Trophy className="w-3.5 h-3.5" />
               Venture Path
-            </button>
+            </Link>
             <div className="flex items-center gap-1.5" data-testid="chat-language-toggle">
               <Globe className="w-3.5 h-3.5 text-[#666666]" />
               <button
