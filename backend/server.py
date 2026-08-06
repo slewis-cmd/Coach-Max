@@ -714,6 +714,40 @@ async def _cumulative_same_assignment_section(student_id: str, assignment_id: st
     return header + body
 
 
+async def _prior_attempts_on_same_milestone_section(
+    student_id: str, milestone_id: str, exclude_submission_id: Optional[str] = None,
+) -> str:
+    """Return prior attempts on the SAME milestone + the feedback given each time
+    so Coach Max can (a) see if this revision addressed his previous growth areas
+    and (b) reward improvement with a meaningful score bump. Empty string if this
+    is the student's first attempt on the milestone."""
+    if not milestone_id:
+        return ""
+    q: Dict[str, Any] = {"student_id": student_id, "milestone_id": milestone_id}
+    if exclude_submission_id:
+        q["submission_id"] = {"$ne": exclude_submission_id}
+    prior = await db.submissions.find(q, {"_id": 0}).sort("submitted_at", 1).to_list(20)
+    if not prior:
+        return ""
+    body = ""
+    for i, s in enumerate(prior, start=1):
+        prior_score = s.get("readiness_score")
+        score_txt = f" (Founder Progress Score awarded: {prior_score}/100)" if prior_score else ""
+        try:
+            sub_text = await read_file_text(s)
+            excerpt = (sub_text or "")[:500]
+        except Exception:
+            excerpt = ""
+        fb = (s.get("instructor_feedback") or s.get("ai_feedback") or "")[:800]
+        body += f"\nAttempt #{i}{score_txt}:\nSubmitted content excerpt:\n{excerpt}\n\nCoach Max's feedback on that attempt:\n{fb}\n"
+    header = (
+        "\n--- PRIOR ATTEMPTS ON THIS EXACT MILESTONE ---\n"
+        "The student is resubmitting the same milestone. Their previous attempt(s) and "
+        "the feedback Coach Max gave are below. Compare carefully.\n"
+    )
+    return header + body
+
+
 async def _cumulative_global_resources_sections(cohort_id: str) -> List[str]:
     """Return one section string per course-wide (is_global=True) material with non-empty text."""
     global_materials = await db.materials.find({
@@ -778,11 +812,21 @@ async def _cumulative_prior_weeks_sections(student_id: str, cohort_id: str, curr
     return sections
 
 
-async def build_cumulative_context(student_id: str, cohort_id: str, current_week: int, max_chars: int = 6000, assignment_id: Optional[str] = None) -> str:
+async def build_cumulative_context(
+    student_id: str,
+    cohort_id: str,
+    current_week: int,
+    max_chars: int = 6000,
+    assignment_id: Optional[str] = None,
+    milestone_id: Optional[str] = None,
+    exclude_submission_id: Optional[str] = None,
+) -> str:
     """Build cumulative context from all prior weeks: materials + student submissions + feedback.
     Always includes Course-Wide Resources (is_global=True) regardless of week.
     If assignment_id is given, ALSO includes the student's prior submissions to the SAME assignment
-    (used for cumulative feedback on the Kawasaki Deck / iterative 60-Sec Pitch etc.)."""
+    (used for cumulative feedback on the Kawasaki Deck / iterative 60-Sec Pitch etc.).
+    If milestone_id is given, ALSO includes any prior attempts on that SAME milestone so the AI
+    can reward revisions that address earlier growth areas."""
     parts: List[str] = []
     total_chars = 0
 
@@ -796,7 +840,10 @@ async def build_cumulative_context(student_id: str, cohort_id: str, current_week
         total_chars += len(section)
         return True
 
-    # 1) Same-assignment progression (highest priority)
+    # 0) Prior attempts on the SAME milestone (highest priority for revision-scoring)
+    _try_append(await _prior_attempts_on_same_milestone_section(student_id, milestone_id, exclude_submission_id))
+
+    # 1) Same-assignment progression
     _try_append(await _cumulative_same_assignment_section(student_id, assignment_id, current_week))
 
     # 2) Course-Wide Resources: always included
@@ -1008,14 +1055,29 @@ INVESTOR_SCORE_INSTRUCTION = (
     "AT THE VERY END of your response, on its own line, output the student's Founder "
     "Progress Score for this submission as a single integer between 1 and 100 in this "
     "EXACT format (no other words on that line):\n"
-    "Progress Score: <int>/100\n"
-    "Score generously — reward effort, clarity, and forward motion. Use these bands:\n"
-    "  1-49  = Strong Start — the founder is finding their footing.\n"
-    "  50-69 = Building Momentum — a real foundation is taking shape.\n"
-    "  70-84 = Traction Mode — the founder is thinking like a builder.\n"
-    "  85-100 = Investor-Ready — polished and ready for the pitch room.\n"
-    "Most first-time founders on a first attempt should land in the 50-75 range. Only "
-    "score below 50 when the submission is essentially blank or off-topic."
+    "Progress Score: <int>/100\n\n"
+    "SCORING CALIBRATION — read carefully:\n"
+    "  1-49  = Strong Start. Only score here if the submission is essentially blank, "
+    "off-topic, or missing the core deliverable. This is rare.\n"
+    "  50-64 = Building Momentum. Foundation is there but a major piece is missing or thin.\n"
+    "  65-79 = Traction Mode. The default landing zone for a solid first-time founder "
+    "attempt. If the student showed up, hit the brief, and communicated their thinking "
+    "with reasonable clarity, they belong HERE — not lower. Err on the side of 70+ when "
+    "the core deliverable is present.\n"
+    "  80-89 = Almost Investor-Ready. Genuine polish; the student has clearly iterated "
+    "and the piece could be shown to an early advisor.\n"
+    "  90-100 = Investor-Ready. Reserve for standout work.\n\n"
+    "REVISION BONUS — this is critical:\n"
+    "If a 'PRIOR ATTEMPTS ON THIS EXACT MILESTONE' section appears above, the student is "
+    "resubmitting. Read the earlier feedback carefully. Then:\n"
+    "  * If this revision SUBSTANTIVELY addresses the specific growth areas you (or a "
+    "prior reviewer) raised, award +10 to +15 points over the previous attempt's score. "
+    "Cap at 100. Explicitly acknowledge in your feedback which growth area they closed.\n"
+    "  * If the revision only makes cosmetic changes or ignores the prior growth areas, "
+    "award +0 to +5 and gently explain what still needs work.\n"
+    "  * Never score a genuine revision LOWER than the previous attempt unless the new "
+    "version is objectively weaker (e.g., they removed something that was working).\n"
+    "Students must feel that iterating on your feedback moves the needle."
 )
 
 
@@ -4821,9 +4883,12 @@ async def ask_tutor(request: Request, user: dict = Depends(get_current_user)):
     submission_text, context_text = await build_coach_max_context(submission, material, week_number=week_number)
 
     # Build cumulative context from prior weeks + prior submissions in the same assignment
+    # + prior attempts on the SAME milestone (fuels revision-aware scoring)
     cumulative_ctx = await build_cumulative_context(
         user["user_id"], submission.get("cohort_id", ""), week_number,
         assignment_id=submission.get("assignment_id"),
+        milestone_id=submission.get("milestone_id"),
+        exclude_submission_id=submission.get("submission_id"),
     )
 
     api_key = os.environ.get("EMERGENT_LLM_KEY")
@@ -5484,8 +5549,13 @@ async def _run_auto_ai_review_for_submission(
                 )
 
         # Cumulative context from prior weeks + prior same-assignment submissions
+        # + prior attempts on the SAME milestone (so revisions get scored against
+        # the previous attempt and the growth areas Coach Max already flagged)
         cumulative_ctx = await build_cumulative_context(
-            student_id, cohort_id, week_number, assignment_id=assignment_id
+            student_id, cohort_id, week_number,
+            assignment_id=assignment_id,
+            milestone_id=submission.get("milestone_id"),
+            exclude_submission_id=submission_id,
         )
 
         api_key = os.environ.get("EMERGENT_LLM_KEY")
@@ -6671,9 +6741,12 @@ async def review_submission(submission_id: str, user: dict = Depends(require_ins
     lang_instr = get_language_instruction(lang)
     
     # Build cumulative context from prior weeks + prior submissions for the SAME assignment
+    # + prior attempts on the SAME milestone (so revisions are scored against the previous attempt)
     cumulative_ctx = await build_cumulative_context(
         submission["student_id"], submission.get("cohort_id", ""), week_number,
         assignment_id=submission.get("assignment_id"),
+        milestone_id=submission.get("milestone_id"),
+        exclude_submission_id=submission.get("submission_id"),
     )
     
     feedback = ""

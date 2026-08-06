@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration_59 revision-scoring changes verified. Created /app/backend/tests/test_revision_scoring.py with 11 tests covering (a) INVESTOR_SCORE_INSTRUCTION prompt shipped with SCORING CALIBRATION / 65-79 / Traction Mode / REVISION BONUS / +10 to +15 / PRIOR ATTEMPTS ON THIS EXACT MILESTONE phrases; (b) _prior_attempts_on_same_milestone_section() helper — empty on no priors, empty on None/empty milestone_id, header + 'Founder Progress Score awarded: NN/100' lines, chronological ordering, exclude_submission_id honoured, feedback (up to 800 chars) included, instructor_feedback preferred over ai_feedback, no score line when readiness_score missing; (c) build_cumulative_context() end-to-end — passes milestone_id + exclude_submission_id and both prior scores (62, 71) + both feedback snippets appear while current attempt is excluded; (d) backwards compatibility — legacy positional call without milestone_id returns a valid string with NO 'PRIOR ATTEMPTS' section leak; (e) milestone_id passed but no priors -> no PRIOR ATTEMPTS header. Regression: full test_venture_path.py + test_score_display.py suites still pass unchanged. Combined suite: 45 passed, 0 failed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_revision_scoring.py",
+    "/app/test_reports/pytest/iter59_revision_scoring.xml",
+    "/app/test_reports/pytest/iter59_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_prior_attempts_on_same_milestone_section uses `if prior_score` (line 735) which will suppress the score line when readiness_score == 0. Not a bug per business rules (0 shouldn't occur — parse_readiness_score clamps to min 1), but consider `if prior_score is not None` for defensive correctness.",
+    "build_cumulative_context caps sections at max_chars=6000. Prior-milestone attempts are appended FIRST so they get priority — good. However if a student has many prior attempts (helper reads up to 20) with large feedback (800 chars each) + 500 chars excerpts, the block alone could consume >6000 chars and starve the course-wide + prior-week sections. Consider capping the number of prior attempts included to ~3 most recent.",
+    "server.py is 8158 lines — well over the 700-line guideline. Splitting is out of scope for this iteration but worth flagging for a future refactor pass."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_revision_scoring.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (frontend explicitly skipped per request)"
+  },
+  "test_credentials": "Not used — direct MongoDB seed per test_credentials.md guidance.",
+  "seed_data_creation": "Per-test TEST_-prefixed submissions in `submissions` collection; cleaned in fixture teardown. No persistent test data left in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_revision_scoring.py rebinds server.client/server.db to a fresh AsyncIOMotorClient per test (function-scoped event_loop fixture) to avoid motor's 'Future attached to different loop' error when calling server async helpers directly. Reuse this pattern for any future direct-async-call tests against server.py. pytest requires REACT_APP_BACKEND_URL env var when combined with test_venture_path.py / test_score_display.py — sourced from /app/frontend/.env.",
+  "rca of the issue": "N/A — no bugs found; all assertions pass."
+}
