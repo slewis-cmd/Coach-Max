@@ -753,3 +753,12 @@ User: "Coach Max is too tough. Raise the baseline. Reward revisions that address
 - [x] **New context helper**: `_prior_attempts_on_same_milestone_section(student_id, milestone_id, exclude_submission_id)` — pulls up to 3 most recent prior attempts on the same milestone (excluding the current one), formats each with the exact score Max awarded + the feedback he gave. Injected at the TOP of `build_cumulative_context` so revisions are always scored against the prior attempt.
 - [x] `build_cumulative_context()` gained `milestone_id` + `exclude_submission_id` kwargs. All 3 review/scoring callsites updated (auto-review helper ~L5534, main review endpoint ~L6721, Coach Max chat context ~L4871).
 - [x] **Tests**: new `test_revision_scoring.py` (11 cases) + regression on `test_venture_path.py` + `test_score_display.py` = **45/45 pass** (iteration_59). Covers prompt content, helper edge cases, chronological ordering, exclude_submission_id, and legacy-signature back-compat.
+
+### Score Parser Hardening + On-Demand Backfill (Completed - Feb 2026)
+User: "Gamification still not working. Scoring + medal missing on student feedback page. Venture Path only shows a medal for one week."
+- [x] **Root-cause candidates** identified: (a) production may not have received recent deploys, (b) the parser was too strict — markdown-wrapped scores like `**Progress Score:** 72/100` (a common LLM output slip) silently failed, so those submissions had feedback text but no persisted score, so the badge + trend point never appeared.
+- [x] **Hardened `parse_readiness_score`**: tolerant regex handles markdown wrappers (`**`, `*`, `_`, backticks), non-colon separators (`=`, `-`, `is`), and whitespace/newlines between label and number. Also switched from first-match to LAST-match so mentions in prose don't hijack the score. 9/9 edge cases pass.
+- [x] Applied the same tolerant pattern to the PDF strip regex + frontend `stripProgressScoreLine`.
+- [x] **Refactored backfill into `_backfill_readiness_scores()`** helper; still runs at startup; added `POST /api/admin/backfill-readiness-scores` (super_admin only) so the user can trigger it on demand without waiting for a redeploy.
+- [x] Legacy material-based auto-review path (~L6039) also now passes milestone_id + exclude_submission_id so revisions get compared against the prior attempt there too.
+- [x] Regression: 45/45 pytest still pass.

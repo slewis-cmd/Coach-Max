@@ -4,9 +4,11 @@
  * that renders AI feedback can benefit consistently.
  */
 
-// Matches the trailing "Progress Score: 72/100" or legacy "Readiness Score: 72/100"
-// line the backend appends to AI feedback via INVESTOR_SCORE_INSTRUCTION.
-const SCORE_LINE_RE = /\s*(?:Progress|Readiness)\s*Score\s*:\s*\d{1,3}\s*(?:\/\s*100)?\s*$/im;
+// Tolerant matcher: allows the AI to wrap the label in markdown (`**Progress
+// Score:**`), swap the `:` for `=`/`-`, or insert extra whitespace/newlines.
+// Applied MULTILINE + at end-of-string so we only strip a trailing score line,
+// never any prose that happens to reference "progress" earlier in the feedback.
+const SCORE_LINE_RE = /\s*[*_`]{0,3}\s*(?:Progress|Readiness)\s*Score\s*[*_`]{0,3}[^\d\n]{0,12}\d{1,3}\s*(?:\/\s*100)?\s*$/im;
 
 /** Remove the trailing machine-readable score line so it doesn't leak into UI. */
 export function stripProgressScoreLine(text) {

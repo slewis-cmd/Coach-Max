@@ -1084,21 +1084,32 @@ INVESTOR_SCORE_INSTRUCTION = (
 )
 
 
+_SCORE_LINE_REGEX = _re_scoring.compile(
+    # Tolerant matcher: allows the AI to wrap the label in markdown (`**Progress
+    # Score:**`, `*Progress Score:*`), swap the separator (`:`, `=`, `-`, `is`),
+    # or insert whitespace/newlines between "Score" and the number. Anything up
+    # to 12 non-digit characters is skipped between the "Score" keyword and the
+    # captured integer.
+    r"[*_`]{0,3}\s*(?:Progress|Readiness)\s*Score\s*[*_`]{0,3}[^\d]{0,12}(\d{1,3})",
+    _re_scoring.IGNORECASE,
+)
+
+
 def parse_readiness_score(feedback_text: str) -> Optional[int]:
     """Pull the trailing 'Progress Score: NN/100' (or legacy 'Readiness Score') line out
     of the AI response. Returns an int 1..100 or None if the line is missing/malformed.
-    Accepts both labels for backwards compatibility with previously stored submissions."""
+    Accepts both labels + common markdown/format variations for backwards compatibility."""
     if not feedback_text:
         return None
-    m = _re_scoring.search(
-        r"(?:Progress|Readiness)\s*Score\s*:\s*(\d{1,3})\s*(?:/\s*100)?",
-        feedback_text,
-        _re_scoring.IGNORECASE,
-    )
-    if not m:
+    # Use findall + take the LAST match so if the AI accidentally mentions
+    # "Progress Score" earlier in the body ("Your Progress Score has improved
+    # since last week..."), we still lock onto the machine-readable line at
+    # the end.
+    matches = _SCORE_LINE_REGEX.findall(feedback_text)
+    if not matches:
         return None
     try:
-        val = int(m.group(1))
+        val = int(matches[-1])
     except ValueError:
         return None
     return max(1, min(100, val))
@@ -1119,6 +1130,42 @@ def badge_tier_for(score: int) -> str:
         if score >= threshold:
             return tier
     return "none"
+
+
+async def _backfill_readiness_scores() -> int:
+    """Scan submissions where readiness_score is missing/null but the stored
+    feedback text still contains a machine-readable score line, and populate
+    the field. Idempotent — subsequent runs skip already-filled rows.
+
+    Returns the number of submissions that were back-filled."""
+    # Broad Mongo regex casts a wide net (any 'Progress Score' or 'Readiness
+    # Score' substring in either feedback field). The Python-side
+    # parse_readiness_score does the tolerant matching + integer extraction.
+    cursor = db.submissions.find(
+        {
+            "$and": [
+                {"$or": [{"readiness_score": {"$exists": False}}, {"readiness_score": None}]},
+                {"$or": [
+                    {"ai_feedback": {"$regex": r"Progress\s*Score", "$options": "i"}},
+                    {"ai_feedback": {"$regex": r"Readiness\s*Score", "$options": "i"}},
+                    {"instructor_feedback": {"$regex": r"Progress\s*Score", "$options": "i"}},
+                    {"instructor_feedback": {"$regex": r"Readiness\s*Score", "$options": "i"}},
+                ]},
+            ]
+        },
+        {"_id": 0, "submission_id": 1, "ai_feedback": 1, "instructor_feedback": 1},
+    )
+    backfilled = 0
+    async for sub in cursor:
+        text = sub.get("instructor_feedback") or sub.get("ai_feedback") or ""
+        score = parse_readiness_score(text)
+        if score is not None:
+            await db.submissions.update_one(
+                {"submission_id": sub["submission_id"]},
+                {"$set": {"readiness_score": score}},
+            )
+            backfilled += 1
+    return backfilled
 
 
 # Founder Progress Score → Venture Path badges. Each module now supports three
@@ -4437,6 +4484,17 @@ async def get_student_venture_path(user: dict = Depends(get_current_user)):
     return await _compute_venture_path_for_student(user["user_id"])
 
 
+@api_router.post("/admin/backfill-readiness-scores")
+async def admin_backfill_readiness_scores(user: dict = Depends(get_current_user)):
+    """On-demand trigger for the readiness_score backfill. Same logic that
+    runs at startup, but callable via HTTP so an admin can populate historical
+    scores without waiting for a backend restart. Idempotent."""
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin only")
+    count = await _backfill_readiness_scores()
+    return {"backfilled": count}
+
+
 @api_router.get("/instructor/students/{student_id}/venture-path")
 async def get_student_venture_path_for_instructor(student_id: str, user: dict = Depends(get_current_user)):
     """Same shape as /student/venture-path but for instructors/super admins so
@@ -6035,9 +6093,14 @@ async def submit_on_behalf(
             auto_lang = stu.get("language_preference", "en") if stu else "en"
             auto_lang_instr = get_language_instruction(auto_lang)
             
-            # Build cumulative context from prior weeks
+            # Build cumulative context from prior weeks + any prior attempts on
+            # the same milestone (so revisions get compared against the previous score).
+            _sub_ms = await db.submissions.find_one({"submission_id": submission_id}, {"_id": 0, "milestone_id": 1, "assignment_id": 1})
             auto_cumulative = await build_cumulative_context(
-                student_id, submission_cohort_id, material.get("week_number", 1)
+                student_id, submission_cohort_id, material.get("week_number", 1),
+                assignment_id=(_sub_ms or {}).get("assignment_id"),
+                milestone_id=(_sub_ms or {}).get("milestone_id"),
+                exclude_submission_id=submission_id,
             )
             
             auto_custom_tpl = (material.get("feedback_template") or "").strip()
@@ -7023,10 +7086,11 @@ async def export_feedback_pdf(submission_id: str, user: dict = Depends(require_i
     feedback = submission.get("instructor_feedback") or submission.get("ai_feedback")
     if not feedback:
         raise HTTPException(status_code=400, detail="No feedback available. Generate AI feedback first.")
-    # Strip the trailing machine-readable "Progress Score: NN/100" line — we render
-    # it as a proper header section below instead of leaking raw text into the PDF.
+    # Strip any trailing machine-readable "Progress Score" / "Readiness Score" line
+    # (tolerant of markdown wrappers) — we render it as a proper header section
+    # below instead of leaking raw text into the PDF.
     feedback = _re_scoring.sub(
-        r"\s*(?:Progress|Readiness)\s*Score\s*:\s*\d{1,3}\s*(?:/\s*100)?\s*$",
+        r"\s*[*_`]{0,3}\s*(?:Progress|Readiness)\s*Score\s*[*_`]{0,3}[^\d]{0,12}\d{1,3}\s*(?:/\s*100)?\s*$",
         "",
         feedback,
         flags=_re_scoring.IGNORECASE | _re_scoring.MULTILINE,
@@ -8122,30 +8186,7 @@ async def migrate_instructor_ids():
     # the score-parsing bug was fixed (feedback text has the score line but the
     # field was never populated, so the badge never renders).
     try:
-        backfill_cursor = db.submissions.find(
-            {
-                "$and": [
-                    {"$or": [{"readiness_score": {"$exists": False}}, {"readiness_score": None}]},
-                    {"$or": [
-                        {"ai_feedback": {"$regex": r"Progress\s*Score\s*:\s*\d", "$options": "i"}},
-                        {"ai_feedback": {"$regex": r"Readiness\s*Score\s*:\s*\d", "$options": "i"}},
-                        {"instructor_feedback": {"$regex": r"Progress\s*Score\s*:\s*\d", "$options": "i"}},
-                        {"instructor_feedback": {"$regex": r"Readiness\s*Score\s*:\s*\d", "$options": "i"}},
-                    ]},
-                ]
-            },
-            {"_id": 0, "submission_id": 1, "ai_feedback": 1, "instructor_feedback": 1},
-        )
-        backfilled = 0
-        async for sub in backfill_cursor:
-            text = sub.get("instructor_feedback") or sub.get("ai_feedback") or ""
-            score = parse_readiness_score(text)
-            if score is not None:
-                await db.submissions.update_one(
-                    {"submission_id": sub["submission_id"]},
-                    {"$set": {"readiness_score": score}},
-                )
-                backfilled += 1
+        backfilled = await _backfill_readiness_scores()
         if backfilled:
             logger.info(f"Backfilled readiness_score on {backfilled} historical submissions")
     except Exception as e:
