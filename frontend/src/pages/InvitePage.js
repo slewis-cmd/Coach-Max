@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -33,14 +33,7 @@ export default function InvitePage() {
     fetchInvite();
   }, [code]);
 
-  // Auto-join after authentication
-  useEffect(() => {
-    if (!authLoading && isAuthenticated && cohortInfo && !joined && !joining) {
-      handleJoin();
-    }
-  }, [authLoading, isAuthenticated, cohortInfo, joined, joining]);
-
-  const handleJoin = async () => {
+  const handleJoin = useCallback(async () => {
     setJoining(true);
     try {
       const res = await axios.post(`${API_URL}/api/invite/${code}/join`);
@@ -55,7 +48,14 @@ export default function InvitePage() {
       toast.error(err.response?.data?.detail || 'Failed to join cohort');
       setJoining(false);
     }
-  };
+  }, [code, navigate]);
+
+  // Auto-join after authentication
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && cohortInfo && !joined && !joining) {
+      handleJoin();
+    }
+  }, [authLoading, isAuthenticated, cohortInfo, joined, joining, handleJoin]);
 
   if (loading || authLoading) {
     return (

@@ -769,3 +769,11 @@ User: "Remove the 'do not give grades or scores' instruction (conflicts with Pro
 - [x] **INVESTOR_SCORE_INSTRUCTION now appended to all 6 prompt branches** (3 default + 3 custom-template). Every review path — no matter which template — now produces a score line. Confirmed: 7 total mentions in server.py (1 definition + 6 usages).
 - [x] **Instructor visibility on Venture Path CTA**: SubmissionDetail's post-feedback button now shows for both roles. Students go to `/venture-path`; instructors go to `/venture-path/student/<student_id>` with a personalised label ("View <FirstName>'s Venture Path").
 - [x] Regression: 45/45 pytest still pass.
+
+### Code Review Fixes — Critical Only (Completed - Feb 2026)
+- [x] **Array-index-as-key**: SupportWidget + AdminSupportTicketsPage message loops now use `${ts}-${index}` composite keys (both outer message and inner text-line loops).
+- [x] **`is True/False` → `== True/False`** in test files: 11 replacements across `test_milestone_submit_auto_review.py`, `test_video_submission_review.py`, `test_venture_path.py`. Regression suite still 50/50 pass.
+- [x] **Real hook-dep bug fixed in `InvitePage.js`**: auto-join `useEffect` referenced `handleJoin` without including it in deps and `handleJoin` was redefined every render. Wrapped in `useCallback([code, navigate])` and added to effect deps. Zero react-hooks/exhaustive-deps warnings across the entire frontend now.
+- [x] **Reviewer's "53 hook-dep warnings" claim mostly false-positive**: verified with actual `eslint-plugin-react-hooks` — only 1 real issue existed (the InvitePage one above). The reviewer's specific claims for VenturePath.js:60, SubmissionDetail.js:105, StudentDashboard.js:72/91 are all incorrect — those deps are already correct (module constants like API_URL/axios/toast don't need to be in deps; state setters are stable; property accesses on already-included objects don't create new deps).
+- [x] **Reviewer's "6 Python undefined variables" claim doesn't reproduce**: ruff F821 clean across entire backend.
+- [x] **Deferred** (with user approval): full localStorage → httpOnly cookie migration, server.py refactor, large React component splits. Flagged as roadmap items.
