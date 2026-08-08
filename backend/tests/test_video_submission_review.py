@@ -188,18 +188,18 @@ class TestPureHelpers:
         from server import _is_media_submission
         for name in ["pitch.mp4", "clip.MOV", "voice.mp3", "audio.wav",
                      "rec.webm", "vid.m4v", "sound.flac"]:
-            assert _is_media_submission({"file_name": name}) is True, name
+            assert _is_media_submission({"file_name": name}) == True, name
 
     def test_is_media_submission_negative(self):
         from server import _is_media_submission
         for name in ["doc.pdf", "slides.pptx", "notes.docx", "readme.txt",
                      "", "no-extension"]:
-            assert _is_media_submission({"file_name": name}) is False, name
+            assert _is_media_submission({"file_name": name}) == False, name
         # No file_name key at all
-        assert _is_media_submission({}) is False
+        assert _is_media_submission({}) == False
         # Questionnaire (no file_name → treated as non-media)
         assert _is_media_submission({"submission_type": "business_questionnaire",
-                                     "questionnaire_answers": {"x": "y"}}) is False
+                                     "questionnaire_answers": {"x": "y"}}) == False
 
     def test_transcribe_media_bytes_returns_tuple_mp3(self):
         """Real mp3 (2s tone) → Whisper should return ('done', <string>).

@@ -202,7 +202,7 @@ class TestAutoReviewOnNewSubmit:
         )
         assert r.status_code == 200, r.text
         sid = r.json()["submission_id"]
-        assert r.json().get("is_resubmission") is False
+        assert r.json().get("is_resubmission") == False
 
         sub = _poll_for_feedback(sid, timeout=90)
         assert sub is not None, f"No feedback within 90s for {sid}"
@@ -246,7 +246,7 @@ class TestAutoReviewOnResubmit:
         assert r2.status_code == 200
         sid2 = r2.json()["submission_id"]
         assert sid2 == sid1, "Resubmit must reuse the same submission_id"
-        assert r2.json().get("is_resubmission") is True
+        assert r2.json().get("is_resubmission") == True
 
         # Immediately after resubmit, doc should have reset fields (status=pending,
         # ai_feedback=None, transcript=None) before background helper runs.

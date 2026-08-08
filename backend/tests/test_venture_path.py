@@ -192,8 +192,8 @@ def test_empty_student_shape(student_ctx):
                   "attempted", "tier", "next_tier", "points_to_next"):
             assert f in m, f"missing {f} in {m}"
         assert m["best_score"] == 0
-        assert m["unlocked"] is False
-        assert m["attempted"] is False
+        assert m["unlocked"] == False
+        assert m["attempted"] == False
         assert m["tier"] == "none"
         assert m["next_tier"] == "bronze"
         assert m["points_to_next"] == 50
@@ -224,9 +224,9 @@ def test_unlock_module_2_after_seeded_submission(mongo, student_ctx):
 
     mods = {m["module"]: m for m in data["modules"]}
     m2 = mods[2]
-    assert m2["unlocked"] is True
+    assert m2["unlocked"] == True
     assert m2["best_score"] == 85
-    assert m2["attempted"] is True
+    assert m2["attempted"] == True
     assert m2["tier"] == "gold"
     assert m2["next_tier"] is None
     assert m2["points_to_next"] is None
@@ -234,7 +234,7 @@ def test_unlock_module_2_after_seeded_submission(mongo, student_ctx):
     assert data["silver_count"] == 0
     assert data["bronze_count"] == 0
     for n in (1, 3, 4, 5, 6):
-        assert mods[n]["unlocked"] is False, f"module {n} should be locked"
+        assert mods[n]["unlocked"] == False, f"module {n} should be locked"
 
     trend = data["trend"]
     assert any(t["week"] == 2 and t["score"] == 85 for t in trend), trend

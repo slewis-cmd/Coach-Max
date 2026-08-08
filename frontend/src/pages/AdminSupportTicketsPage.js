@@ -128,7 +128,7 @@ export default function AdminSupportTicketsPage() {
                   <div className="mt-4 pt-4 border-t border-[#E5E7EB] space-y-2">
                     {(t.conversation || []).map((c, i) => (
                       <div
-                        key={i}
+                        key={`${c.ts || c.timestamp || 'msg'}-${i}`}
                         className={`text-sm rounded-lg p-3 ${
                           c.role === 'user' ? 'bg-[#EFF6FF] text-[#1E3A8A]' : 'bg-[#F3F4F6] text-[#374151]'
                         }`}
@@ -136,7 +136,7 @@ export default function AdminSupportTicketsPage() {
                         <div className="text-[10px] uppercase font-medium mb-1 opacity-70">
                           {c.role === 'user' ? t.user_name : 'Support bot'}
                         </div>
-                        {c.text.split('\n').map((l, j) => <div key={j}>{l || '\u00A0'}</div>)}
+                        {c.text.split('\n').map((l, j) => <div key={`${i}-${j}`}>{l || '\u00A0'}</div>)}
                       </div>
                     ))}
                     <div className="pt-2">

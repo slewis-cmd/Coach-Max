@@ -142,7 +142,7 @@ export default function SupportWidget() {
             )}
             {messages.map((m, i) => (
               <div
-                key={i}
+                key={`${m.ts || 'msg'}-${i}`}
                 className={`text-sm rounded-lg p-3 ${
                   m.role === 'user'
                     ? 'bg-[#22438E] text-white ml-8'
@@ -151,7 +151,7 @@ export default function SupportWidget() {
                 data-testid={`support-message-${m.role}-${i}`}
               >
                 {m.text.split('\n').map((line, j) => (
-                  <div key={j}>{line || '\u00A0'}</div>
+                  <div key={`${m.ts || i}-${j}`}>{line || '\u00A0'}</div>
                 ))}
               </div>
             ))}
