@@ -5646,14 +5646,13 @@ Guidelines:
 - Be warm, supportive, and encouraging
 - Use specific examples from the student's work
 - Reference prior weeks' concepts when relevant
-- Do NOT give grades or scores
 - Write in a mentoring tone
 {fmt_block}
 
 For THIS assignment, follow these custom instructions from the instructor:
 
 {_rendered}
-{lang_instr}"""
+{lang_instr}""" + INVESTOR_SCORE_INSTRUCTION
         else:
             system_msg = f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
@@ -5663,7 +5662,6 @@ Guidelines:
 - Use specific examples from their work to support each point
 - When relevant, reference concepts from earlier weeks to show how the student is building on prior learning
 - Note any improvements or growth patterns compared to prior feedback
-- Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
 {fmt_block}
@@ -6120,13 +6118,12 @@ Guidelines:
 - Be warm, supportive, and encouraging
 - Use specific examples from the student's work
 - Reference prior weeks' concepts when relevant
-- Do NOT give grades or scores
 - Write in a mentoring tone
 
 For THIS assignment, follow these custom instructions from the instructor:
 
 {_auto_rendered}
-{auto_lang_instr}"""
+{auto_lang_instr}""" + INVESTOR_SCORE_INSTRUCTION
             else:
                 _auto_system = f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
@@ -6136,7 +6133,6 @@ Guidelines:
 - Use specific examples from their work to support each point
 - When relevant, reference concepts from earlier weeks to show how the student is building on prior learning
 - Note any improvements or growth patterns compared to prior feedback
-- Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
 
@@ -6838,14 +6834,13 @@ Guidelines:
 - Be warm, supportive, and encouraging
 - Use specific examples from the student's work
 - Reference prior weeks' concepts when relevant
-- Do NOT give grades or scores
 - Write in a mentoring tone
 {fmt_block}
 
 For THIS assignment, follow these custom instructions from the instructor:
 
 {_rendered}
-{lang_instr}"""
+{lang_instr}""" + INVESTOR_SCORE_INSTRUCTION
     else:
         system_msg = f"""You are a supportive and encouraging AI tutor helping students learn.
 Your role is to provide qualitative, structured feedback on homework submissions.
@@ -6855,7 +6850,6 @@ Guidelines:
 - Use specific examples from their work to support each point
 - When relevant, reference concepts from earlier weeks to show how the student is building on prior learning
 - Note any improvements or growth patterns you see compared to prior feedback
-- Do NOT give grades or scores
 - Write in a mentoring, supportive tone
 - Keep each bullet point concise (1-2 sentences)
 {fmt_block}

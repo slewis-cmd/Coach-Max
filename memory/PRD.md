@@ -762,3 +762,10 @@ User: "Gamification still not working. Scoring + medal missing on student feedba
 - [x] **Refactored backfill into `_backfill_readiness_scores()`** helper; still runs at startup; added `POST /api/admin/backfill-readiness-scores` (super_admin only) so the user can trigger it on demand without waiting for a redeploy.
 - [x] Legacy material-based auto-review path (~L6039) also now passes milestone_id + exclude_submission_id so revisions get compared against the prior attempt there too.
 - [x] Regression: 45/45 pytest still pass.
+
+### Prompt Coherence + Instructor CTA (Completed - Feb 2026)
+User: "Remove the 'do not give grades or scores' instruction (conflicts with Progress Score). Add Progress Score instruction to EVERY review path including custom-template. Make the Venture Path button on the feedback view visible to instructors too."
+- [x] **Removed all 6 occurrences** of "- Do NOT give grades or scores" across the 3 review helpers (auto-review, legacy material auto-review, main review endpoint). This was contradicting the "output Progress Score" system instruction and confusing the model — likely explains why some submissions had no score line at all.
+- [x] **INVESTOR_SCORE_INSTRUCTION now appended to all 6 prompt branches** (3 default + 3 custom-template). Every review path — no matter which template — now produces a score line. Confirmed: 7 total mentions in server.py (1 definition + 6 usages).
+- [x] **Instructor visibility on Venture Path CTA**: SubmissionDetail's post-feedback button now shows for both roles. Students go to `/venture-path`; instructors go to `/venture-path/student/<student_id>` with a personalised label ("View <FirstName>'s Venture Path").
+- [x] Regression: 45/45 pytest still pass.

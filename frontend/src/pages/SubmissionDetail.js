@@ -563,18 +563,23 @@ export default function SubmissionDetail() {
                 onGenerateAudio={handleGenerateAudio}
               />
             )}
-            {/* Student CTA: after every piece of feedback, offer a fast route to
-                the gamification dashboard so they can see where this score sits
-                in the bigger picture. Only shown for students. */}
-            {!isInstructor && currentFeedback && (
+            {/* Post-feedback CTA: quick route to the Venture Path so students
+                see where this score sits in the bigger picture. Instructors also
+                get it so they can jump directly to a student's progress dashboard
+                from their reviewing workflow. */}
+            {currentFeedback && (
               <div className="mt-4">
                 <Link
-                  to="/venture-path"
+                  to={!isInstructor
+                    ? '/venture-path'
+                    : `/venture-path/student/${submission.student_id || submission.student?.user_id || ''}`}
                   className="inline-flex items-center gap-2 bg-[#22438E] text-white hover:bg-[#1A3A7A] transition-colors px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm"
                   data-testid="feedback-view-venture-path-btn"
                 >
                   <Trophy className="w-4 h-4" />
-                  View your Venture Path
+                  {isInstructor
+                    ? `View ${submission.student?.name?.split(' ')[0] || 'Student'}'s Venture Path`
+                    : 'View your Venture Path'}
                 </Link>
               </div>
             )}
