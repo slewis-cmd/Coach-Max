@@ -124,7 +124,7 @@ export default function AssignmentTemplatesPage() {
                       <div className="min-w-0 flex-1">
                         <CardTitle className="text-base font-medium truncate">{t.name}</CardTitle>
                         <CardDescription className="text-xs mt-1 flex items-center gap-2">
-                          <span className="uppercase tracking-wide text-[#7C3AED]">{config?.label || t.submission_type}</span>
+                          <span className="uppercase tracking-wide text-[#7C3AED]">{config?.label || (t.submission_type ? t.submission_type : 'Other')}</span>
                           <span>·</span>
                           <span>{(t.milestones || []).length} milestones</span>
                         </CardDescription>
@@ -195,7 +195,7 @@ function TemplateFormDialog({ open, editing, onOpenChange, onSaved }) {
     if (open) {
       setName(editing?.name || '');
       setDescription(editing?.description || '');
-      setSubmissionType(editing?.submission_type || '60_second_pitch');
+      setSubmissionType(editing?.submission_type ?? '60_second_pitch');
       setFeedbackTemplate(editing?.feedback_template || '');
       setDriveFolderUrl(editing?.drive_folder_url || '');
       setQuestionnaireFields(editing?.questionnaire_fields || []);
@@ -274,7 +274,7 @@ function TemplateFormDialog({ open, editing, onOpenChange, onSaved }) {
           {!editing && (
             <SubmissionTypeFields
               submissionType={submissionType}
-              onSubmissionTypeChange={(v) => setSubmissionType(v || '60_second_pitch')}
+              onSubmissionTypeChange={setSubmissionType}
               questionnaireFields={questionnaireFields}
               onQuestionnaireFieldsChange={setQuestionnaireFields}
               idPrefix="tpl-submission-type"
@@ -288,6 +288,12 @@ function TemplateFormDialog({ open, editing, onOpenChange, onSaved }) {
               onQuestionnaireFieldsChange={setQuestionnaireFields}
               idPrefix="tpl-submission-type-edit"
             />
+          )}
+          {editing && submissionType !== 'business_questionnaire' && (
+            <div className="text-xs text-[#666]" data-testid="template-edit-type-readonly">
+              Homework format: <strong>{SUBMISSION_TYPE_BY_ID[submissionType]?.label || 'Other (any file type)'}</strong>
+              <span className="ml-1 opacity-70">(cannot be changed after creation)</span>
+            </div>
           )}
           <div>
             <Label htmlFor="tpl-drive">Default Drive Folder URL (optional)</Label>

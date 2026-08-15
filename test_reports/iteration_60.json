@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 60 — verified restoration of the 'Other' submission type (empty string wildcard) end-to-end. Backend: created /app/backend/tests/test_other_submission_type.py with 8 tests — all pass. Covers (a) POST /api/cohorts/{cohort_id}/assignments accepts submission_type='' and persists it as ''; still 400s on 'invalid_value'; (b) POST /api/assignment-templates accepts submission_type='' and stores '' in Mongo; still 400s on 'not_a_type'; (c) student PNG submission to an 'Other' milestone — currently REJECTED because DEFAULT_HOMEWORK_EXTENSIONS in server.py does NOT include png/jpg despite the task claim; test uses .mp4 (which IS in DEFAULT_HOMEWORK_EXTENSIONS) to positively verify the empty-type fallback path; a second test explicitly documents the png gap; (d) GET /api/submit-link/w/{week}/{submission_type} still 400s for invalid and 404s for empty (routing) — intended. Frontend: seeded a super_admin session and drove Playwright through both Assignment Templates and Cohort → Assignments tab. Verified — (i) Assignment Templates: 'New Template' dropdown first option is 'Other (any file type)' with data-testid tpl-submission-type-option-generic; selecting it, saving, then observing the card shows badge 'OTHER · 1 milestones' (persistence confirmed). Note: Edit dialog HIDES the Homework Format select for non-questionnaire types (by design in code lines 274-291 of AssignmentTemplatesPage.js) so the 'reopen edit shows Other' dropdown-persistence check is not visually testable via UI — persistence is however verified by (1) badge on card and (2) direct DB inspection in the backend test. (ii) Cohort Assignments tab: dropdown first option is 'Other (any file type)' with data-testid asgn-submission-type-option-generic; selecting it makes the trigger show 'Other (any file type)'. All coercion bugs mentioned in the ticket appear fixed (?? used, no || '60_second_pitch' fallback in onChange, submissionType saved verbatim). No other pages found that hardcode SUBMISSION_TYPE_IDS check without empty-string escape.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/milestones/{milestone_id}/submit", "issue": "Task description claims DEFAULT_HOMEWORK_EXTENSIONS 'includes png/jpg/mp4/etc.' but server.py L1204-1213 only lists docs/spreadsheets/slides/video/audio — NO image formats (png/jpg/gif/webp). A student uploading a .png to an 'Other' assignment gets '400 Allowed file types...'. If image support was intended, add 'png','jpg','jpeg','gif','webp','svg' to DEFAULT_HOMEWORK_EXTENSIONS."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Assignment Templates → Edit dialog", "issues": ["'Homework Format' select is hidden entirely in Edit mode for non-questionnaire types (AssignmentTemplatesPage.js L274). Users cannot verify or change the format after creation. This is not the reported regression (persistence works — badge shows 'OTHER') but it prevents visual confirmation on edit. Consider showing the select as read-only, or as an editable field, to close the loop."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_other_submission_type.py",
+    "/app/test_reports/pytest/iter60_other.xml"
+  ],
+  "action_items": [
+    "Decide whether DEFAULT_HOMEWORK_EXTENSIONS in /app/backend/server.py (L1204-1213) should include image formats (png/jpg/jpeg/gif/webp). The task copy explicitly said 'Other/any file' should accept png but it currently 400s.",
+    "Optional: show the Homework Format value (read-only) in the Assignment Template Edit dialog so admins can visually confirm 'Other' persistence without reading the card badge."
+  ],
+  "critical_code_review_comments": [
+    "server.py is still 8198 lines — flagged multiple iterations in a row. Not scope-of-this-ticket.",
+    "In AssignmentsTab.js L463 the placeholder for 'Accepted file types' only branches on 60_second_pitch; consider adding an Other-specific hint mentioning the wider default set."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_other_submission_type.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 tests pass)",
+    "frontend": "100% for the reported regression (Other option visible, first, selectable, persisted with correct badge; both AssignmentsTab and Templates page)"
+  },
+  "test_credentials": "Direct MongoDB session-token seeding per /app/memory/test_credentials.md — no OAuth login. Used slewis@theboostpad.org (user_d198275ccff4) session; cleaned up.",
+  "seed_data_creation": "Per-test TEST_OTH_ users/sessions/cohorts/assignments/templates/submissions, deleted in module fixture teardown. One TEST_UI_Other_Tpl assignment_template created via UI test, deleted manually afterwards.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend uses localStorage['thinkific_session_token'] as Bearer. To drive UI as super_admin without OAuth: (1) find user_id of slewis@theboostpad.org in `users`, (2) insert a doc into `user_sessions` with a chosen session_token + expires_at, (3) in Playwright evaluate localStorage.setItem before navigating. Assignment Template EDIT dialog intentionally hides SubmissionTypeFields for non-questionnaire types (AssignmentTemplatesPage.js L274) — do not assume the select is visible in edit mode.",
+  "rca of the issue": "N/A — the ticket's fixes are correct and shipped. The only genuine concern is a docs/behavior mismatch on png/jpg in DEFAULT_HOMEWORK_EXTENSIONS (see backend minor issue)."
+}

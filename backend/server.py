@@ -1210,6 +1210,8 @@ DEFAULT_HOMEWORK_EXTENSIONS = [
     "ppt", "pptx",
     # Video / audio (transcribed for pitches, etc.)
     "mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav",
+    # Images — screenshots, scans, whiteboard photos etc. (common on "Other" submissions)
+    "png", "jpg", "jpeg", "gif", "webp", "heic", "svg",
 ]
 
 
@@ -3112,8 +3114,9 @@ async def create_custom_assignment(cohort_id: str, payload: AssignmentCreate, us
     if user.get("role") != "super_admin" and not is_cohort_manager(user, cohort):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    if payload.submission_type not in SUBMISSION_TYPE_IDS:
-        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
+    # submission_type = "" means "Other / any file" (wildcard) — explicitly allowed.
+    if payload.submission_type and payload.submission_type not in SUBMISSION_TYPE_IDS:
+        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS} or empty for Other")
 
     # If instructor creates a business_questionnaire without providing fields,
     # backfill from an existing homework material in the same cohort so the new
@@ -3532,12 +3535,13 @@ async def create_assignment_template(payload: AssignmentTemplatePayload, user: d
     name = (payload.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
-    if not payload.submission_type or payload.submission_type not in SUBMISSION_TYPE_IDS:
-        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS}")
+    # Empty submission_type is the "Other / any file" wildcard — allowed.
+    if payload.submission_type and payload.submission_type not in SUBMISSION_TYPE_IDS:
+        raise HTTPException(status_code=400, detail=f"submission_type must be one of {SUBMISSION_TYPE_IDS} or empty for Other")
     tpl = AssignmentTemplate(
         name=name,
         description=(payload.description or "").strip(),
-        submission_type=payload.submission_type,
+        submission_type=payload.submission_type or "",
         feedback_template=(payload.feedback_template or "").strip(),
         drive_folder_url=_validate_drive_url(payload.drive_folder_url or ""),
         questionnaire_fields=payload.questionnaire_fields if payload.submission_type == "business_questionnaire" else None,

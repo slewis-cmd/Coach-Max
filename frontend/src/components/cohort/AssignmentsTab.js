@@ -142,7 +142,7 @@ export function AssignmentsTab({ cohortId, cohort, isInstructor }) {
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base font-medium">{asgn.title}</CardTitle>
                     <CardDescription className="text-xs text-[#666]">
-                      {config?.label || asgn.submission_type} · {(asgn.milestones || []).length} milestones
+                      {config?.label || (asgn.submission_type ? asgn.submission_type : 'Other')} · {(asgn.milestones || []).length} milestones
                       {asgn.feedback_template ? ' · Custom rubric' : ''}
                     </CardDescription>
                   </div>
@@ -310,7 +310,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
     if (open) {
       setTitle(editing?.title || '');
       setDescription(editing?.description || '');
-      setSubmissionType(editing?.submission_type || '60_second_pitch');
+      setSubmissionType(editing?.submission_type ?? '60_second_pitch');
       setFeedbackTemplate(editing?.feedback_template || '');
       setDriveFolderUrl(editing?.drive_folder_url || '');
       setAllowedExtensions((editing?.allowed_extensions || []).join(', '));
@@ -397,7 +397,7 @@ function AssignmentFormDialog({ open, editing, onOpenChange, onSaved, cohortId }
           {!editing && (
             <SubmissionTypeFields
               submissionType={submissionType}
-              onSubmissionTypeChange={(v) => setSubmissionType(v || '60_second_pitch')}
+              onSubmissionTypeChange={setSubmissionType}
               questionnaireFields={questionnaireFields}
               onQuestionnaireFieldsChange={setQuestionnaireFields}
               idPrefix="asgn-submission-type"

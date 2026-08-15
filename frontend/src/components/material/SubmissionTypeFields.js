@@ -10,7 +10,8 @@ import { SUBMISSION_TYPES, SUBMISSION_TYPE_BY_ID } from '../../config/submission
 
 /**
  * Two related fields:
- *  - Submission Type select (5 options: generic homework + 4 named types)
+ *  - Submission Type select (5 named types + 'Other/any file' wildcard for
+ *    submissions that don't fit the standard categories — maps to submission_type='')
  *  - Questionnaire Field builder (only shown when type === 'business_questionnaire')
  */
 export function SubmissionTypeFields({
@@ -56,7 +57,7 @@ export function SubmissionTypeFields({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__generic__" data-testid={`${idPrefix}-option-generic`}>
-              Generic Homework (any file)
+              Other (any file type)
             </SelectItem>
             {SUBMISSION_TYPES.map((t) => (
               <SelectItem key={t.id} value={t.id} data-testid={`${idPrefix}-option-${t.id}`}>

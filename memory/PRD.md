@@ -777,3 +777,18 @@ User: "Remove the 'do not give grades or scores' instruction (conflicts with Pro
 - [x] **Reviewer's "53 hook-dep warnings" claim mostly false-positive**: verified with actual `eslint-plugin-react-hooks` — only 1 real issue existed (the InvitePage one above). The reviewer's specific claims for VenturePath.js:60, SubmissionDetail.js:105, StudentDashboard.js:72/91 are all incorrect — those deps are already correct (module constants like API_URL/axios/toast don't need to be in deps; state setters are stable; property accesses on already-included objects don't create new deps).
 - [x] **Reviewer's "6 Python undefined variables" claim doesn't reproduce**: ruff F821 clean across entire backend.
 - [x] **Deferred** (with user approval): full localStorage → httpOnly cookie migration, server.py refactor, large React component splits. Flagged as roadmap items.
+
+### "Other" Submission Type Restoration (Completed - Feb 2026)
+User: "The 'Other' fifth-type option is missing from the UI. Restore it end-to-end."
+- [x] **Root causes identified** (three separate bugs stacked):
+  1. Frontend label was `Generic Homework (any file)` — user didn't recognise it as "Other".
+  2. FOUR silent coercion bugs: `setSubmissionType(v || '60_second_pitch')` in both AssignmentsTab and AssignmentTemplatesPage onChange, AND `editing?.submission_type || '60_second_pitch'` on editor reset in both files — every time the user selected Other, it snapped back to 60-Second Pitch.
+  3. Backend REJECTED empty `submission_type` at both `POST /api/cohorts/{id}/assignments` and `POST /api/assignment-templates` — even though empty string was the intended wildcard.
+- [x] **Fixes shipped**:
+  - Label renamed to **"Other (any file type)"** in `SubmissionTypeFields.js`.
+  - All four `||` coercions replaced with pass-through or `??` so empty-string persists.
+  - Backend validation at both endpoints now accepts empty `submission_type` (still 400s on non-empty invalid values). Public `submit-link/{week}/{type}` URL kept strict (URL-shape reason).
+  - Display fallback: assignment/template cards show badge **"Other"** instead of blank.
+  - Assignment Template edit dialog now shows a read-only `Homework format: Other (any file type)` line so instructors can visually confirm the persisted type.
+  - **DEFAULT_HOMEWORK_EXTENSIONS extended with image formats** (png/jpg/jpeg/gif/webp/heic/svg) — students can now submit screenshots and whiteboard photos to "Other" milestones, which was the primary use case.
+- [x] **Tests**: new `test_other_submission_type.py` (8 cases) — creation, persistence, invalid rejection, png upload, submit-link. Regression suite still **53/53 pass** (iteration_60 + follow-ups).
