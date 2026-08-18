@@ -1168,16 +1168,27 @@ async def _backfill_readiness_scores() -> int:
     return backfilled
 
 
-# Founder Progress Score → Venture Path badges. Each module now supports three
-# tiers (bronze 50 / silver 70 / gold 85) so early-stage founders see visible
-# progress on nearly every submission.
+# Founder Progress Score → Venture Path badges. 14 modules aligned to the
+# 14-week course. Each supports three tiers (bronze 50 / silver 70 / gold 85)
+# so early-stage founders see visible progress on nearly every submission.
+# Names below are sensible defaults for typical accelerator curricula — if the
+# cohort's assignments have milestones with distinctive titles for a given
+# week, the endpoint OVERRIDES these defaults with the real curriculum name.
 VENTURE_PATH_MODULES: List[Dict[str, Any]] = [
-    {"module": 1, "name": "Problem-Solution Fit", "icon": "compass", "tagline": "You've defined the pain worth solving."},
-    {"module": 2, "name": "Market Master",         "icon": "map",     "tagline": "You've sized the opportunity."},
-    {"module": 3, "name": "Value Architect",       "icon": "layers",  "tagline": "Your value proposition holds up."},
-    {"module": 4, "name": "Customer Whisperer",    "icon": "message", "tagline": "You know exactly who you serve."},
-    {"module": 5, "name": "Business Model Builder","icon": "gear",    "tagline": "You've engineered how you'll win."},
-    {"module": 6, "name": "Investor Ready",        "icon": "rocket",  "tagline": "You can walk into any pitch room."},
+    {"module": 1,  "name": "Problem-Solution Fit",   "icon": "compass",     "tagline": "You've defined the pain worth solving."},
+    {"module": 2,  "name": "Market Master",          "icon": "map",         "tagline": "You've sized the opportunity."},
+    {"module": 3,  "name": "Value Architect",        "icon": "layers",      "tagline": "Your value proposition holds up."},
+    {"module": 4,  "name": "Customer Whisperer",     "icon": "message",     "tagline": "You know exactly who you serve."},
+    {"module": 5,  "name": "Business Model Builder", "icon": "gear",        "tagline": "You've engineered how you'll win."},
+    {"module": 6,  "name": "Investor Ready",         "icon": "rocket",      "tagline": "You can walk into any pitch room."},
+    {"module": 7,  "name": "Traction Engine",        "icon": "trending-up", "tagline": "You've proven people want it."},
+    {"module": 8,  "name": "Financial Foundations",  "icon": "dollar",      "tagline": "Your numbers tell a credible story."},
+    {"module": 9,  "name": "Legal & Ops",            "icon": "shield",      "tagline": "You've built the guardrails."},
+    {"module": 10, "name": "Team Builder",           "icon": "users",       "tagline": "You know who to hire and why."},
+    {"module": 11, "name": "Story Craft",            "icon": "mic",         "tagline": "You can make anyone care in 60 seconds."},
+    {"module": 12, "name": "Investor Radar",         "icon": "target",      "tagline": "You know exactly who to pitch."},
+    {"module": 13, "name": "Fundraise Fluent",       "icon": "briefcase",   "tagline": "You can navigate a term sheet."},
+    {"module": 14, "name": "Demo Day Ready",         "icon": "star",        "tagline": "You're ready to walk on stage."},
 ]
 
 
@@ -4534,6 +4545,11 @@ async def _compute_venture_path_for_student(student_id: str) -> Dict[str, Any]:
     """Shared Venture Path computation used by both the self-service student
     endpoint and the instructor 'view a specific student' endpoint. Returns
     the response payload — the endpoint layer decides who's allowed to see it.
+
+    Always returns ALL 14 modules (in numerical order 1..14), regardless of
+    which weeks the student has submitted. Incomplete modules have tier='none'.
+    Module names are overridden from the student's actual cohort milestones
+    when a milestone with a distinctive title exists for that week.
     """
     # Pull every scored submission for this student.
     subs_cursor = db.submissions.find(
@@ -4544,17 +4560,41 @@ async def _compute_venture_path_for_student(student_id: str) -> Dict[str, Any]:
     subs = await subs_cursor.to_list(length=500)
 
     # Map milestone_id -> week_number by looking up the parent assignments.
+    # ALSO collect a per-week label from the FIRST milestone we see for that
+    # week (used to override the default VENTURE_PATH_MODULES names below).
     assignment_ids = list({s.get("assignment_id") for s in subs if s.get("assignment_id")})
     ms_to_week: Dict[str, int] = {}
+    week_to_curriculum_name: Dict[int, str] = {}
     if assignment_ids:
         async for a in db.assignments.find(
             {"assignment_id": {"$in": assignment_ids}},
+            {"_id": 0, "milestones": 1, "title": 1},
+        ):
+            for m in (a.get("milestones") or []):
+                wk = m.get("week_number") or 0
+                ms_to_week[m.get("milestone_id")] = wk
+                if wk >= 1 and wk not in week_to_curriculum_name:
+                    label = (m.get("title") or "").strip()
+                    if label:
+                        week_to_curriculum_name[wk] = label
+
+    # Also pull the FULL curriculum for the student's cohort(s) so that we can
+    # name locked/never-submitted modules from the assignments the student has
+    # been given (not just modules they've already touched).
+    cohort_ids = await db.cohorts.distinct("cohort_id", {"student_ids": student_id})
+    if cohort_ids:
+        async for a in db.assignments.find(
+            {"cohort_id": {"$in": cohort_ids}, "is_active": {"$ne": False}},
             {"_id": 0, "milestones": 1},
         ):
             for m in (a.get("milestones") or []):
-                ms_to_week[m.get("milestone_id")] = m.get("week_number") or 0
+                wk = m.get("week_number") or 0
+                if wk >= 1 and wk not in week_to_curriculum_name:
+                    label = (m.get("title") or "").strip()
+                    if label:
+                        week_to_curriculum_name[wk] = label
 
-    # Best score per module (module == week_number, capped at 6 for badges)
+    # Best score per module (module == week_number).
     best_by_module: Dict[int, int] = {}
     trend: List[Dict[str, Any]] = []
     for s in subs:
@@ -4571,8 +4611,14 @@ async def _compute_venture_path_for_student(student_id: str) -> Dict[str, Any]:
             "title": s.get("title") or f"Week {wk}",
         })
 
+    # Sort trend by curriculum week (ASC) so the chart reads Week 1 → Week 14,
+    # not the chronological order the student happened to submit in.
+    trend.sort(key=lambda t: (t.get("week") or 0, t.get("date") or ""))
+
+    # Always emit modules in numerical order (1..N) — sort the source list to
+    # be defensive against manual reordering later.
     modules_out = []
-    for m in VENTURE_PATH_MODULES:
+    for m in sorted(VENTURE_PATH_MODULES, key=lambda x: x["module"]):
         n = m["module"]
         best = best_by_module.get(n, 0)
         tier = badge_tier_for(best)
@@ -4592,6 +4638,8 @@ async def _compute_venture_path_for_student(student_id: str) -> Dict[str, Any]:
             points_to_next = max(0, next_threshold - best)
         modules_out.append({
             **m,
+            # Override the default name with the real curriculum title when we found one
+            "name": week_to_curriculum_name.get(n, m["name"]),
             "best_score": best,
             "tier": tier,                    # 'none' | 'bronze' | 'silver' | 'gold'
             "unlocked": tier != "none",     # kept for backwards compat with older clients

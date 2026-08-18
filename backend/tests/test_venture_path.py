@@ -42,7 +42,7 @@ def student_ctx(mongo):
     assignment_id = f"TEST_asgmt_{suffix}"
     milestones = [
         {"milestone_id": f"TEST_ms_{suffix}_w{w}", "week_number": w, "title": f"Week {w}"}
-        for w in range(1, 7)
+        for w in range(1, 15)
     ]
 
     mongo.users.insert_one({
@@ -177,8 +177,8 @@ def test_empty_student_shape(student_ctx):
     data = r.json()
     assert set(data.keys()) >= {"modules", "trend", "unlocked_count", "total_modules",
                                  "overall_best_score", "gold_count", "silver_count", "bronze_count"}
-    assert data["total_modules"] == 6
-    assert len(data["modules"]) == 6
+    assert data["total_modules"] == 14
+    assert len(data["modules"]) == 14
     assert data["unlocked_count"] == 0
     assert data["gold_count"] == 0
     assert data["silver_count"] == 0
@@ -186,7 +186,7 @@ def test_empty_student_shape(student_ctx):
     assert data["overall_best_score"] == 0
     assert data["trend"] == []
     nums = [m["module"] for m in data["modules"]]
-    assert nums == [1, 2, 3, 4, 5, 6]
+    assert nums == list(range(1, 15))
     for m in data["modules"]:
         for f in ("module", "name", "icon", "tagline", "best_score", "unlocked",
                   "attempted", "tier", "next_tier", "points_to_next"):
@@ -493,3 +493,153 @@ class TestInstructorVenturePathScoreMath:
             assert data["student"]["email"].startswith("TEST_")
         finally:
             _cleanup_student(mongo, ctx)
+
+
+# ============================================================
+# 14-module ordering + always-visible locked modules
+# ============================================================
+class TestFourteenModulesInOrder:
+    def test_all_14_modules_returned_in_numerical_order(self, student_ctx, mongo):
+        """All 14 modules must appear regardless of what the student submitted."""
+        token = student_ctx["token"]
+        r = requests.get(
+            f"{BASE_URL}/api/student/venture-path",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        module_nums = [m["module"] for m in data["modules"]]
+        # Bug #1: numerical curriculum order, always
+        assert module_nums == list(range(1, 15)), f"Modules must be 1..14 in order, got {module_nums}"
+        # Bug #2: all 14 present even for a student with no submissions
+        assert data["total_modules"] == 14
+        assert len(data["modules"]) == 14
+
+    def test_completed_module_out_of_order_still_renders_in_curriculum_order(self, mongo):
+        """If a student completes Week 5 first, then Week 2, both badges should
+        show at their curriculum position (not in submission order)."""
+        suffix = uuid.uuid4().hex[:8]
+        user_id = f"TEST_ord_{suffix}"
+        token = f"TEST_tok_{suffix}"
+        cohort_id = f"TEST_coh_{suffix}"
+        assignment_id = f"TEST_asg_{suffix}"
+        milestones = [
+            {"milestone_id": f"TEST_ms_{suffix}_w{w}", "week_number": w, "title": f"Week {w}"}
+            for w in range(1, 15)
+        ]
+        mongo.users.insert_one({
+            "user_id": user_id, "email": f"TEST_ord_{suffix}@example.com",
+            "name": "Order Test", "role": "student",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mongo.user_sessions.insert_one({
+            "session_token": token, "user_id": user_id,
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+        })
+        mongo.cohorts.insert_one({
+            "cohort_id": cohort_id, "name": "Ord Cohort",
+            "student_ids": [user_id], "instructor_ids": [],
+        })
+        mongo.assignments.insert_one({
+            "assignment_id": assignment_id, "cohort_id": cohort_id,
+            "title": "Test Asg", "milestones": milestones, "is_active": True,
+        })
+        # Submit Week 5 FIRST (chronologically), then Week 2
+        subs = [
+            {
+                "submission_id": f"TEST_sub_{suffix}_wk5",
+                "student_id": user_id, "cohort_id": cohort_id,
+                "assignment_id": assignment_id,
+                "milestone_id": f"TEST_ms_{suffix}_w5",
+                "readiness_score": 88,
+                "submitted_at": "2026-01-10T00:00:00+00:00",
+            },
+            {
+                "submission_id": f"TEST_sub_{suffix}_wk2",
+                "student_id": user_id, "cohort_id": cohort_id,
+                "assignment_id": assignment_id,
+                "milestone_id": f"TEST_ms_{suffix}_w2",
+                "readiness_score": 72,
+                "submitted_at": "2026-01-20T00:00:00+00:00",  # later date, earlier week
+            },
+        ]
+        mongo.submissions.insert_many(subs)
+        try:
+            r = requests.get(
+                f"{BASE_URL}/api/student/venture-path",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=15,
+            )
+            assert r.status_code == 200, r.text
+            data = r.json()
+            # Bug #1: modules array is in curriculum order 1..14, regardless of submission dates
+            module_nums = [m["module"] for m in data["modules"]]
+            assert module_nums == list(range(1, 15))
+            # Trend is ALSO sorted by week (curriculum order), not submission date
+            weeks_in_trend = [t["week"] for t in data["trend"]]
+            assert weeks_in_trend == [2, 5], f"Trend should be curriculum order, got {weeks_in_trend}"
+            # Bug #2: modules NOT submitted are still present, with tier='none'
+            m1 = next(m for m in data["modules"] if m["module"] == 1)
+            m14 = next(m for m in data["modules"] if m["module"] == 14)
+            assert m1["tier"] == "none" and m1["unlocked"] == False
+            assert m14["tier"] == "none" and m14["unlocked"] == False
+            # Submitted modules unlocked at correct tier
+            m2 = next(m for m in data["modules"] if m["module"] == 2)
+            m5 = next(m for m in data["modules"] if m["module"] == 5)
+            assert m2["tier"] == "silver" and m2["best_score"] == 72
+            assert m5["tier"] == "gold" and m5["best_score"] == 88
+        finally:
+            mongo.users.delete_one({"user_id": user_id})
+            mongo.user_sessions.delete_one({"session_token": token})
+            mongo.cohorts.delete_one({"cohort_id": cohort_id})
+            mongo.assignments.delete_one({"assignment_id": assignment_id})
+            mongo.submissions.delete_many({"submission_id": {"$regex": f"^TEST_sub_{suffix}_"}})
+
+    def test_module_name_overridden_from_curriculum_milestone_title(self, mongo):
+        """When a cohort's milestone has a distinctive title, it replaces the
+        default VENTURE_PATH_MODULES name for that week."""
+        suffix = uuid.uuid4().hex[:8]
+        user_id = f"TEST_nm_{suffix}"
+        token = f"TEST_tok_{suffix}"
+        cohort_id = f"TEST_coh_{suffix}"
+        assignment_id = f"TEST_asg_{suffix}"
+        milestones = [
+            {"milestone_id": f"TEST_ms_{suffix}_w1", "week_number": 1, "title": "Custom Week One Title"},
+        ]
+        mongo.users.insert_one({
+            "user_id": user_id, "email": f"TEST_nm_{suffix}@example.com",
+            "name": "Name Test", "role": "student",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mongo.user_sessions.insert_one({
+            "session_token": token, "user_id": user_id,
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+        })
+        mongo.cohorts.insert_one({
+            "cohort_id": cohort_id, "name": "Name Cohort",
+            "student_ids": [user_id], "instructor_ids": [],
+        })
+        mongo.assignments.insert_one({
+            "assignment_id": assignment_id, "cohort_id": cohort_id,
+            "title": "Test Asg", "milestones": milestones, "is_active": True,
+        })
+        try:
+            r = requests.get(
+                f"{BASE_URL}/api/student/venture-path",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=15,
+            )
+            assert r.status_code == 200, r.text
+            data = r.json()
+            m1 = next(m for m in data["modules"] if m["module"] == 1)
+            # Curriculum name overrides default "Problem-Solution Fit"
+            assert m1["name"] == "Custom Week One Title"
+            # Default names still used for weeks without a curriculum milestone
+            m2 = next(m for m in data["modules"] if m["module"] == 2)
+            assert m2["name"] == "Market Master"
+        finally:
+            mongo.users.delete_one({"user_id": user_id})
+            mongo.user_sessions.delete_one({"session_token": token})
+            mongo.cohorts.delete_one({"cohort_id": cohort_id})
+            mongo.assignments.delete_one({"assignment_id": assignment_id})

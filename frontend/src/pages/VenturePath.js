@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { ArrowLeft, Rocket, Compass, Map, Layers, MessageCircle, Cog, Sparkles, Info } from 'lucide-react';
+import { ArrowLeft, Rocket, Compass, Map, Layers, MessageCircle, Cog, Sparkles, Info,
+  TrendingUp, DollarSign, Shield, Users, Mic, Target, Briefcase, Star } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 
@@ -15,6 +16,8 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 const ICONS = {
   compass: Compass, map: Map, layers: Layers,
   message: MessageCircle, gear: Cog, rocket: Rocket,
+  'trending-up': TrendingUp, dollar: DollarSign, shield: Shield,
+  users: Users, mic: Mic, target: Target, briefcase: Briefcase, star: Star,
 };
 
 // Visual + copy for each of the three badge tiers. Bronze at 50, Silver at 70,
