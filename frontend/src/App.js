@@ -18,6 +18,7 @@ import MaterialLibrary from "./pages/MaterialLibrary";
 import ThinkificSync from "./pages/ThinkificSync";
 import AdminManagement from "./pages/AdminManagement";
 import BrandingSettings from "./pages/BrandingSettings";
+import VenturePathAdmin from "./pages/VenturePathAdmin";
 import InvitePage from "./pages/InvitePage";
 import DirectSubmit, { DirectSubmitStable, AssignmentMilestoneSubmit } from "./pages/DirectSubmit";
 import StudentAssignmentsDashboard from "./pages/StudentAssignmentsDashboard";
@@ -175,6 +176,11 @@ const AppRouter = () => {
       <Route path="/admin/branding" element={
         <ProtectedRoute>
           <BrandingSettings />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/venture-path" element={
+        <ProtectedRoute>
+          <VenturePathAdmin />
         </ProtectedRoute>
       } />
       <Route path="/invite/:code" element={<InvitePage />} />

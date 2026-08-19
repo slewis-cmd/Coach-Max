@@ -152,6 +152,13 @@ export default function AdminManagement() {
           
           <div className="flex items-center gap-2">
             <Link
+              to="/admin/venture-path"
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF] rounded-lg text-sm"
+              data-testid="venture-path-admin-nav-btn"
+            >
+              Venture Path
+            </Link>
+            <Link
               to="/admin/branding"
               className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#22438E] text-[#22438E] hover:bg-[#E1F0FF] rounded-lg text-sm"
               data-testid="branding-nav-btn"

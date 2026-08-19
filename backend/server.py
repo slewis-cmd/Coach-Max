@@ -1191,6 +1191,35 @@ VENTURE_PATH_MODULES: List[Dict[str, Any]] = [
     {"module": 14, "name": "Demo Day Ready",         "icon": "star",        "tagline": "You're ready to walk on stage."},
 ]
 
+# Icons a super_admin is allowed to pick in the module-name editor. Keep in sync
+# with the ICONS map in /app/frontend/src/pages/VenturePath.js.
+VENTURE_PATH_ALLOWED_ICONS = [
+    "compass", "map", "layers", "message", "gear", "rocket",
+    "trending-up", "dollar", "shield", "users", "mic", "target", "briefcase", "star",
+]
+
+
+async def _get_venture_path_modules_merged() -> List[Dict[str, Any]]:
+    """Return the 14 modules with any super_admin overrides applied. Overrides
+    are stored as a single doc in platform_settings and are keyed by module
+    number (as a string). Empty/whitespace overrides fall back to the default
+    for that field, so an admin can partially override just a name and keep
+    the default tagline."""
+    overrides_doc = await db.platform_settings.find_one(
+        {"_id": "venture_path_modules"}, {"_id": 0, "overrides": 1}
+    )
+    overrides: Dict[str, Dict[str, Any]] = (overrides_doc or {}).get("overrides") or {}
+    merged: List[Dict[str, Any]] = []
+    for base in VENTURE_PATH_MODULES:
+        o = overrides.get(str(base["module"])) or {}
+        merged.append({
+            "module": base["module"],
+            "name":    (o.get("name")    or "").strip() or base["name"],
+            "tagline": (o.get("tagline") or "").strip() or base["tagline"],
+            "icon":    (o.get("icon")    or "").strip() or base["icon"],
+        })
+    return merged
+
 
 # --- Named homework submission types (mirror /app/frontend/src/config/submissionTypes.js) ---
 SUBMISSION_TYPE_CONFIG: Dict[str, Dict[str, Any]] = {
@@ -4510,6 +4539,64 @@ async def admin_backfill_readiness_scores(user: dict = Depends(get_current_user)
     return {"backfilled": count}
 
 
+@api_router.get("/admin/venture-path-modules")
+async def admin_get_venture_path_modules(user: dict = Depends(get_current_user)):
+    """Return the 14 Venture Path modules with any admin overrides applied,
+    plus the raw defaults so the editor can show a 'reset to default' hint."""
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin only")
+    merged = await _get_venture_path_modules_merged()
+    return {
+        "modules": merged,
+        "defaults": VENTURE_PATH_MODULES,
+        "allowed_icons": VENTURE_PATH_ALLOWED_ICONS,
+    }
+
+
+class VenturePathModuleOverrideItem(BaseModel):
+    module: int
+    name: Optional[str] = ""
+    tagline: Optional[str] = ""
+    icon: Optional[str] = ""
+
+
+class VenturePathModulesUpdate(BaseModel):
+    modules: List[VenturePathModuleOverrideItem]
+
+
+@api_router.put("/admin/venture-path-modules")
+async def admin_update_venture_path_modules(
+    payload: VenturePathModulesUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """Upsert the super_admin's module-name overrides. Any field left empty
+    (name/tagline/icon) falls back to the built-in default for that module."""
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin only")
+    valid_modules = {m["module"] for m in VENTURE_PATH_MODULES}
+    overrides: Dict[str, Dict[str, str]] = {}
+    for item in payload.modules:
+        if item.module not in valid_modules:
+            raise HTTPException(status_code=400, detail=f"Invalid module {item.module}")
+        icon = (item.icon or "").strip()
+        if icon and icon not in VENTURE_PATH_ALLOWED_ICONS:
+            raise HTTPException(status_code=400, detail=f"Icon '{icon}' not allowed. Choose from: {VENTURE_PATH_ALLOWED_ICONS}")
+        # Only store non-empty fields so the merged helper can fall back cleanly.
+        entry: Dict[str, str] = {}
+        if (item.name or "").strip():    entry["name"]    = item.name.strip()[:80]
+        if (item.tagline or "").strip(): entry["tagline"] = item.tagline.strip()[:160]
+        if icon:                          entry["icon"]    = icon
+        if entry:
+            overrides[str(item.module)] = entry
+    await db.platform_settings.update_one(
+        {"_id": "venture_path_modules"},
+        {"$set": {"overrides": overrides, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("user_id")}},
+        upsert=True,
+    )
+    merged = await _get_venture_path_modules_merged()
+    return {"modules": merged, "saved_count": len(overrides)}
+
+
 @api_router.get("/instructor/students/{student_id}/venture-path")
 async def get_student_venture_path_for_instructor(student_id: str, user: dict = Depends(get_current_user)):
     """Same shape as /student/venture-path but for instructors/super admins so
@@ -4616,9 +4703,11 @@ async def _compute_venture_path_for_student(student_id: str) -> Dict[str, Any]:
     trend.sort(key=lambda t: (t.get("week") or 0, t.get("date") or ""))
 
     # Always emit modules in numerical order (1..N) — sort the source list to
-    # be defensive against manual reordering later.
+    # be defensive against manual reordering later. Use merged list so admin
+    # overrides apply everywhere the Venture Path is rendered.
+    base_modules = await _get_venture_path_modules_merged()
     modules_out = []
-    for m in sorted(VENTURE_PATH_MODULES, key=lambda x: x["module"]):
+    for m in sorted(base_modules, key=lambda x: x["module"]):
         n = m["module"]
         best = best_by_module.get(n, 0)
         tier = badge_tier_for(best)

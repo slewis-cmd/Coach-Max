@@ -643,3 +643,203 @@ class TestFourteenModulesInOrder:
             mongo.user_sessions.delete_one({"session_token": token})
             mongo.cohorts.delete_one({"cohort_id": cohort_id})
             mongo.assignments.delete_one({"assignment_id": assignment_id})
+
+
+# ============================================================
+# TestModuleNameOverrides — super_admin editable module names
+# (GET/PUT /api/admin/venture-path-modules and E2E propagation)
+# ============================================================
+def _get_admin_modules(token=None):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    return requests.get(f"{BASE_URL}/api/admin/venture-path-modules", headers=headers, timeout=15)
+
+
+def _put_admin_modules(payload, token=None):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    return requests.put(f"{BASE_URL}/api/admin/venture-path-modules", json=payload, headers=headers, timeout=15)
+
+
+@pytest.fixture(scope="module", autouse=False)
+def _reset_overrides(mongo):
+    """Ensure the platform_settings overrides doc is cleared before/after this suite."""
+    mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+    yield
+    mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+
+
+class TestModuleNameOverrides:
+    def test_get_no_auth_401(self, _reset_overrides):
+        r = _get_admin_modules()
+        assert r.status_code == 401, r.text
+
+    def test_get_student_forbidden(self, student_ctx, _reset_overrides):
+        r = _get_admin_modules(student_ctx["token"])
+        assert r.status_code == 403, r.text
+
+    def test_get_instructor_forbidden(self, instructor_ctx, _reset_overrides):
+        r = _get_admin_modules(instructor_ctx["token"])
+        assert r.status_code == 403, r.text
+
+    def test_get_super_admin_200_shape(self, super_admin_token, _reset_overrides):
+        r = _get_admin_modules(super_admin_token)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert set(data.keys()) >= {"modules", "defaults", "allowed_icons"}
+        assert len(data["modules"]) == 14
+        assert len(data["defaults"]) == 14
+        assert len(data["allowed_icons"]) == 14
+        for m in data["modules"]:
+            for f in ("module", "name", "tagline", "icon"):
+                assert f in m
+        # First load: no overrides → merged == defaults
+        for merged, default in zip(data["modules"], data["defaults"]):
+            assert merged["module"] == default["module"]
+            assert merged["name"] == default["name"]
+            assert merged["tagline"] == default["tagline"]
+            assert merged["icon"] == default["icon"]
+
+    def test_put_no_auth_401(self):
+        r = _put_admin_modules({"modules": [{"module": 1, "name": "X"}]})
+        assert r.status_code == 401, r.text
+
+    def test_put_student_forbidden(self, student_ctx):
+        r = _put_admin_modules({"modules": [{"module": 1, "name": "X"}]}, token=student_ctx["token"])
+        assert r.status_code == 403, r.text
+
+    def test_put_instructor_forbidden(self, instructor_ctx):
+        r = _put_admin_modules({"modules": [{"module": 1, "name": "X"}]}, token=instructor_ctx["token"])
+        assert r.status_code == 403, r.text
+
+    def test_put_super_admin_persists_and_saved_count(self, super_admin_token, mongo):
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+        payload = {
+            "modules": [
+                {"module": 1, "name": "Custom Name 1", "tagline": "Custom tag", "icon": "rocket"},
+                {"module": 2, "name": "Custom Name 2", "tagline": "T2", "icon": "shield"},
+            ]
+        }
+        r = _put_admin_modules(payload, token=super_admin_token)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["saved_count"] == 2
+        mods = {m["module"]: m for m in data["modules"]}
+        assert mods[1]["name"] == "Custom Name 1"
+        assert mods[1]["tagline"] == "Custom tag"
+        assert mods[1]["icon"] == "rocket"
+        assert mods[2]["icon"] == "shield"
+        # Persistence: subsequent GET returns same overrides
+        g = _get_admin_modules(super_admin_token)
+        assert g.status_code == 200
+        gdata = g.json()
+        gmods = {m["module"]: m for m in gdata["modules"]}
+        assert gmods[1]["name"] == "Custom Name 1"
+        assert gmods[2]["icon"] == "shield"
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+
+    def test_partial_override_falls_back_to_defaults(self, super_admin_token, mongo):
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+        # Only override the NAME of module 3 — tagline+icon should fall back
+        r = _put_admin_modules({"modules": [{"module": 3, "name": "Only Name Changed"}]}, token=super_admin_token)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["saved_count"] == 1
+        mods = {m["module"]: m for m in data["modules"]}
+        # Module 3 defaults
+        assert mods[3]["name"] == "Only Name Changed"
+        assert mods[3]["tagline"] == "Your value proposition holds up."
+        assert mods[3]["icon"] == "layers"
+        # Other modules unchanged from defaults
+        assert mods[1]["name"] == "Problem-Solution Fit"
+        assert mods[14]["name"] == "Demo Day Ready"
+        assert mods[14]["icon"] == "star"
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+
+    def test_validation_invalid_module_number_400(self, super_admin_token):
+        r = _put_admin_modules({"modules": [{"module": 99, "name": "X"}]}, token=super_admin_token)
+        assert r.status_code == 400, r.text
+
+    def test_validation_invalid_icon_400(self, super_admin_token):
+        r = _put_admin_modules({"modules": [{"module": 1, "icon": "nonexistent-icon"}]}, token=super_admin_token)
+        assert r.status_code == 400, r.text
+        detail = r.json().get("detail", "")
+        # Should mention allowed icons in error
+        assert "allowed" in detail.lower() or "rocket" in detail.lower()
+
+    def test_name_truncated_to_80_chars(self, super_admin_token, mongo):
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+        long_name = "A" * 200
+        r = _put_admin_modules({"modules": [{"module": 4, "name": long_name}]}, token=super_admin_token)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        mods = {m["module"]: m for m in data["modules"]}
+        assert len(mods[4]["name"]) <= 80
+        assert mods[4]["name"] == "A" * 80
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+
+    def test_e2e_admin_override_propagates_to_student_view(self, super_admin_token, mongo):
+        """Set module 5 override and confirm the student endpoint reflects it
+        (when no cohort-milestone title for week 5 exists)."""
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+        # Seed a student without any week-5 milestone title
+        ctx = _seed_student(mongo, weeks=(1, 2, 3, 4))  # no week 5 milestone
+        try:
+            r = _put_admin_modules(
+                {"modules": [{"module": 5, "name": "Custom Model Builder"}]},
+                token=super_admin_token,
+            )
+            assert r.status_code == 200, r.text
+            r2 = _get_vp(ctx["token"])
+            assert r2.status_code == 200, r2.text
+            m5 = next(m for m in r2.json()["modules"] if m["module"] == 5)
+            assert m5["name"] == "Custom Model Builder"
+        finally:
+            _cleanup_student(mongo, ctx)
+            mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+
+    def test_curriculum_milestone_title_beats_admin_override(self, super_admin_token, mongo):
+        """Hierarchy: cohort_milestone_title > admin_override > code_default."""
+        mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
+        # Set admin override for module 5
+        r = _put_admin_modules(
+            {"modules": [{"module": 5, "name": "Admin Override Name"}]},
+            token=super_admin_token,
+        )
+        assert r.status_code == 200, r.text
+        # Seed student WITH a week-5 milestone that has a distinctive title
+        suffix = uuid.uuid4().hex[:8]
+        user_id = f"TEST_h_{suffix}"
+        token = f"TEST_tok_{suffix}"
+        cohort_id = f"TEST_coh_{suffix}"
+        assignment_id = f"TEST_asg_{suffix}"
+        milestones = [
+            {"milestone_id": f"TEST_ms_{suffix}_w5", "week_number": 5, "title": "Curriculum Week 5 Title"},
+        ]
+        mongo.users.insert_one({
+            "user_id": user_id, "email": f"TEST_h_{suffix}@example.com",
+            "name": "Hierarchy Test", "role": "student",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mongo.user_sessions.insert_one({
+            "session_token": token, "user_id": user_id,
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+        })
+        mongo.cohorts.insert_one({
+            "cohort_id": cohort_id, "name": "H Cohort",
+            "student_ids": [user_id], "instructor_ids": [],
+        })
+        mongo.assignments.insert_one({
+            "assignment_id": assignment_id, "cohort_id": cohort_id,
+            "title": "H Asg", "milestones": milestones, "is_active": True,
+        })
+        try:
+            r2 = _get_vp(token)
+            assert r2.status_code == 200, r2.text
+            m5 = next(m for m in r2.json()["modules"] if m["module"] == 5)
+            # Curriculum milestone title WINS over admin override
+            assert m5["name"] == "Curriculum Week 5 Title", f"Expected curriculum title, got {m5['name']}"
+        finally:
+            mongo.users.delete_one({"user_id": user_id})
+            mongo.user_sessions.delete_one({"session_token": token})
+            mongo.cohorts.delete_one({"cohort_id": cohort_id})
+            mongo.assignments.delete_one({"assignment_id": assignment_id})
+            mongo.platform_settings.delete_many({"_id": "venture_path_modules"})
